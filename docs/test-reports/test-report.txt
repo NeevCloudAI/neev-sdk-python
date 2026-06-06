@@ -1,0 +1,48 @@
+﻿============================= test session starts =============================
+platform win32 -- Python 3.14.5, pytest-9.0.3, pluggy-1.6.0 -- C:\Users\manju\Documents\sdk\neev-sdk-python\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\manju\Documents\sdk\neev-sdk-python
+configfile: pyproject.toml
+plugins: anyio-4.13.0, asyncio-1.4.0, mock-3.15.1, typeguard-4.5.2
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 36 items
+
+tests/test_client.py::test_client_initialization_requires_api_key PASSED [  2%]
+tests/test_client.py::test_async_client_initialization_requires_api_key PASSED [  5%]
+tests/test_errors.py::test_error_from_status_mapping[400-BadRequestError] PASSED [  8%]
+tests/test_errors.py::test_error_from_status_mapping[401-AuthenticationError] PASSED [ 11%]
+tests/test_errors.py::test_error_from_status_mapping[403-PermissionDeniedError] PASSED [ 13%]
+tests/test_errors.py::test_error_from_status_mapping[404-NotFoundError] PASSED [ 16%]
+tests/test_errors.py::test_error_from_status_mapping[409-ConflictError] PASSED [ 19%]
+tests/test_errors.py::test_error_from_status_mapping[412-PreconditionFailedError] PASSED [ 22%]
+tests/test_errors.py::test_error_from_status_mapping[429-RateLimitError] PASSED [ 25%]
+tests/test_errors.py::test_error_from_status_mapping[504-DeadlineExceededError] PASSED [ 27%]
+tests/test_errors.py::test_error_from_status_mapping[500-InternalServerError] PASSED [ 30%]
+tests/test_errors.py::test_error_from_status_mapping[502-InternalServerError] PASSED [ 33%]
+tests/test_sandbox.py::test_sandbox_properties PASSED                    [ 36%]
+tests/test_sandbox.py::test_wait_until_ready_ready_phase PASSED          [ 38%]
+tests/test_sandbox.py::test_wait_until_ready_paused_raises PASSED        [ 41%]
+tests/test_sandbox.py::test_sandbox_refresh PASSED                       [ 44%]
+tests/test_sandboxd.py::test_dataplane_transport_sanity PASSED           [ 47%]
+tests/test_sandboxd.py::test_dataplane_transport_timeout PASSED          [ 50%]
+tests/test_sandboxd.py::test_dataplane_transport_connection_error PASSED [ 52%]
+tests/test_sandboxd.py::test_sandbox_connection_init PASSED              [ 55%]
+tests/test_sandboxd.py::test_async_sandbox_connection_init PASSED        [ 58%]
+tests/test_sandboxd.py::test_sandbox_connection_close_idempotent PASSED  [ 61%]
+tests/test_sandboxes.py::test_sandboxes_create PASSED                    [ 63%]
+tests/test_sandboxes.py::test_sandboxes_get PASSED                       [ 66%]
+tests/test_sandboxes.py::test_sandboxes_list PASSED                      [ 69%]
+tests/test_sandboxes.py::test_sandboxes_delete PASSED                    [ 72%]
+tests/test_sandboxes.py::test_sandboxes_pause_resume PASSED              [ 75%]
+tests/test_sandboxes.py::test_sandboxes_metrics PASSED                   [ 77%]
+tests/test_sandboxes.py::test_sandboxes_get_not_found PASSED             [ 80%]
+tests/test_transport.py::test_calculate_backoff_values PASSED            [ 83%]
+tests/test_transport.py::test_parse_retry_after_seconds PASSED           [ 86%]
+tests/test_transport.py::test_parse_retry_after_http_date PASSED         [ 88%]
+tests/test_transport.py::test_control_transport_retries PASSED           [ 91%]
+tests/test_transport.py::test_control_transport_timeout PASSED           [ 94%]
+tests/test_transport.py::test_control_transport_connection_error PASSED  [ 97%]
+tests/test_transport.py::test_control_transport_sanity PASSED            [100%]
+
+- generated xml file: C:\Users\manju\Documents\sdk\neev-sdk-python\docs\test-report.xml -
+============================= 36 passed in 2.33s ==============================

@@ -1,0 +1,15 @@
+line-length = 88
+indent-width = 4
+
+target-version = "py310"
+
+[lint]
+select = ["E", "F", "B", "C90", "I", "N", "W", "UP"]
+
+[lint.per-file-ignores]
+"__init__.py" = ["F401"]
+
+[format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
