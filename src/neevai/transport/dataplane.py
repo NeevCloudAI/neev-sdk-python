@@ -1,4 +1,5 @@
-from typing import Any, AsyncGenerator, Dict, Generator, Optional, Union
+from collections.abc import AsyncGenerator, Generator
+from typing import Any
 
 import httpx
 
@@ -13,7 +14,7 @@ class DataplaneTransport:
         connect_url: str,
         api_key: str,
         timeout_ms: int = 60000,
-        client: Optional[httpx.Client] = None,
+        client: httpx.Client | None = None,
     ):
         self.connect_url = connect_url.rstrip("/")
         self.api_key = api_key
@@ -27,10 +28,10 @@ class DataplaneTransport:
         self,
         method: str,
         path: str,
-        query: Optional[Dict[str, Any]] = None,
-        headers: Optional[Dict[str, str]] = None,
-        content: Optional[Union[str, bytes]] = None,
-        body: Optional[Any] = None,
+        query: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        content: str | bytes | None = None,
+        body: Any | None = None,
     ) -> httpx.Response:
         """Sends a request to the sandbox daemon without retries."""
         url = f"{self.connect_url}/{path.lstrip('/')}"
@@ -57,10 +58,12 @@ class DataplaneTransport:
             )
         except httpx.TimeoutException as e:
             from neevai.errors import APITimeoutError
-            raise APITimeoutError("Data-plane request timed out", cause=e)
+
+            raise APITimeoutError("Data-plane request timed out") from e
         except httpx.RequestError as e:
             from neevai.errors import APIConnectionError
-            raise APIConnectionError("Failed to reach the sandbox data-plane daemon", cause=e)
+
+            raise APIConnectionError("Failed to reach the sandbox data-plane daemon") from e
 
         if not response.is_success:
             raise self._daemon_error(response)
@@ -71,8 +74,8 @@ class DataplaneTransport:
         self,
         method: str,
         path: str,
-        headers: Optional[Dict[str, str]] = None,
-        body: Optional[Any] = None,
+        headers: dict[str, str] | None = None,
+        body: Any | None = None,
     ) -> Generator[str, None, None]:
         """Streams the response body line by line for NDJSON exec streams."""
         url = f"{self.connect_url}/{path.lstrip('/')}"
@@ -93,14 +96,17 @@ class DataplaneTransport:
                 if not response.is_success:
                     response.read()  # Buffer response text for mapping error
                     raise self._daemon_error(response)
-                for line in response.iter_lines():
-                    yield line
+                yield from response.iter_lines()
         except httpx.TimeoutException as e:
             from neevai.errors import APITimeoutError
-            raise APITimeoutError("Data-plane request timed out during stream", cause=e)
+
+            raise APITimeoutError("Data-plane request timed out during stream") from e
         except httpx.RequestError as e:
             from neevai.errors import APIConnectionError
-            raise APIConnectionError("Failed to reach the sandbox data-plane daemon during stream", cause=e)
+
+            raise APIConnectionError(
+                "Failed to reach the sandbox data-plane daemon during stream"
+            ) from e
 
     def _daemon_error(self, response: httpx.Response) -> Exception:
         text = response.text
@@ -129,7 +135,7 @@ class AsyncDataplaneTransport:
         connect_url: str,
         api_key: str,
         timeout_ms: int = 60000,
-        client: Optional[httpx.AsyncClient] = None,
+        client: httpx.AsyncClient | None = None,
     ):
         self.connect_url = connect_url.rstrip("/")
         self.api_key = api_key
@@ -143,10 +149,10 @@ class AsyncDataplaneTransport:
         self,
         method: str,
         path: str,
-        query: Optional[Dict[str, Any]] = None,
-        headers: Optional[Dict[str, str]] = None,
-        content: Optional[Union[str, bytes]] = None,
-        body: Optional[Any] = None,
+        query: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        content: str | bytes | None = None,
+        body: Any | None = None,
     ) -> httpx.Response:
         """Sends an async request to the sandbox daemon without retries."""
         url = f"{self.connect_url}/{path.lstrip('/')}"
@@ -173,10 +179,12 @@ class AsyncDataplaneTransport:
             )
         except httpx.TimeoutException as e:
             from neevai.errors import APITimeoutError
-            raise APITimeoutError("Data-plane request timed out", cause=e)
+
+            raise APITimeoutError("Data-plane request timed out") from e
         except httpx.RequestError as e:
             from neevai.errors import APIConnectionError
-            raise APIConnectionError("Failed to reach the sandbox data-plane daemon", cause=e)
+
+            raise APIConnectionError("Failed to reach the sandbox data-plane daemon") from e
 
         if not response.is_success:
             raise self._daemon_error(response)
@@ -187,8 +195,8 @@ class AsyncDataplaneTransport:
         self,
         method: str,
         path: str,
-        headers: Optional[Dict[str, str]] = None,
-        body: Optional[Any] = None,
+        headers: dict[str, str] | None = None,
+        body: Any | None = None,
     ) -> AsyncGenerator[str, None]:
         """Streams the response body line by line for NDJSON exec streams."""
         url = f"{self.connect_url}/{path.lstrip('/')}"
@@ -213,10 +221,14 @@ class AsyncDataplaneTransport:
                     yield line
         except httpx.TimeoutException as e:
             from neevai.errors import APITimeoutError
-            raise APITimeoutError("Data-plane request timed out during stream", cause=e)
+
+            raise APITimeoutError("Data-plane request timed out during stream") from e
         except httpx.RequestError as e:
             from neevai.errors import APIConnectionError
-            raise APIConnectionError("Failed to reach the sandbox data-plane daemon during stream", cause=e)
+
+            raise APIConnectionError(
+                "Failed to reach the sandbox data-plane daemon during stream"
+            ) from e
 
     def _daemon_error(self, response: httpx.Response) -> Exception:
         text = response.text

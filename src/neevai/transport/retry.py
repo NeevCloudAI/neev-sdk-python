@@ -1,8 +1,6 @@
 import email.utils
 import random
-import time
 from datetime import datetime, timezone
-from typing import Optional
 
 MAX_RETRY_AFTER_SECS = 30.0
 
@@ -18,7 +16,7 @@ def calculate_backoff(attempt: int) -> float:
     return base * (0.5 + random.random() * 0.5)
 
 
-def parse_retry_after(header: Optional[str]) -> Optional[float]:
+def parse_retry_after(header: str | None) -> float | None:
     """Parses a Retry-After header.
 
     Supports both delta-seconds (e.g. "5") and HTTP-date strings.

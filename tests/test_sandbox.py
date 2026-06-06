@@ -1,9 +1,10 @@
 """Basic sanity tests for the Sandbox handle (sync)."""
 
 import pytest
+
 from neevai.client import NeevAI
-from neevai.sandbox import Sandbox
 from neevai.errors import NeevAIError
+from neevai.sandbox import Sandbox
 
 
 def test_sandbox_properties():

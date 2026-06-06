@@ -4,25 +4,32 @@ Provides a mock httpx transport that returns deterministic JSON payloads
 for control‑plane and data‑plane endpoints. The fixtures are used across
 all test modules.
 """
+
 import json
 import re
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict
+from typing import Any
+
 import httpx
 import pytest
 
 # Simple in‑memory store to simulate backend state for sandbox resources
-_FAKE_DB: Dict[str, Any] = {
+_FAKE_DB: dict[str, Any] = {
     "sandboxes": {},
     "next_id": 1,
 }
 
 
-def _control_response(method: str, path: str, query: Dict[str, Any] | None, body: Any) -> httpx.Response:
+def _control_response(
+    method: str, path: str, query: dict[str, Any] | None, body: Any
+) -> httpx.Response:
     """Return a mocked control‑plane response.
     Only a subset of endpoints required for the test suite are handled.
     """
-    def json_resp(status: int, data: Any = None, headers: Dict[str, str] | None = None) -> httpx.Response:
+
+    def json_resp(
+        status: int, data: Any = None, headers: dict[str, str] | None = None
+    ) -> httpx.Response:
         content = b"" if data is None else json.dumps(data).encode()
         return httpx.Response(status_code=status, content=content, headers=headers or {})
 
@@ -42,12 +49,15 @@ def _control_response(method: str, path: str, query: Dict[str, Any] | None, body
             # ---- Collection endpoints ------------------------------------------------
             if method == "GET":
                 items = list(_FAKE_DB["sandboxes"].values())
-                return json_resp(200, {
-                    "items": items,
-                    "total": len(items),
-                    "page": 1,
-                    "limit": 100,
-                })
+                return json_resp(
+                    200,
+                    {
+                        "items": items,
+                        "total": len(items),
+                        "page": 1,
+                        "limit": 100,
+                    },
+                )
             if method == "POST":
                 now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
                 sid = str(_FAKE_DB["next_id"])
@@ -97,13 +107,16 @@ def _control_response(method: str, path: str, query: Dict[str, Any] | None, body
             sandbox["replicas"] = 1
             return json_resp(200, sandbox)
         if action == "metrics" and method == "GET":
-            return json_resp(200, {
-                "sandbox_id": sandbox_id,
-                "from": (query or {}).get("from", ""),
-                "to": (query or {}).get("to", ""),
-                "step": (query or {}).get("step", ""),
-                "series": [],
-            })
+            return json_resp(
+                200,
+                {
+                    "sandbox_id": sandbox_id,
+                    "from": (query or {}).get("from", ""),
+                    "to": (query or {}).get("to", ""),
+                    "step": (query or {}).get("step", ""),
+                    "series": [],
+                },
+            )
 
         return json_resp(400, {"message": "bad request"})
 
@@ -151,10 +164,13 @@ def _control_response(method: str, path: str, query: Dict[str, Any] | None, body
     return json_resp(404, {"message": "unknown endpoint"})
 
 
-def _dataplane_response(method: str, path: str, query: Dict[str, Any] | None, body: Any) -> httpx.Response:
+def _dataplane_response(
+    method: str, path: str, query: dict[str, Any] | None, body: Any
+) -> httpx.Response:
     """Mock data‑plane (sandboxd) responses.
     Only the minimal subset needed for the current tests is implemented.
     """
+
     def json_resp(status: int, data: Any = None) -> httpx.Response:
         content = b"" if data is None else json.dumps(data).encode()
         return httpx.Response(status_code=status, content=content)

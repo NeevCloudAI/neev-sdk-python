@@ -19,10 +19,12 @@ def main() -> None:
         project_id=os.environ.get("NEEVCLOUD_PROJECT_ID"),
     )
 
-    sandbox = client.sandboxes.create({
-        "name": "sync-demo",
-        "image": "ubuntu:22.04",
-    })
+    sandbox = client.sandboxes.create(
+        {
+            "name": "sync-demo",
+            "image": "ubuntu:22.04",
+        }
+    )
     print(f"Created {sandbox.id} (phase={sandbox.phase})")
 
     sandbox.wait_until_ready()

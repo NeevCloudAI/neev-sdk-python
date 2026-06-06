@@ -2,17 +2,22 @@
 
 import email.utils
 import time
+
 import httpx
 import pytest
 
-from neevai.transport.control import ControlTransport, calculate_backoff, parse_retry_after
 from neevai.errors import APIConnectionError, APITimeoutError, NotFoundError
+from neevai.transport.control import (
+    ControlTransport,
+    calculate_backoff,
+    parse_retry_after,
+)
 
 
 def test_calculate_backoff_values():
     for attempt in range(5):
         backoff = calculate_backoff(attempt)
-        base = min(0.250 * (2 ** attempt), 8.0)
+        base = min(0.250 * (2**attempt), 8.0)
         assert 0.5 * base <= backoff <= base
 
 
@@ -110,7 +115,9 @@ def test_control_transport_sanity(control_transport):
     resp = transport.request("GET", "/v1/sandboxes")
     assert resp == {"items": []}
 
-    created = transport.request("POST", "/v1/sandboxes", body={"name": "s1", "image": "ubuntu:22.04"})
+    created = transport.request(
+        "POST", "/v1/sandboxes", body={"name": "s1", "image": "ubuntu:22.04"}
+    )
     assert created["name"] == "s1"
     assert created["id"] == "1"
 

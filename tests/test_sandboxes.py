@@ -1,6 +1,7 @@
 """Basic sanity tests for the Sandboxes resource (control plane, sync)."""
 
 import pytest
+
 from neevai.client import NeevAI
 from neevai.errors import NotFoundError
 

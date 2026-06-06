@@ -19,11 +19,12 @@ async def main() -> None:
         org_id=os.environ.get("NEEVCLOUD_ORG_ID"),
         project_id=os.environ.get("NEEVCLOUD_PROJECT_ID"),
     ) as client:
-
-        sandbox = await client.sandboxes.create({
-            "name": "async-demo",
-            "image": "ubuntu:22.04",
-        })
+        sandbox = await client.sandboxes.create(
+            {
+                "name": "async-demo",
+                "image": "ubuntu:22.04",
+            }
+        )
         print(f"Created {sandbox.id} (phase={sandbox.phase})")
 
         await sandbox.wait_until_ready()

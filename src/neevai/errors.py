@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional
+from typing import Any
 
 
 class NeevAIError(Exception):
@@ -13,7 +13,7 @@ class APIConnectionError(NeevAIError):
     This covers DNS failures, connection resets, network timeouts, or when the request is aborted.
     """
 
-    def __init__(self, message: str, cause: Optional[Exception] = None):
+    def __init__(self, message: str, cause: Exception | None = None):
         super().__init__(message)
         self.__cause__ = cause
 
@@ -30,8 +30,8 @@ class APIError(NeevAIError):
     def __init__(
         self,
         status_code: int,
-        body: Optional[Dict[str, Any]],
-        request_id: Optional[str],
+        body: dict[str, Any] | None,
+        request_id: str | None,
     ):
         self.status_code = status_code
         self.code = body.get("error") if body else None
@@ -106,8 +106,8 @@ class InternalServerError(APIError):
 
 def error_from_status(
     status_code: int,
-    body: Optional[Dict[str, Any]],
-    request_id: Optional[str],
+    body: dict[str, Any] | None,
+    request_id: str | None,
 ) -> APIError:
     """Maps an HTTP status code and parsed JSON body to a specific APIError subclass."""
     if status_code == 400:

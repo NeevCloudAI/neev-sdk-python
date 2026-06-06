@@ -1,13 +1,17 @@
-line-length = 88
+line-length = 100
 indent-width = 4
 
 target-version = "py310"
 
 [lint]
-select = ["E", "F", "B", "C90", "I", "N", "W", "UP"]
+select = ["E", "F", "B", "I", "N", "W", "UP"]
+ignore = [
+    "E501",  # line length: enforced by formatter where it can wrap, long error messages / URL paths are tolerated
+]
 
 [lint.per-file-ignores]
 "__init__.py" = ["F401"]
+"tests/**" = ["B011"]
 
 [format]
 quote-style = "double"

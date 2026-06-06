@@ -1,5 +1,5 @@
 import time
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING
 
 from neevai.errors import NeevAIError
 from neevai.types import SandboxData, SandboxMetricsResponse, SandboxPhase, Scope
@@ -24,11 +24,11 @@ class Sandbox:
     Updates its state in-place and caches the data-plane connection.
     """
 
-    def __init__(self, sandboxes: "Sandboxes", data: SandboxData, scope: Optional[Scope] = None):
+    def __init__(self, sandboxes: "Sandboxes", data: SandboxData, scope: Scope | None = None):
         self.sandboxes = sandboxes
         self._state = data
         self.scope = scope
-        self._conn: Optional["SandboxConnection"] = None
+        self._conn: SandboxConnection | None = None
 
     @property
     def id(self) -> str:
@@ -51,7 +51,7 @@ class Sandbox:
         return self._state["replicas"]
 
     @property
-    def connect_url(self) -> Optional[str]:
+    def connect_url(self) -> str | None:
         """Direct address of the sandbox daemon, or None if not ready/configured."""
         return self._state.get("connect_url")
 
@@ -66,31 +66,47 @@ class Sandbox:
 
     def refresh(self) -> "Sandbox":
         """Re-fetches the sandbox and updates this handle's state in place."""
-        fresh = self.sandboxes.get(self.id, org_id=self.scope.org_id if self.scope else None, project_id=self.scope.project_id if self.scope else None)
+        fresh = self.sandboxes.get(
+            self.id,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+        )
         self._state = fresh.data
         return self
 
     def pause(self) -> "Sandbox":
         """Pauses the sandbox (scales to 0 replicas) and updates this handle in place."""
-        next_state = self.sandboxes.pause(self.id, org_id=self.scope.org_id if self.scope else None, project_id=self.scope.project_id if self.scope else None)
+        next_state = self.sandboxes.pause(
+            self.id,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+        )
         self._state = next_state.data
         return self
 
     def resume(self) -> "Sandbox":
         """Resumes the sandbox (scales to 1 replica) and updates this handle in place."""
-        next_state = self.sandboxes.resume(self.id, org_id=self.scope.org_id if self.scope else None, project_id=self.scope.project_id if self.scope else None)
+        next_state = self.sandboxes.resume(
+            self.id,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+        )
         self._state = next_state.data
         return self
 
     def delete(self) -> None:
         """Permanently deletes the sandbox."""
-        self.sandboxes.delete(self.id, org_id=self.scope.org_id if self.scope else None, project_id=self.scope.project_id if self.scope else None)
+        self.sandboxes.delete(
+            self.id,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+        )
 
     def metrics(
         self,
-        from_: Optional[str] = None,
-        to: Optional[str] = None,
-        step: Optional[str] = None,
+        from_: str | None = None,
+        to: str | None = None,
+        step: str | None = None,
     ) -> SandboxMetricsResponse:
         """Queries live health metrics for this sandbox."""
         return self.sandboxes.metrics(
@@ -136,12 +152,12 @@ class Sandbox:
 
     def exec(
         self,
-        command: Union[str, List[str]],
-        args: Optional[List[str]] = None,
-        cwd: Optional[str] = None,
-        env: Optional[Dict[str, str]] = None,
-        timeout_ms: Optional[int] = None,
-        stdin: Optional[str] = None,
+        command: str | list[str],
+        args: list[str] | None = None,
+        cwd: str | None = None,
+        env: dict[str, str] | None = None,
+        timeout_ms: int | None = None,
+        stdin: str | None = None,
     ) -> "ExecResult":
         """Runs a command inside the sandbox."""
         return self._connection().exec(
@@ -165,7 +181,8 @@ class Sandbox:
             self._conn = SandboxConnection(
                 connect_url=connect_url,
                 api_key=self.sandboxes._client._transport.api_key,
-                timeout_ms=self.sandboxes._client._transport.timeout.read * 1000.0,  # Match client timeout
+                timeout_ms=self.sandboxes._client._transport.timeout.read
+                * 1000.0,  # Match client timeout
             )
         return self._conn
 
@@ -176,11 +193,11 @@ class AsyncSandbox:
     Updates its state in-place and caches the async data-plane connection.
     """
 
-    def __init__(self, sandboxes: "AsyncSandboxes", data: SandboxData, scope: Optional[Scope] = None):
+    def __init__(self, sandboxes: "AsyncSandboxes", data: SandboxData, scope: Scope | None = None):
         self.sandboxes = sandboxes
         self._state = data
         self.scope = scope
-        self._conn: Optional["AsyncSandboxConnection"] = None
+        self._conn: AsyncSandboxConnection | None = None
 
     @property
     def id(self) -> str:
@@ -199,7 +216,7 @@ class AsyncSandbox:
         return self._state["replicas"]
 
     @property
-    def connect_url(self) -> Optional[str]:
+    def connect_url(self) -> str | None:
         return self._state.get("connect_url")
 
     @property
@@ -210,28 +227,44 @@ class AsyncSandbox:
         return self._state
 
     async def refresh(self) -> "AsyncSandbox":
-        fresh = await self.sandboxes.get(self.id, org_id=self.scope.org_id if self.scope else None, project_id=self.scope.project_id if self.scope else None)
+        fresh = await self.sandboxes.get(
+            self.id,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+        )
         self._state = fresh.data
         return self
 
     async def pause(self) -> "AsyncSandbox":
-        next_state = await self.sandboxes.pause(self.id, org_id=self.scope.org_id if self.scope else None, project_id=self.scope.project_id if self.scope else None)
+        next_state = await self.sandboxes.pause(
+            self.id,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+        )
         self._state = next_state.data
         return self
 
     async def resume(self) -> "AsyncSandbox":
-        next_state = await self.sandboxes.resume(self.id, org_id=self.scope.org_id if self.scope else None, project_id=self.scope.project_id if self.scope else None)
+        next_state = await self.sandboxes.resume(
+            self.id,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+        )
         self._state = next_state.data
         return self
 
     async def delete(self) -> None:
-        await self.sandboxes.delete(self.id, org_id=self.scope.org_id if self.scope else None, project_id=self.scope.project_id if self.scope else None)
+        await self.sandboxes.delete(
+            self.id,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+        )
 
     async def metrics(
         self,
-        from_: Optional[str] = None,
-        to: Optional[str] = None,
-        step: Optional[str] = None,
+        from_: str | None = None,
+        to: str | None = None,
+        step: str | None = None,
     ) -> SandboxMetricsResponse:
         return await self.sandboxes.metrics(
             self.id,
@@ -273,12 +306,12 @@ class AsyncSandbox:
 
     async def exec(
         self,
-        command: Union[str, List[str]],
-        args: Optional[List[str]] = None,
-        cwd: Optional[str] = None,
-        env: Optional[Dict[str, str]] = None,
-        timeout_ms: Optional[int] = None,
-        stdin: Optional[str] = None,
+        command: str | list[str],
+        args: list[str] | None = None,
+        cwd: str | None = None,
+        env: dict[str, str] | None = None,
+        timeout_ms: int | None = None,
+        stdin: str | None = None,
     ) -> "ExecResult":
         return await self._connection().exec(
             command=command,

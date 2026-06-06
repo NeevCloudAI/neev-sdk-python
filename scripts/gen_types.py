@@ -13,6 +13,7 @@ Usage::
 """
 
 import pathlib
+import re
 import subprocess
 import sys
 
@@ -40,10 +41,37 @@ def generate(spec: pathlib.Path) -> None:
             "--output",
             str(output),
             "--output-model-type",
-            "TypedDict",
+            "typing.TypedDict",
         ],
         check=True,
     )
+    _strip_timestamp(output)
+    _ruff_format(output)
+
+
+def _ruff_format(path: pathlib.Path) -> None:
+    """Run ruff format on a single file so generated code matches project style."""
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "ruff",
+            "format",
+            str(path),
+        ],
+        check=True,
+    )
+
+
+_TIMESTAMP_RE = re.compile(r"^#   timestamp:.*\n", re.MULTILINE)
+
+
+def _strip_timestamp(path: pathlib.Path) -> None:
+    """Remove the volatile timestamp line so CI diffs stay stable."""
+    text = path.read_text(encoding="utf-8")
+    new_text = _TIMESTAMP_RE.sub("", text)
+    if new_text != text:
+        path.write_text(new_text, encoding="utf-8")
 
 
 def main() -> None:

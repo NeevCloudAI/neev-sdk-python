@@ -2,18 +2,20 @@
 """Tests for the error mapping utilities in `neevai.errors`."""
 
 import pytest
+
 from neevai.errors import (
-    BadRequestError,
     AuthenticationError,
-    PermissionDeniedError,
-    NotFoundError,
+    BadRequestError,
     ConflictError,
-    PreconditionFailedError,
-    RateLimitError,
     DeadlineExceededError,
     InternalServerError,
+    NotFoundError,
+    PermissionDeniedError,
+    PreconditionFailedError,
+    RateLimitError,
     error_from_status,
 )
+
 
 @pytest.mark.parametrize(
     "status, expected_type",

@@ -18,11 +18,12 @@ def main() -> None:
         org_id=os.environ.get("NEEVCLOUD_ORG_ID"),
         project_id=os.environ.get("NEEVCLOUD_PROJECT_ID"),
     ) as client:
-
-        sandbox = client.sandboxes.create({
-            "name": "workflow-demo",
-            "image": "ghcr.io/neevcloud/sandbox-python:3.12",
-        })
+        sandbox = client.sandboxes.create(
+            {
+                "name": "workflow-demo",
+                "image": "ghcr.io/neevcloud/sandbox-python:3.12",
+            }
+        )
         print(f"Created {sandbox.id}")
 
         sandbox.wait_until_ready()

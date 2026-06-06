@@ -1,6 +1,6 @@
 import asyncio
 import time
-from typing import Any, Dict, Optional, Union
+from typing import Any
 
 import httpx
 
@@ -21,7 +21,7 @@ class ControlTransport:
         api_key: str,
         timeout_ms: int,
         max_retries: int,
-        client: Optional[httpx.Client] = None,
+        client: httpx.Client | None = None,
     ):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
@@ -36,8 +36,8 @@ class ControlTransport:
         self,
         method: str,
         path: str,
-        query: Optional[Dict[str, Any]] = None,
-        body: Optional[Any] = None,
+        query: dict[str, Any] | None = None,
+        body: Any | None = None,
     ) -> Any:
         """Dispatches an HTTP request to control plane with retries & error handling."""
         # Concatenate base + path, preserving path prefixes correctly
@@ -71,16 +71,18 @@ class ControlTransport:
                     time.sleep(calculate_backoff(attempt))
                     attempt += 1
                     continue
-                raise APITimeoutError("Request timed out", cause=e)
+                raise APITimeoutError("Request timed out") from e
             except httpx.RequestError as e:
                 if attempt < self.max_retries:
                     time.sleep(calculate_backoff(attempt))
                     attempt += 1
                     continue
-                raise APIConnectionError("Request failed to reach the NeevAI API", cause=e)
+                raise APIConnectionError("Request failed to reach the NeevAI API") from e
 
             # Check if retry is needed for transient status codes (429 or 5xx)
-            if (response.status_code == 429 or response.status_code >= 500) and attempt < self.max_retries:
+            if (
+                response.status_code == 429 or response.status_code >= 500
+            ) and attempt < self.max_retries:
                 retry_delay = parse_retry_after(response.headers.get("retry-after"))
                 if retry_delay is None:
                     retry_delay = calculate_backoff(attempt)
@@ -117,7 +119,7 @@ class AsyncControlTransport:
         api_key: str,
         timeout_ms: int,
         max_retries: int,
-        client: Optional[httpx.AsyncClient] = None,
+        client: httpx.AsyncClient | None = None,
     ):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
@@ -132,8 +134,8 @@ class AsyncControlTransport:
         self,
         method: str,
         path: str,
-        query: Optional[Dict[str, Any]] = None,
-        body: Optional[Any] = None,
+        query: dict[str, Any] | None = None,
+        body: Any | None = None,
     ) -> Any:
         """Dispatches an HTTP request to control plane asynchronously with retries."""
         url = f"{self.base_url}/{path.lstrip('/')}"
@@ -165,15 +167,17 @@ class AsyncControlTransport:
                     await asyncio.sleep(calculate_backoff(attempt))
                     attempt += 1
                     continue
-                raise APITimeoutError("Request timed out", cause=e)
+                raise APITimeoutError("Request timed out") from e
             except httpx.RequestError as e:
                 if attempt < self.max_retries:
                     await asyncio.sleep(calculate_backoff(attempt))
                     attempt += 1
                     continue
-                raise APIConnectionError("Request failed to reach the NeevAI API", cause=e)
+                raise APIConnectionError("Request failed to reach the NeevAI API") from e
 
-            if (response.status_code == 429 or response.status_code >= 500) and attempt < self.max_retries:
+            if (
+                response.status_code == 429 or response.status_code >= 500
+            ) and attempt < self.max_retries:
                 retry_delay = parse_retry_after(response.headers.get("retry-after"))
                 if retry_delay is None:
                     retry_delay = calculate_backoff(attempt)
@@ -210,8 +214,8 @@ class RawClient:
         self,
         method: str,
         path: str,
-        query: Optional[Dict[str, Any]] = None,
-        body: Optional[Any] = None,
+        query: dict[str, Any] | None = None,
+        body: Any | None = None,
     ) -> Any:
         return self._transport.request(method, path, query, body)
 
@@ -226,7 +230,7 @@ class AsyncRawClient:
         self,
         method: str,
         path: str,
-        query: Optional[Dict[str, Any]] = None,
-        body: Optional[Any] = None,
+        query: dict[str, Any] | None = None,
+        body: Any | None = None,
     ) -> Any:
         return await self._transport.request(method, path, query, body)

@@ -5,7 +5,6 @@ Run this once after cloning the repo.
 """
 
 import subprocess
-import sys
 from pathlib import Path
 
 PROJECT = Path(__file__).resolve().parent.parent

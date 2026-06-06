@@ -1,5 +1,5 @@
 import os
-from typing import Any, Dict, Optional
+from typing import Any
 
 import httpx
 
@@ -23,13 +23,13 @@ class NeevAI:
 
     def __init__(
         self,
-        api_key: Optional[str] = None,
-        org_id: Optional[str] = None,
-        project_id: Optional[str] = None,
-        base_url: Optional[str] = None,
+        api_key: str | None = None,
+        org_id: str | None = None,
+        project_id: str | None = None,
+        base_url: str | None = None,
         timeout_ms: int = DEFAULT_TIMEOUT_MS,
         max_retries: int = DEFAULT_MAX_RETRIES,
-        client: Optional[httpx.Client] = None,
+        client: httpx.Client | None = None,
     ):
         resolved_api_key = api_key or os.environ.get("NEEVCLOUD_API_KEY")
         if not resolved_api_key:
@@ -62,7 +62,7 @@ class NeevAI:
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         self.close()
 
-    def _resolve_scope(self, org_id: Optional[str] = None, project_id: Optional[str] = None) -> Scope:
+    def _resolve_scope(self, org_id: str | None = None, project_id: str | None = None) -> Scope:
         """Merges caller overrides with client defaults and validates them."""
         resolved_org = org_id or self.default_org_id
         resolved_proj = project_id or self.default_project_id
@@ -84,13 +84,13 @@ class AsyncNeevAI:
 
     def __init__(
         self,
-        api_key: Optional[str] = None,
-        org_id: Optional[str] = None,
-        project_id: Optional[str] = None,
-        base_url: Optional[str] = None,
+        api_key: str | None = None,
+        org_id: str | None = None,
+        project_id: str | None = None,
+        base_url: str | None = None,
         timeout_ms: int = DEFAULT_TIMEOUT_MS,
         max_retries: int = DEFAULT_MAX_RETRIES,
-        client: Optional[httpx.AsyncClient] = None,
+        client: httpx.AsyncClient | None = None,
     ):
         resolved_api_key = api_key or os.environ.get("NEEVCLOUD_API_KEY")
         if not resolved_api_key:
@@ -123,7 +123,7 @@ class AsyncNeevAI:
     async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         await self.aclose()
 
-    def _resolve_scope(self, org_id: Optional[str] = None, project_id: Optional[str] = None) -> Scope:
+    def _resolve_scope(self, org_id: str | None = None, project_id: str | None = None) -> Scope:
         """Merges caller overrides with client defaults and validates them."""
         resolved_org = org_id or self.default_org_id
         resolved_proj = project_id or self.default_project_id
