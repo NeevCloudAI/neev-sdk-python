@@ -5,7 +5,7 @@
 ```sh
 git clone https://github.com/NeevCloudAI/neevai-sdk-python.git
 cd neevai-sdk-python
-uv sync
+uv sync --extra dev
 ```
 
 ## Common commands
