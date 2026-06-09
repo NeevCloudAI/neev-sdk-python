@@ -1,0 +1,367 @@
+openapi: 3.0.3
+info:
+  title: AI Agent Service API
+  description: |
+    Manages sandboxes for the AI Supercloud platform. v1 scope is the
+    sandbox-lifecycle control-plane path described in
+    `services/aiagent-service/docs/rfc/rfc_sandbox_isolation.md` —
+    `aiagent-service` writes `Sandbox` CRs (with `runtimeClassName=runsc`)
+    against the DP cluster, the upstream `agent-sandbox` controller
+    reconciles them, and this service mirrors phase / status back.
+
+    File ops, exec, and secrets are out of scope for v1 and live in
+    follow-up RFCs (`rfc_sandbox_operations.md`,
+    `rfc_sandbox_ingress_gateway.md`, `rfc_agent_secrets.md`).
+
+    Sections in this file:
+      -1  Info / servers / security
+      -2  Paths
+        -2.1  Sandboxes — Lifecycle
+      -3  Components
+        -3.1  Security schemes
+        -3.2  Shared parameters
+        -3.3  Shared responses
+        -3.4  Error schema
+        -3.5  Sandboxes — schemas
+  version: 0.1.0
+
+servers:
+  - url: "https://agent.{env}.ai.neevcloud.com"
+    description: |
+      Agent Service base URL. `env` selects the deployment environment.
+    variables:
+      env:
+        default: dev
+        enum:
+          - stg
+          - dev
+
+security:
+  - BearerAuth: []
+
+paths:
+
+  /api/v1beta1/orgs/{org_id}/projects/{project_id}/sandboxes:
+    get:
+      tags: [Sandboxes]
+      summary: List sandboxes in a project
+      operationId: listSandboxes
+      parameters:
+        - { $ref: '#/components/parameters/OrgID' }
+        - { $ref: '#/components/parameters/ProjectID' }
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        "200":
+          description: Paginated list of sandboxes
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SandboxListResponse' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "500": { $ref: '#/components/responses/InternalServerError' }
+
+    post:
+      tags: [Sandboxes]
+      summary: Create a sandbox
+      operationId: createSandbox
+      parameters:
+        - { $ref: '#/components/parameters/OrgID' }
+        - { $ref: '#/components/parameters/ProjectID' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateSandboxRequest' }
+      responses:
+        "201":
+          description: Sandbox created (Kubernetes CR may still be pending — see phase)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Sandbox' }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "409": { $ref: '#/components/responses/Conflict' }
+        "500": { $ref: '#/components/responses/InternalServerError' }
+
+  /api/v1beta1/orgs/{org_id}/projects/{project_id}/sandboxes/{sandbox_id}:
+    get:
+      tags: [Sandboxes]
+      summary: Get a sandbox by ID
+      operationId: getSandbox
+      parameters:
+        - { $ref: '#/components/parameters/OrgID' }
+        - { $ref: '#/components/parameters/ProjectID' }
+        - { $ref: '#/components/parameters/SandboxID' }
+      responses:
+        "200":
+          description: Sandbox details
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Sandbox' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        "500": { $ref: '#/components/responses/InternalServerError' }
+
+    delete:
+      tags: [Sandboxes]
+      summary: Delete a sandbox (removes the Kubernetes CR and the DB row)
+      operationId: deleteSandbox
+      parameters:
+        - { $ref: '#/components/parameters/OrgID' }
+        - { $ref: '#/components/parameters/ProjectID' }
+        - { $ref: '#/components/parameters/SandboxID' }
+      responses:
+        "204": { description: Sandbox deleted }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        "500": { $ref: '#/components/responses/InternalServerError' }
+
+  /api/v1beta1/orgs/{org_id}/projects/{project_id}/sandboxes/{sandbox_id}/pause:
+    post:
+      tags: [Sandboxes]
+      summary: Pause a sandbox (scale to 0 replicas)
+      operationId: pauseSandbox
+      parameters:
+        - { $ref: '#/components/parameters/OrgID' }
+        - { $ref: '#/components/parameters/ProjectID' }
+        - { $ref: '#/components/parameters/SandboxID' }
+      responses:
+        "200":
+          description: Sandbox paused
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Sandbox' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        "500": { $ref: '#/components/responses/InternalServerError' }
+
+  /api/v1beta1/orgs/{org_id}/projects/{project_id}/sandboxes/{sandbox_id}/resume:
+    post:
+      tags: [Sandboxes]
+      summary: Resume a paused sandbox (scale to 1 replica)
+      operationId: resumeSandbox
+      parameters:
+        - { $ref: '#/components/parameters/OrgID' }
+        - { $ref: '#/components/parameters/ProjectID' }
+        - { $ref: '#/components/parameters/SandboxID' }
+      responses:
+        "200":
+          description: Sandbox resumed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Sandbox' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        "500": { $ref: '#/components/responses/InternalServerError' }
+
+  /api/v1beta1/orgs/{org_id}/projects/{project_id}/sandboxes/{sandbox_id}/metrics:
+    get:
+      tags: [Sandboxes]
+      summary: Read live health metrics for a sandbox
+      description: |
+        Returns the bounded, tenant-scoped metric set for a single sandbox
+        (CPU / memory / disk plus lifecycle/rate series) by querying the
+        CP-resident SigNoz store.
+
+        `org_id` / `project_id` / `sandbox_id` are taken from the path and
+        injected server-side as the SigNoz label filter; a caller can never
+        widen the query to a sandbox their org/project does not own.
+
+        `from` / `to` / `step` are optional and default to the last hour at a
+        default step — the live-health common case is a paramless GET.
+      operationId: getSandboxMetrics
+      parameters:
+        - { $ref: '#/components/parameters/OrgID' }
+        - { $ref: '#/components/parameters/ProjectID' }
+        - { $ref: '#/components/parameters/SandboxID' }
+        - name: from
+          in: query
+          required: false
+          description: Start of the window (RFC3339). Defaults to one hour before `to`.
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          required: false
+          description: End of the window (RFC3339). Defaults to now.
+          schema: { type: string, format: date-time }
+        - name: step
+          in: query
+          required: false
+          description: Resolution as a Go duration (e.g. "60s", "5m"). Server clamps to a sane range.
+          schema: { type: string }
+      responses:
+        "200":
+          description: Tenant-scoped metric series for the sandbox
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SandboxMetricsResponse' }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        "500": { $ref: '#/components/responses/InternalServerError' }
+
+components:
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    OrgID:
+      name: org_id
+      in: path
+      required: true
+      description: Organization identifier (short string, not a UUID)
+      schema:
+        type: string
+    ProjectID:
+      name: project_id
+      in: path
+      required: true
+      description: Project identifier (short string, not a UUID)
+      schema:
+        type: string
+    SandboxID:
+      name: sandbox_id
+      in: path
+      required: true
+      description: Sandbox UUID
+      schema:
+        type: string
+        format: uuid
+    Page:
+      name: page
+      in: query
+      required: false
+      schema: { type: integer, minimum: 1, default: 1 }
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Forbidden:
+      description: Forbidden
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Conflict:
+      description: Resource already exists
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:   { type: string }
+        details: { type: string }
+
+    EnvVar:
+      type: object
+      required: [name, value]
+      properties:
+        name:  { type: string }
+        value: { type: string }
+
+    SandboxPhase:
+      type: string
+      enum: [Pending, Ready, NotReady, Unknown, Paused]
+
+    Sandbox:
+      type: object
+      required: [id, org_id, project_id, name, region, image, phase, replicas, created_at, updated_at]
+      properties:
+        id:         { type: string, format: uuid }
+        org_id:     { type: string }
+        project_id: { type: string }
+        name:       { type: string }
+        namespace:  { type: string }
+        region:     { type: string }
+        image:      { type: string }
+        command:    { type: array, items: { type: string } }
+        env:        { type: array, items: { $ref: '#/components/schemas/EnvVar' } }
+        phase:      { $ref: '#/components/schemas/SandboxPhase' }
+        fqdn:       { type: string, nullable: true }
+        connect_url: { type: string, nullable: true }
+        replicas:   { type: integer, minimum: 0, maximum: 1 }
+        k8s_uid:    { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    CreateSandboxRequest:
+      type: object
+      required: [name, sandbox_template_id, region]
+      properties:
+        name:      { type: string, minLength: 1 }
+        sandbox_template_id: { type: string, minLength: 1 }
+        namespace: { type: string }
+        region:    { type: string }
+        image:     { type: string, minLength: 1 }
+        command:   { type: array, items: { type: string } }
+        env:       { type: array, items: { $ref: '#/components/schemas/EnvVar' } }
+
+    SandboxListResponse:
+      type: object
+      required: [items, total, page, limit]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Sandbox' } }
+        total: { type: integer }
+        page:  { type: integer }
+        limit: { type: integer }
+
+    MetricSeries:
+      type: object
+      required: [metric, points]
+      properties:
+        metric:
+          type: string
+        unit:
+          type: string
+        points:
+          type: array
+          items:
+            type: array
+            items: { type: number, format: double }
+
+    SandboxMetricsResponse:
+      type: object
+      required: [sandbox_id, from, to, step, series]
+      properties:
+        sandbox_id: { type: string, format: uuid }
+        from:       { type: string, format: date-time }
+        to:         { type: string, format: date-time }
+        step:       { type: string }
+        series:     { type: array, items: { $ref: '#/components/schemas/MetricSeries' } }

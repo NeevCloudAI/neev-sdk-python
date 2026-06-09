@@ -1,0 +1,57 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "neevai"
+version = "0.1.0"
+description = "Official NeevCloud SDK for the NeevAI platform"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "Apache-2.0" }
+dependencies = [
+    "httpx>=0.24.0",
+    "typing-extensions>=4.13.2",
+    "pydantic>=2.10",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.20.0",
+    "pytest-mock>=3.6.0",
+    "ruff>=0.5.0",
+    "datamodel-code-generator>=0.25.0",
+    "pyright>=1.1",
+    "mypy>=1.10",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/neevai"]
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.pyright]
+include = ["src/neevai"]
+exclude = ["src/neevai/generated"]
+pythonVersion = "3.10"
+typeCheckingMode = "strict"
+reportMissingTypeStubs = false
+reportPrivateUsage = false
+reportUnknownMemberType = false
+
+[tool.mypy]
+python_version = "3.10"
+packages = ["neevai"]
+strict = true
+warn_return_any = true
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = "neevai.generated.*"
+ignore_errors = true
+
+
