@@ -42,9 +42,10 @@ class Sandbox(TypedDict):
 
 class CreateSandboxRequest(TypedDict):
     name: str
+    sandbox_template_id: str
     namespace: NotRequired[str]
-    region: NotRequired[str]
-    image: str
+    region: str
+    image: NotRequired[str]
     command: NotRequired[list[str]]
     env: NotRequired[list[EnvVar]]
 

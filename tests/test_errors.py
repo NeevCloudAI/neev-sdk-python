@@ -39,3 +39,17 @@ def test_error_from_status_mapping(status, expected_type):
     assert str(status) in str(err)
     assert "msg" in str(err)
     assert "req-123" in str(err)
+
+
+def test_error_from_status_includes_request_context():
+    err = error_from_status(
+        500,
+        None,
+        "req-456",
+        request_method="POST",
+        request_url="https://agent.example.com/api/v1beta1/sandboxes",
+    )
+    assert err.request_method == "POST"
+    assert err.request_url == "https://agent.example.com/api/v1beta1/sandboxes"
+    assert "POST https://agent.example.com/api/v1beta1/sandboxes" in str(err)
+    assert "req-456" in str(err)

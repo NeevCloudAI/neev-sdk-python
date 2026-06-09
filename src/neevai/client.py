@@ -19,13 +19,19 @@ DEFAULT_MAX_RETRIES = 2
 
 
 class NeevAI:
-    """NeevAI platform synchronous client."""
+    """NeevAI platform synchronous client.
+
+    Defaults for ``org_id``, ``project_id``, and ``region`` can be set via
+    constructor kwargs or the ``NEEVCLOUD_ORG_ID``, ``NEEVCLOUD_PROJECT_ID``,
+    and ``NEEVCLOUD_REGION`` environment variables.
+    """
 
     def __init__(
         self,
         api_key: str | None = None,
         org_id: str | None = None,
         project_id: str | None = None,
+        region: str | None = None,
         base_url: str | None = None,
         timeout_ms: int = DEFAULT_TIMEOUT_MS,
         max_retries: int = DEFAULT_MAX_RETRIES,
@@ -39,6 +45,7 @@ class NeevAI:
 
         self.default_org_id = org_id or os.environ.get("NEEVCLOUD_ORG_ID")
         self.default_project_id = project_id or os.environ.get("NEEVCLOUD_PROJECT_ID")
+        self.default_region = region or os.environ.get("NEEVCLOUD_REGION")
         self.base_url = base_url or os.environ.get("NEEVCLOUD_BASE_URL") or DEFAULT_BASE_URL
 
         self._transport = ControlTransport(
@@ -78,15 +85,31 @@ class NeevAI:
 
         return Scope(org_id=resolved_org, project_id=resolved_proj)
 
+    def _resolve_region(self, region: str | None = None) -> str:
+        """Merges caller overrides with client defaults and validates region."""
+        resolved = region or self.default_region
+        if not resolved:
+            raise NeevAIError(
+                "Missing region. Pass `region` in create params, set it on the client, "
+                "or set the NEEVCLOUD_REGION environment variable."
+            )
+        return resolved
+
 
 class AsyncNeevAI:
-    """NeevAI platform asynchronous client."""
+    """NeevAI platform asynchronous client.
+
+    Defaults for ``org_id``, ``project_id``, and ``region`` can be set via
+    constructor kwargs or the ``NEEVCLOUD_ORG_ID``, ``NEEVCLOUD_PROJECT_ID``,
+    and ``NEEVCLOUD_REGION`` environment variables.
+    """
 
     def __init__(
         self,
         api_key: str | None = None,
         org_id: str | None = None,
         project_id: str | None = None,
+        region: str | None = None,
         base_url: str | None = None,
         timeout_ms: int = DEFAULT_TIMEOUT_MS,
         max_retries: int = DEFAULT_MAX_RETRIES,
@@ -100,6 +123,7 @@ class AsyncNeevAI:
 
         self.default_org_id = org_id or os.environ.get("NEEVCLOUD_ORG_ID")
         self.default_project_id = project_id or os.environ.get("NEEVCLOUD_PROJECT_ID")
+        self.default_region = region or os.environ.get("NEEVCLOUD_REGION")
         self.base_url = base_url or os.environ.get("NEEVCLOUD_BASE_URL") or DEFAULT_BASE_URL
 
         self._transport = AsyncControlTransport(
@@ -138,3 +162,13 @@ class AsyncNeevAI:
             )
 
         return Scope(org_id=resolved_org, project_id=resolved_proj)
+
+    def _resolve_region(self, region: str | None = None) -> str:
+        """Merges caller overrides with client defaults and validates region."""
+        resolved = region or self.default_region
+        if not resolved:
+            raise NeevAIError(
+                "Missing region. Pass `region` in create params, set it on the client, "
+                "or set the NEEVCLOUD_REGION environment variable."
+            )
+        return resolved

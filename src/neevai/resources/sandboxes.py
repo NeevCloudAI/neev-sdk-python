@@ -4,7 +4,7 @@ from neevai.types import CreateSandboxParams, SandboxMetricsResponse
 
 if TYPE_CHECKING:
     from neevai.client import AsyncNeevAI, NeevAI
-    from neevai.sandbox import AsyncSandbox, Sandbox
+    from neevai.handles.sandbox import AsyncSandbox, Sandbox
 
 
 class SandboxPage(TypedDict):
@@ -34,12 +34,15 @@ class Sandboxes:
         project_id: str | None = None,
     ) -> "Sandbox":
         """Creates a new sandbox in the resolved project context."""
-        from neevai.sandbox import Sandbox
+        from neevai.handles.sandbox import Sandbox
 
         scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
         path = f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes"
 
-        data = self._client._transport.request("POST", path, body=params)
+        body = dict(params)
+        if not body.get("region"):
+            body["region"] = self._client._resolve_region()
+        data = self._client._transport.request("POST", path, body=body)
         return Sandbox(self, data, scope)
 
     def list(
@@ -50,7 +53,7 @@ class Sandboxes:
         project_id: str | None = None,
     ) -> SandboxPage:
         """Lists all sandboxes in the resolved project context with pagination."""
-        from neevai.sandbox import Sandbox
+        from neevai.handles.sandbox import Sandbox
 
         scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
         path = f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes"
@@ -77,7 +80,7 @@ class Sandboxes:
         project_id: str | None = None,
     ) -> "Sandbox":
         """Retrieves details of a specific sandbox."""
-        from neevai.sandbox import Sandbox
+        from neevai.handles.sandbox import Sandbox
 
         scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
         path = f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes/{id}"
@@ -92,7 +95,7 @@ class Sandboxes:
         project_id: str | None = None,
     ) -> "Sandbox":
         """Scales a sandbox to 0 replicas, putting it in Paused state."""
-        from neevai.sandbox import Sandbox
+        from neevai.handles.sandbox import Sandbox
 
         scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
         path = f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes/{id}/pause"
@@ -107,7 +110,7 @@ class Sandboxes:
         project_id: str | None = None,
     ) -> "Sandbox":
         """Scales a sandbox back to 1 replica, moving it back towards Ready."""
-        from neevai.sandbox import Sandbox
+        from neevai.handles.sandbox import Sandbox
 
         scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
         path = f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes/{id}/resume"
@@ -166,12 +169,15 @@ class AsyncSandboxes:
         project_id: str | None = None,
     ) -> "AsyncSandbox":
         """Creates a new sandbox asynchronously."""
-        from neevai.sandbox import AsyncSandbox
+        from neevai.handles.sandbox import AsyncSandbox
 
         scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
         path = f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes"
 
-        data = await self._client._transport.request("POST", path, body=params)
+        body = dict(params)
+        if not body.get("region"):
+            body["region"] = self._client._resolve_region()
+        data = await self._client._transport.request("POST", path, body=body)
         return AsyncSandbox(self, data, scope)
 
     async def list(
@@ -182,7 +188,7 @@ class AsyncSandboxes:
         project_id: str | None = None,
     ) -> AsyncSandboxPage:
         """Lists all sandboxes asynchronously with pagination."""
-        from neevai.sandbox import AsyncSandbox
+        from neevai.handles.sandbox import AsyncSandbox
 
         scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
         path = f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes"
@@ -209,7 +215,7 @@ class AsyncSandboxes:
         project_id: str | None = None,
     ) -> "AsyncSandbox":
         """Retrieves details of a specific sandbox asynchronously."""
-        from neevai.sandbox import AsyncSandbox
+        from neevai.handles.sandbox import AsyncSandbox
 
         scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
         path = f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes/{id}"
@@ -224,7 +230,7 @@ class AsyncSandboxes:
         project_id: str | None = None,
     ) -> "AsyncSandbox":
         """Scales a sandbox to 0 replicas asynchronously."""
-        from neevai.sandbox import AsyncSandbox
+        from neevai.handles.sandbox import AsyncSandbox
 
         scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
         path = f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes/{id}/pause"
@@ -239,7 +245,7 @@ class AsyncSandboxes:
         project_id: str | None = None,
     ) -> "AsyncSandbox":
         """Scales a sandbox back to 1 replica asynchronously."""
-        from neevai.sandbox import AsyncSandbox
+        from neevai.handles.sandbox import AsyncSandbox
 
         scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
         path = f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes/{id}/resume"

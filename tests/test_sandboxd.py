@@ -3,13 +3,13 @@
 import httpx
 import pytest
 
-from neevai.errors import APIConnectionError, APITimeoutError, NotFoundError
-from neevai.sandboxd import (
+from neevai.dataplane.sandboxd import (
     AsyncSandboxConnection,
     AsyncSandboxFiles,
     SandboxConnection,
     SandboxFiles,
 )
+from neevai.errors import APIConnectionError, APITimeoutError, NotFoundError
 from neevai.transport.dataplane import DataplaneTransport
 
 

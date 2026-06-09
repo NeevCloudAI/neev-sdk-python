@@ -1,61 +1,60 @@
 """
-Minimum asynchronous example: create a sandbox, wait until ready, hold, delete.
+Linear sandbox lifecycle: create, wait, metrics, pause, delete.
 
 Requires ``NEEVCLOUD_SANDBOX_TEMPLATE_ID``. Set ``NEEVCLOUD_REGION`` for the
 deployment region (or pass ``region`` on the client / in create params).
-Optional ``NEEVAI_HOLD_SECONDS`` (default 60) controls how long to keep the
-sandbox alive after it becomes ready.
 
 Usage::
 
     NEEVCLOUD_API_KEY=... NEEVCLOUD_ORG_ID=... NEEVCLOUD_PROJECT_ID=... \\
-    NEEVCLOUD_REGION=... NEEVCLOUD_SANDBOX_TEMPLATE_ID=... python examples/async_basic.py
+    NEEVCLOUD_REGION=... NEEVCLOUD_SANDBOX_TEMPLATE_ID=... \\
+    python examples/sandbox_lifecycle.py
 """
 
-import asyncio
 import os
 import sys
 
-from neevai import AsyncNeevAI
+from neevai import NeevAI
 from neevai.errors import NeevAIError
 
 SANDBOX_TEMPLATE_ID = os.environ["NEEVCLOUD_SANDBOX_TEMPLATE_ID"]
 WAIT_TIMEOUT_MS = int(os.environ.get("NEEVAI_WAIT_TIMEOUT_MS", "300000"))
-HOLD_SECONDS = int(os.environ.get("NEEVAI_HOLD_SECONDS", "60"))
 
 
-async def main() -> None:
-    async with AsyncNeevAI(
+def main() -> None:
+    with NeevAI(
         api_key=os.environ.get("NEEVCLOUD_API_KEY"),
         org_id=os.environ.get("NEEVCLOUD_ORG_ID"),
         project_id=os.environ.get("NEEVCLOUD_PROJECT_ID"),
     ) as client:
         try:
-            sandbox = await client.sandboxes.create(
+            sandbox = client.sandboxes.create(
                 {
-                    "name": "async-demo",
+                    "name": "example-agent",
                     "sandbox_template_id": SANDBOX_TEMPLATE_ID,
-                    "image": "ubuntu:22.04",
+                    "image": "ghcr.io/neevcloud/sandbox-python:3.12",
                 }
             )
-            print(f"Created {sandbox.id} (phase={sandbox.phase})")
+            print(f"created {sandbox.id} (phase: {sandbox.phase})")
 
-            print(f"Waiting for Ready (timeout={WAIT_TIMEOUT_MS}ms)...")
-            await sandbox.wait_until_ready(
+            sandbox.wait_until_ready(
                 timeout_ms=WAIT_TIMEOUT_MS,
                 on_poll=lambda s: print(f"  phase={s.phase} replicas={s.replicas}"),
             )
-            print(f"Ready at {sandbox.connect_url}")
+            print(f"ready at {sandbox.connect_url}")
 
-            print(f"Holding for {HOLD_SECONDS}s...")
-            await asyncio.sleep(HOLD_SECONDS)
+            metrics = sandbox.metrics()
+            print(f"metric series: {[s['metric'] for s in metrics.get('series', [])]}")
 
-            await client.sandboxes.delete(sandbox.id)
-            print("Deleted")
+            sandbox.pause()
+            print(f"paused (replicas: {sandbox.replicas})")
+
+            client.sandboxes.delete(sandbox.id)
+            print("deleted")
         except NeevAIError as e:
             print(f"Error: {e}", file=sys.stderr)
             sys.exit(1)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

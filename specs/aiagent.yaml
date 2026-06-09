@@ -323,9 +323,10 @@ components:
 
     CreateSandboxRequest:
       type: object
-      required: [name, image]
+      required: [name, sandbox_template_id, region]
       properties:
         name:      { type: string, minLength: 1 }
+        sandbox_template_id: { type: string, minLength: 1 }
         namespace: { type: string }
         region:    { type: string }
         image:     { type: string, minLength: 1 }

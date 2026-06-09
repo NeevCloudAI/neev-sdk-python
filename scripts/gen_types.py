@@ -1,24 +1,29 @@
 #!/usr/bin/env python3
 """Generate Python types from vendored OpenAPI specs.
 
-Each ``specs/<service>.yaml`` produces
-``src/neevai/generated/<service>.py`` via datamodel-code-generator.
+Each ``specs/<service>.yaml`` (or ``$NEEV_PUBLIC_SPECS/<service>.yaml``)
+produces ``src/neevai/generated/<service>.py`` via datamodel-code-generator.
 Specs are migrated into ``specs/`` from the backend services one at a time;
 dropping a new file here and re-running this script is all that is needed
 to make a service's types available for a hand-written wrapper.
+
+Set ``NEEV_PUBLIC_SPECS`` to override the local vendored ``specs/`` directory
+(for example, when developing against a monorepo ``public-specs/`` checkout).
 
 Usage::
 
     uv run python scripts/gen_types.py
 """
 
+import os
 import pathlib
 import re
 import subprocess
 import sys
 
-SPECS_DIR = pathlib.Path(__file__).resolve().parent.parent / "specs"
-OUT_DIR = pathlib.Path(__file__).resolve().parent.parent / "src" / "neevai" / "generated"
+REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
+SPECS_DIR = pathlib.Path(os.environ.get("NEEV_PUBLIC_SPECS", REPO_ROOT / "specs"))
+OUT_DIR = REPO_ROOT / "src" / "neevai" / "generated"
 
 
 def spec_files() -> list[pathlib.Path]:

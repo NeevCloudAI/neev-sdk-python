@@ -38,10 +38,18 @@ Both paths run over a single shared transport: bearer auth, per-request timeout,
 
 ### Adding or migrating a service
 
-1. Copy the service's OpenAPI spec to `specs/<service>.yaml`.
-2. Run `uv run python scripts/gen_types.py` → generates `src/neevai/generated/<service>.py`.
-3. Hand-write the resource wrapper (a `src/neevai/resources/<service>.py` + any handle classes).
-4. Until a spec exists, a resource may use `client.raw.request()` with hand-written types; migrate it to the typed client when the spec lands.
+Follow the slot-based layout (see [docs/architecture.md](./docs/architecture.md)):
+
+1. **Spec** — copy the service OpenAPI spec to `specs/<service>.yaml`.
+2. **Generated types** — run `uv run python scripts/gen_types.py` → `src/neevai/generated/<service>.py`.
+3. **Type aliases** — add public aliases in `src/neevai/types.py` if needed.
+4. **Resource class** — hand-write `src/neevai/resources/<plural>.py` (control-plane CRUD).
+5. **Handle** (if lifecycle object) — hand-write `src/neevai/handles/<singular>.py`.
+6. **Data-plane surface** (if applicable) — hand-write `src/neevai/dataplane/<name>.py`.
+7. **Tests** — add `tests/test_<plural>.py`, `tests/test_<handle>.py`, etc.
+8. **Public exports** — re-export new types from `src/neevai/__init__.py`.
+
+Until a spec exists, a resource may use `client.raw.request()` with hand-written types; migrate it to the typed client when the spec lands.
 
 ## Code conventions
 

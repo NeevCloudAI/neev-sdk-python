@@ -4,7 +4,7 @@ import pytest
 
 from neevai.client import NeevAI
 from neevai.errors import NeevAIError
-from neevai.sandbox import Sandbox
+from neevai.handles.sandbox import Sandbox
 
 
 def test_sandbox_properties():
@@ -74,9 +74,12 @@ def test_sandbox_refresh(control_transport):
         api_key="test",
         org_id="org1",
         project_id="proj1",
+        region="us-east-1",
         client=control_transport,
     )
-    sb = client.sandboxes.create({"name": "s1", "image": "ubuntu:22.04"})
+    sb = client.sandboxes.create(
+        {"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal", "image": "ubuntu:22.04"}
+    )
     assert sb.phase == "Pending"
 
     sb.refresh()

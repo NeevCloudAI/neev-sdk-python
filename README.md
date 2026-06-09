@@ -10,6 +10,11 @@ pip install neevai
 
 Requires **Python ≥ 3.10**.
 
+## Repository layout
+
+See [docs/architecture.md](docs/architecture.md) for the canonical SDK slot
+layout and how this repo maps Python paths to each slot.
+
 ## Quick start
 
 Set your API key and default scope as environment variables:
@@ -18,6 +23,7 @@ Set your API key and default scope as environment variables:
 export NEEVCLOUD_API_KEY=your_api_key_here
 export NEEVCLOUD_ORG_ID=your_org_id
 export NEEVCLOUD_PROJECT_ID=your_project_id
+export NEEVCLOUD_REGION=your_region
 ```
 
 Or pass them directly when creating the client:
@@ -25,17 +31,23 @@ Or pass them directly when creating the client:
 ```python
 from neevai import NeevAI
 
-with NeevAI(api_key="...", org_id="...", project_id="...") as client:
-    sandbox = client.sandboxes.create({"name": "my-sandbox", "image": "ubuntu:22.04"})
+with NeevAI(api_key="...", org_id="...", project_id="...", region="...") as client:
+    sandbox = client.sandboxes.create({
+        "name": "my-sandbox",
+        "sandbox_template_id": "<your-sandbox-template-id>",
+        "image": "ubuntu:22.04",
+    })
     sandbox.wait_until_ready()
     result = sandbox.exec("echo Hello World")
     print(result["stdout"])
     client.sandboxes.delete(sandbox.id)
 ```
 
-See [`examples/demo.py`](examples/demo.py) for a complete walk‑through covering
-create, list, get, pause, resume, exec, file operations, metrics, the raw
-client, and error handling.
+Runnable examples live under [`examples/`](examples/). They require
+`NEEVCLOUD_SANDBOX_TEMPLATE_ID` and `NEEVCLOUD_REGION` (or pass `region` on
+the client or per `create()` call).
+See [`examples/sandbox_lifecycle.py`](examples/sandbox_lifecycle.py) for a
+complete walk‑through covering create, wait, metrics, pause, and delete.
 
 ## Testing
 
@@ -77,8 +89,10 @@ async with AsyncNeevAI(api_key="...") as client:
     await client.sandboxes.create(...)
 ```
 
-Constructor accepts `api_key`, `org_id`, `project_id`, `base_url`,
-`timeout_ms` (default 60 s), and `max_retries` (default 2).
+Constructor accepts `api_key`, `org_id`, `project_id`, `region`, `base_url`,
+`timeout_ms` (default 60 s), and `max_retries` (default 2). Defaults for
+`org_id`, `project_id`, and `region` can also be set via `NEEVCLOUD_ORG_ID`,
+`NEEVCLOUD_PROJECT_ID`, and `NEEVCLOUD_REGION`.
 
 ### Sandboxes resource
 

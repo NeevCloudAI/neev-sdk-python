@@ -116,7 +116,13 @@ def test_control_transport_sanity(control_transport):
     assert resp == {"items": []}
 
     created = transport.request(
-        "POST", "/v1/sandboxes", body={"name": "s1", "image": "ubuntu:22.04"}
+        "POST",
+        "/v1/sandboxes",
+        body={
+            "name": "s1",
+            "sandbox_template_id": "sb-ubuntu-24-04-minimal",
+            "image": "ubuntu:22.04",
+        },
     )
     assert created["name"] == "s1"
     assert created["id"] == "1"

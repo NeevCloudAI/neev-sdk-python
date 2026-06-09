@@ -1,21 +1,30 @@
 import time
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from neevai.errors import NeevAIError
 from neevai.types import SandboxData, SandboxMetricsResponse, SandboxPhase, Scope
 
 if TYPE_CHECKING:
-    from neevai.resources.sandboxes import AsyncSandboxes, Sandboxes
-    from neevai.sandboxd import (
+    from neevai.dataplane.sandboxd import (
         AsyncSandboxConnection,
         AsyncSandboxFiles,
         ExecResult,
         SandboxConnection,
         SandboxFiles,
     )
+    from neevai.resources.sandboxes import AsyncSandboxes, Sandboxes
 
 DEFAULT_WAIT_TIMEOUT_MS = 120_000
 DEFAULT_POLL_INTERVAL_MS = 2_000
+
+
+def _wait_timeout_message(sandbox: "Sandbox | AsyncSandbox", timeout_ms: int) -> str:
+    return (
+        f"Sandbox {sandbox.id} did not become Ready within {timeout_ms}ms "
+        f"(phase: {sandbox.phase}, replicas: {sandbox.replicas}, "
+        f"connect_url: {sandbox.connect_url or '<none>'})."
+    )
 
 
 class Sandbox:
@@ -122,6 +131,7 @@ class Sandbox:
         self,
         timeout_ms: int = DEFAULT_WAIT_TIMEOUT_MS,
         poll_interval_ms: int = DEFAULT_POLL_INTERVAL_MS,
+        on_poll: Callable[["Sandbox"], None] | None = None,
     ) -> "Sandbox":
         """Polls until the sandbox reaches the Ready phase.
 
@@ -129,6 +139,8 @@ class Sandbox:
         """
         deadline = (time.time() * 1000.0) + timeout_ms
         while True:
+            if on_poll is not None:
+                on_poll(self)
             if self.phase == "Ready":
                 return self
             if self.phase == "Paused":
@@ -138,9 +150,7 @@ class Sandbox:
 
             remaining = deadline - (time.time() * 1000.0)
             if remaining <= 0:
-                raise NeevAIError(
-                    f"Sandbox {self.id} did not become Ready within {timeout_ms}ms (phase: {self.phase})."
-                )
+                raise NeevAIError(_wait_timeout_message(self, timeout_ms))
 
             time.sleep(min(poll_interval_ms, remaining) / 1000.0)
             self.refresh()
@@ -176,7 +186,7 @@ class Sandbox:
                 raise NeevAIError(
                     f"Sandbox {self.id} has no connect_url yet; it must be Ready before file or exec operations."
                 )
-            from neevai.sandboxd import SandboxConnection
+            from neevai.dataplane.sandboxd import SandboxConnection
 
             self._conn = SandboxConnection(
                 connect_url=connect_url,
@@ -279,11 +289,14 @@ class AsyncSandbox:
         self,
         timeout_ms: int = DEFAULT_WAIT_TIMEOUT_MS,
         poll_interval_ms: int = DEFAULT_POLL_INTERVAL_MS,
+        on_poll: Callable[["AsyncSandbox"], None] | None = None,
     ) -> "AsyncSandbox":
         deadline = (time.time() * 1000.0) + timeout_ms
         import asyncio
 
         while True:
+            if on_poll is not None:
+                on_poll(self)
             if self.phase == "Ready":
                 return self
             if self.phase == "Paused":
@@ -293,9 +306,7 @@ class AsyncSandbox:
 
             remaining = deadline - (time.time() * 1000.0)
             if remaining <= 0:
-                raise NeevAIError(
-                    f"Sandbox {self.id} did not become Ready within ${timeout_ms}ms (phase: ${self.phase})."
-                )
+                raise NeevAIError(_wait_timeout_message(self, timeout_ms))
 
             await asyncio.sleep(min(poll_interval_ms, remaining) / 1000.0)
             await self.refresh()
@@ -329,7 +340,7 @@ class AsyncSandbox:
                 raise NeevAIError(
                     f"Sandbox {self.id} has no connect_url yet; it must be Ready before file or exec operations."
                 )
-            from neevai.sandboxd import AsyncSandboxConnection
+            from neevai.dataplane.sandboxd import AsyncSandboxConnection
 
             self._conn = AsyncSandboxConnection(
                 connect_url=connect_url,

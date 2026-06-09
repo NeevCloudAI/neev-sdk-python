@@ -71,13 +71,13 @@ class ControlTransport:
                     time.sleep(calculate_backoff(attempt))
                     attempt += 1
                     continue
-                raise APITimeoutError("Request timed out") from e
+                raise APITimeoutError(f"Request timed out: {method} {url}") from e
             except httpx.RequestError as e:
                 if attempt < self.max_retries:
                     time.sleep(calculate_backoff(attempt))
                     attempt += 1
                     continue
-                raise APIConnectionError("Request failed to reach the NeevAI API") from e
+                raise APIConnectionError(f"Request failed to reach the NeevAI API at {url}") from e
 
             # Check if retry is needed for transient status codes (429 or 5xx)
             if (
@@ -92,9 +92,15 @@ class ControlTransport:
 
             # Handle non-2xx status codes
             if not response.is_success:
-                body_parsed = self._parse_json(response)
+                body_parsed = self._parse_error_body(response)
                 request_id = response.headers.get("x-request-id")
-                raise error_from_status(response.status_code, body_parsed, request_id)
+                raise error_from_status(
+                    response.status_code,
+                    body_parsed,
+                    request_id,
+                    request_method=method,
+                    request_url=url,
+                )
 
             if response.status_code == 204:
                 return None
@@ -108,6 +114,14 @@ class ControlTransport:
             return response.json()
         except ValueError:
             return {"details": response.text}
+
+    def _parse_error_body(self, response: httpx.Response) -> dict[str, Any] | None:
+        parsed = self._parse_json(response)
+        if parsed is not None:
+            return parsed
+        if response.text:
+            return {"details": response.text}
+        return None
 
 
 class AsyncControlTransport:
@@ -167,13 +181,13 @@ class AsyncControlTransport:
                     await asyncio.sleep(calculate_backoff(attempt))
                     attempt += 1
                     continue
-                raise APITimeoutError("Request timed out") from e
+                raise APITimeoutError(f"Request timed out: {method} {url}") from e
             except httpx.RequestError as e:
                 if attempt < self.max_retries:
                     await asyncio.sleep(calculate_backoff(attempt))
                     attempt += 1
                     continue
-                raise APIConnectionError("Request failed to reach the NeevAI API") from e
+                raise APIConnectionError(f"Request failed to reach the NeevAI API at {url}") from e
 
             if (
                 response.status_code == 429 or response.status_code >= 500
@@ -186,9 +200,15 @@ class AsyncControlTransport:
                 continue
 
             if not response.is_success:
-                body_parsed = self._parse_json(response)
+                body_parsed = self._parse_error_body(response)
                 request_id = response.headers.get("x-request-id")
-                raise error_from_status(response.status_code, body_parsed, request_id)
+                raise error_from_status(
+                    response.status_code,
+                    body_parsed,
+                    request_id,
+                    request_method=method,
+                    request_url=url,
+                )
 
             if response.status_code == 204:
                 return None
@@ -202,6 +222,14 @@ class AsyncControlTransport:
             return response.json()
         except ValueError:
             return {"details": response.text}
+
+    def _parse_error_body(self, response: httpx.Response) -> dict[str, Any] | None:
+        parsed = self._parse_json(response)
+        if parsed is not None:
+            return parsed
+        if response.text:
+            return {"details": response.text}
+        return None
 
 
 class RawClient:

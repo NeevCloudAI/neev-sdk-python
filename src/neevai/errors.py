@@ -32,11 +32,17 @@ class APIError(NeevAIError):
         status_code: int,
         body: dict[str, Any] | None,
         request_id: str | None,
+        *,
+        request_method: str | None = None,
+        request_url: str | None = None,
     ):
         self.status_code = status_code
+        self.body = body
         self.code = body.get("error") if body else None
         self.details = body.get("details") if body else None
         self.request_id = request_id
+        self.request_method = request_method
+        self.request_url = request_url
         super().__init__(self._build_message())
 
     def _build_message(self) -> str:
@@ -45,6 +51,10 @@ class APIError(NeevAIError):
             parts.append(self.code)
         if self.details:
             parts.append(f"({self.details})")
+        elif self.body:
+            parts.append(f"(body: {self.body})")
+        if self.request_method and self.request_url:
+            parts.append(f"[{self.request_method} {self.request_url}]")
         if self.request_id:
             parts.append(f"[request-id: {self.request_id}]")
         return " ".join(parts)
@@ -108,25 +118,32 @@ def error_from_status(
     status_code: int,
     body: dict[str, Any] | None,
     request_id: str | None,
+    *,
+    request_method: str | None = None,
+    request_url: str | None = None,
 ) -> APIError:
     """Maps an HTTP status code and parsed JSON body to a specific APIError subclass."""
+    kwargs = {
+        "request_method": request_method,
+        "request_url": request_url,
+    }
     if status_code == 400:
-        return BadRequestError(status_code, body, request_id)
+        return BadRequestError(status_code, body, request_id, **kwargs)
     elif status_code == 401:
-        return AuthenticationError(status_code, body, request_id)
+        return AuthenticationError(status_code, body, request_id, **kwargs)
     elif status_code == 403:
-        return PermissionDeniedError(status_code, body, request_id)
+        return PermissionDeniedError(status_code, body, request_id, **kwargs)
     elif status_code == 404:
-        return NotFoundError(status_code, body, request_id)
+        return NotFoundError(status_code, body, request_id, **kwargs)
     elif status_code == 409:
-        return ConflictError(status_code, body, request_id)
+        return ConflictError(status_code, body, request_id, **kwargs)
     elif status_code == 412:
-        return PreconditionFailedError(status_code, body, request_id)
+        return PreconditionFailedError(status_code, body, request_id, **kwargs)
     elif status_code == 429:
-        return RateLimitError(status_code, body, request_id)
+        return RateLimitError(status_code, body, request_id, **kwargs)
     elif status_code == 504:
-        return DeadlineExceededError(status_code, body, request_id)
+        return DeadlineExceededError(status_code, body, request_id, **kwargs)
     elif status_code >= 500:
-        return InternalServerError(status_code, body, request_id)
+        return InternalServerError(status_code, body, request_id, **kwargs)
     else:
-        return APIError(status_code, body, request_id)
+        return APIError(status_code, body, request_id, **kwargs)

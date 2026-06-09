@@ -2,6 +2,12 @@
 # the Sandbox handle, and the typed error hierarchy.
 
 from neevai.client import AsyncNeevAI, NeevAI
+from neevai.dataplane import (
+    AsyncSandboxConnection,
+    AsyncSandboxFiles,
+    SandboxConnection,
+    SandboxFiles,
+)
 from neevai.errors import (
     APIConnectionError,
     APIError,
@@ -17,13 +23,7 @@ from neevai.errors import (
     PreconditionFailedError,
     RateLimitError,
 )
-from neevai.sandbox import AsyncSandbox, Sandbox
-from neevai.sandboxd import (
-    AsyncSandboxConnection,
-    AsyncSandboxFiles,
-    SandboxConnection,
-    SandboxFiles,
-)
+from neevai.handles import AsyncSandbox, Sandbox
 from neevai.transport.control import AsyncRawClient, RawClient
 from neevai.types import Scope
 
