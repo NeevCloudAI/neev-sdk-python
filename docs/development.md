@@ -19,12 +19,14 @@ uv sync --extra dev
 | `uv run ruff format .`                     | Auto-format sources                 |
 | `uv run ruff format --check .`             | Check formatting only               |
 | `uv run pytest -v`                         | Run all tests                       |
+| `uv run pyright`                           | Static type check (Pyright)         |
+| `uv run mypy`                              | Static type check (mypy)            |
 | `uv run python scripts/gen_types.py`       | Regenerate OpenAPI types from specs |
 
 ## Code generation
 
 The SDK uses [datamodel-code-generator](https://github.com/koxudaxi/datamodel-code-generator)
-to produce `TypedDict` classes from each vendored OpenAPI spec in `specs/`.
+to produce Pydantic v2 `BaseModel` classes from each vendored OpenAPI spec in `specs/`.
 
 Add a new spec file and run:
 
@@ -85,6 +87,6 @@ uv run ruff format .      # Fix formatting
 
 ## CI
 
-The CI workflow runs linting, formatting checks, type generation
-verification, tests, and a build step. It is defined in
-`.github/workflows/python-ci.yml`.
+The CI workflow runs linting, formatting checks, Pyright and mypy type
+checks, type generation verification, tests, and a build step. It is
+defined in `.github/workflows/python-ci.yml`.

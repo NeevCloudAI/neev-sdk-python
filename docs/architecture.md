@@ -45,7 +45,7 @@ neev-sdk-<lang>/
 | `transport/control` | Control-plane HTTP **with retries** | `src/neevai/transport/control.py` | `ControlTransport`, `RawClient` |
 | `transport/dataplane` | Data-plane HTTP **no retries** | `src/neevai/transport/dataplane.py` | `DataplaneTransport` |
 | `transport/retry` | Backoff/jitter policy | `src/neevai/transport/retry.py` | retry helpers |
-| `generated/` | Auto-generated OpenAPI types | `src/neevai/generated/aiagent.py` | `TypedDict` schemas |
+| `generated/` | Auto-generated OpenAPI types | `src/neevai/generated/aiagent.py` | Pydantic `BaseModel` schemas |
 | `types` | Public aliases / shared types | `src/neevai/types.py` | `Scope`, `SandboxData`, … |
 | `errors` | Typed error hierarchy | `src/neevai/errors.py` | `NeevAIError`, … |
 | `tests/` / `examples/` | Tests and usage samples | `tests/`, `examples/` | — |
@@ -168,7 +168,10 @@ This is a Python idiom; other language SDKs may use separate trees.
 5. **Scope model** — `org_id`/`project_id` on client or per-call.
 6. **No retries on sandboxd** — exec and writes are not idempotent.
 7. **CI enforcement** — generated types must match spec
-   (`git diff --exit-code src/neevai/generated`).
+   (`git diff --exit-code src/neevai/generated`); Pyright and mypy run in CI.
+8. **Runtime validation** — control-plane responses are coerced through Pydantic
+   models in `resources/` via `neevai._parse`; transport returns untyped JSON.
+9. **PEP 561** — `src/neevai/py.typed` marks the package as typed for consumers.
 
 ---
 

@@ -39,15 +39,27 @@ with NeevAI(api_key="...", org_id="...", project_id="...", region="...") as clie
     })
     sandbox.wait_until_ready()
     result = sandbox.exec("echo Hello World")
-    print(result["stdout"])
+    print(result.stdout)
     client.sandboxes.delete(sandbox.id)
 ```
 
-Runnable examples live under [`examples/`](examples/). They require
+Runnable examples live under `[examples/](examples/)`. They require
 `NEEVCLOUD_SANDBOX_TEMPLATE_ID` and `NEEVCLOUD_REGION` (or pass `region` on
 the client or per `create()` call).
-See [`examples/sandbox_lifecycle.py`](examples/sandbox_lifecycle.py) for a
+See `[examples/sandbox_lifecycle.py](examples/sandbox_lifecycle.py)` for a
 complete walk‑through covering create, wait, metrics, pause, and delete.
+See [`examples/sandbox_lifecycle_controller.py`](examples/sandbox_lifecycle_controller.py) to run individual sandbox operations (`create`, `list`, `get`, `pause`, `resume`, `delete`, `metrics`) from the command line.
+
+## Typing and validation
+
+The package ships a `[py.typed](src/neevai/py.typed)` marker (PEP 561). Control-plane
+JSON is validated at the resource boundary with Pydantic v2 models generated from
+`specs/aiagent.yaml`. `client.sandboxes.create({...})` still accepts plain dict
+literals; pass a `CreateSandboxParams` model instance if you prefer typed input.
+
+`sandbox.data` and `sandbox.to_json()` return JSON-compatible dicts
+(`model_dump(mode="json")`). `client.raw.request()` remains an intentional untyped
+escape hatch for spec-less endpoints.
 
 ## Testing
 
@@ -55,23 +67,22 @@ The test suite uses `pytest` and `httpx` mock transports — no network access
 is required.
 
 ```bash
-# Install dev dependencies
-pip install pytest pytest-asyncio
-
-# Run all tests
-pytest tests/ -v
+uv sync --extra dev
+uv run pytest -v
+uv run pyright
+uv run mypy
 ```
 
-All tests are under the [`tests/`](tests/) directory:
+All tests are under the `[tests/](tests/)` directory:
 
-| File                   | What it covers                           |
-|------------------------|------------------------------------------|
-| `test_client.py`       | Client init (sync & async)               |
-| `test_errors.py`       | HTTP-status → error-type mapping         |
-| `test_transport.py`    | Retry/backoff logic, mock transport      |
-| `test_sandbox.py`      | Sandbox handle properties & lifecycle    |
-| `test_sandboxd.py`     | Data‑plane transport & connection        |
-| `test_sandboxes.py`    | Sandboxes resource CRUD operations       |
+| File                | What it covers                        |
+| ------------------- | ------------------------------------- |
+| `test_client.py`    | Client init (sync & async)            |
+| `test_errors.py`    | HTTP-status → error-type mapping      |
+| `test_transport.py` | Retry/backoff logic, mock transport   |
+| `test_sandbox.py`   | Sandbox handle properties & lifecycle |
+| `test_sandboxd.py`  | Data‑plane transport & connection     |
+| `test_sandboxes.py` | Sandboxes resource CRUD operations    |
 
 ## API overview
 
@@ -96,37 +107,37 @@ Constructor accepts `api_key`, `org_id`, `project_id`, `region`, `base_url`,
 
 ### Sandboxes resource
 
-| Method              | Description                              |
-|---------------------|------------------------------------------|
-| `create(params)`    | Create a new sandbox                     |
-| `list(page, limit)` | List sandboxes (paginated)               |
-| `get(id)`           | Get a single sandbox                     |
-| `pause(id)`         | Scale to 0 replicas (Paused phase)       |
-| `resume(id)`        | Scale back to 1 replica                  |
-| `delete(id)`        | Permanently delete a sandbox             |
-| `metrics(id, ...)`  | Query live health metrics                |
+| Method              | Description                        |
+| ------------------- | ---------------------------------- |
+| `create(params)`    | Create a new sandbox               |
+| `list(page, limit)` | List sandboxes (paginated)         |
+| `get(id)`           | Get a single sandbox               |
+| `pause(id)`         | Scale to 0 replicas (Paused phase) |
+| `resume(id)`        | Scale back to 1 replica            |
+| `delete(id)`        | Permanently delete a sandbox       |
+| `metrics(id, ...)`  | Query live health metrics          |
 
 ### Sandbox handle
 
 Returned by `create()`, `get()`, etc.
 
-| Property / Method          | Description                            |
-|----------------------------|----------------------------------------|
-| `.id`                      | Sandbox UUID                           |
-| `.name`                    | Human-readable name                    |
-| `.phase`                   | Current lifecycle phase                |
-| `.replicas`                | Desired replica count                  |
-| `.connect_url`             | Daemon address (when Ready)            |
-| `.refresh()`               | Re‑fetch state from server             |
-| `.wait_until_ready(...)`   | Poll until phase is Ready              |
-| `.pause()`                 | Pause this sandbox                     |
-| `.resume()`                | Resume this sandbox                    |
-| `.delete()`                | Delete this sandbox                    |
-| `.exec(command, ...)`      | Run a command inside the sandbox       |
-| `.files.write(path, data)` | Write a file                           |
-| `.files.read(path)`        | Read a file (raw bytes)                |
-| `.files.read_text(path)`   | Read a file (UTF‑8 string)             |
-| `.files.list(path, ...)`   | List directory entries                 |
+| Property / Method          | Description                      |
+| -------------------------- | -------------------------------- |
+| `.id`                      | Sandbox UUID                     |
+| `.name`                    | Human-readable name              |
+| `.phase`                   | Current lifecycle phase          |
+| `.replicas`                | Desired replica count            |
+| `.connect_url`             | Daemon address (when Ready)      |
+| `.refresh()`               | Re‑fetch state from server       |
+| `.wait_until_ready(...)`   | Poll until phase is Ready        |
+| `.pause()`                 | Pause this sandbox               |
+| `.resume()`                | Resume this sandbox              |
+| `.delete()`                | Delete this sandbox              |
+| `.exec(command, ...)`      | Run a command inside the sandbox |
+| `.files.write(path, data)` | Write a file                     |
+| `.files.read(path)`        | Read a file (raw bytes)          |
+| `.files.read_text(path)`   | Read a file (UTF‑8 string)       |
+| `.files.list(path, ...)`   | List directory entries           |
 
 ### Exec
 
@@ -135,9 +146,9 @@ result = sandbox.exec("ls -la /tmp")
 # or with argv (bypasses shell):
 result = sandbox.exec(["ls", "-la", "/tmp"])
 
-print(result["stdout"])    # combined stdout
-print(result["stderr"])    # combined stderr
-print(result["exit_code"]) # integer exit code
+print(result.stdout)       # combined stdout
+print(result.stderr)       # combined stderr
+print(result.exit_code)    # integer exit code
 ```
 
 ### Raw client (untyped escape hatch)
@@ -151,17 +162,17 @@ resp = client.raw.request("GET", "/api/v1beta1/orgs/.../projects/.../sandboxes")
 All errors inherit from `NeevAIError`. HTTP errors are mapped to specific
 subclasses:
 
-| Status | Exception              |
-|--------|------------------------|
-| 400    | `BadRequestError`      |
-| 401    | `AuthenticationError`  |
-| 403    | `PermissionDeniedError`|
-| 404    | `NotFoundError`        |
-| 409    | `ConflictError`        |
+| Status | Exception                 |
+| ------ | ------------------------- |
+| 400    | `BadRequestError`         |
+| 401    | `AuthenticationError`     |
+| 403    | `PermissionDeniedError`   |
+| 404    | `NotFoundError`           |
+| 409    | `ConflictError`           |
 | 412    | `PreconditionFailedError` |
-| 429    | `RateLimitError`       |
-| 504    | `DeadlineExceededError`|
-| 5xx    | `InternalServerError`  |
+| 429    | `RateLimitError`          |
+| 504    | `DeadlineExceededError`   |
+| 5xx    | `InternalServerError`     |
 
 ## License
 

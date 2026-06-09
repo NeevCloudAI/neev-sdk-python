@@ -125,7 +125,7 @@ def test_control_transport_sanity(control_transport):
         },
     )
     assert created["name"] == "s1"
-    assert created["id"] == "1"
+    assert created["id"] == "00000000-0000-0000-0000-000000000001"
 
     fetched = transport.request("GET", f"/v1/sandboxes/{created['id']}")
     assert fetched["id"] == created["id"]

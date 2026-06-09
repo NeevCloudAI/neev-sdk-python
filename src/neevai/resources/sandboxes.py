@@ -1,24 +1,47 @@
-from typing import TYPE_CHECKING, TypedDict
+from collections.abc import Mapping
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
 
-from neevai.types import CreateSandboxParams, SandboxMetricsResponse
+from neevai._parse import coerce_model, coerce_params
+from neevai.types import (
+    CreateSandboxParams,
+    SandboxData,
+    SandboxListResponse,
+    SandboxMetricsResponse,
+)
 
 if TYPE_CHECKING:
     from neevai.client import AsyncNeevAI, NeevAI
     from neevai.handles.sandbox import AsyncSandbox, Sandbox
 
 
-class SandboxPage(TypedDict):
+@dataclass
+class SandboxPage:
     items: list["Sandbox"]
     total: int
     page: int
     limit: int
 
 
-class AsyncSandboxPage(TypedDict):
+@dataclass
+class AsyncSandboxPage:
     items: list["AsyncSandbox"]
     total: int
     page: int
     limit: int
+
+
+def _prepare_create_params(
+    client: "NeevAI | AsyncNeevAI",
+    params: CreateSandboxParams | Mapping[str, Any],
+) -> CreateSandboxParams:
+    if isinstance(params, Mapping):
+        raw: dict[str, Any] = dict(params)
+    else:
+        raw = params.model_dump(exclude_unset=True)
+    if not raw.get("region"):
+        raw["region"] = client._resolve_region()
+    return coerce_params(CreateSandboxParams, raw)
 
 
 class Sandboxes:
@@ -29,7 +52,7 @@ class Sandboxes:
 
     def create(
         self,
-        params: CreateSandboxParams,
+        params: CreateSandboxParams | Mapping[str, Any],
         org_id: str | None = None,
         project_id: str | None = None,
     ) -> "Sandbox":
@@ -39,10 +62,13 @@ class Sandboxes:
         scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
         path = f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes"
 
-        body = dict(params)
-        if not body.get("region"):
-            body["region"] = self._client._resolve_region()
-        data = self._client._transport.request("POST", path, body=body)
+        body = _prepare_create_params(self._client, params)
+        raw = self._client._transport.request(
+            "POST",
+            path,
+            body=body.model_dump(exclude_unset=True),
+        )
+        data = coerce_model(SandboxData, raw)
         return Sandbox(self, data, scope)
 
     def list(
@@ -58,19 +84,20 @@ class Sandboxes:
         scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
         path = f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes"
 
-        query = {}
+        query: dict[str, Any] = {}
         if page is not None:
             query["page"] = page
         if limit is not None:
             query["limit"] = limit
 
-        data = self._client._transport.request("GET", path, query=query)
-        wrapped_items = [Sandbox(self, item, scope) for item in data["items"]]
+        raw = self._client._transport.request("GET", path, query=query)
+        page_data = coerce_model(SandboxListResponse, raw)
+        wrapped_items = [Sandbox(self, item, scope) for item in page_data.items]
         return SandboxPage(
             items=wrapped_items,
-            total=data["total"],
-            page=data["page"],
-            limit=data["limit"],
+            total=page_data.total,
+            page=page_data.page,
+            limit=page_data.limit,
         )
 
     def get(
@@ -85,7 +112,8 @@ class Sandboxes:
         scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
         path = f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes/{id}"
 
-        data = self._client._transport.request("GET", path)
+        raw = self._client._transport.request("GET", path)
+        data = coerce_model(SandboxData, raw)
         return Sandbox(self, data, scope)
 
     def pause(
@@ -100,7 +128,8 @@ class Sandboxes:
         scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
         path = f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes/{id}/pause"
 
-        data = self._client._transport.request("POST", path)
+        raw = self._client._transport.request("POST", path)
+        data = coerce_model(SandboxData, raw)
         return Sandbox(self, data, scope)
 
     def resume(
@@ -115,7 +144,8 @@ class Sandboxes:
         scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
         path = f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes/{id}/resume"
 
-        data = self._client._transport.request("POST", path)
+        raw = self._client._transport.request("POST", path)
+        data = coerce_model(SandboxData, raw)
         return Sandbox(self, data, scope)
 
     def delete(
@@ -145,7 +175,7 @@ class Sandboxes:
             f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes/{id}/metrics"
         )
 
-        query = {}
+        query: dict[str, Any] = {}
         if from_ is not None:
             query["from"] = from_
         if to is not None:
@@ -153,7 +183,8 @@ class Sandboxes:
         if step is not None:
             query["step"] = step
 
-        return self._client._transport.request("GET", path, query=query)
+        raw = self._client._transport.request("GET", path, query=query)
+        return coerce_model(SandboxMetricsResponse, raw)
 
 
 class AsyncSandboxes:
@@ -164,7 +195,7 @@ class AsyncSandboxes:
 
     async def create(
         self,
-        params: CreateSandboxParams,
+        params: CreateSandboxParams | Mapping[str, Any],
         org_id: str | None = None,
         project_id: str | None = None,
     ) -> "AsyncSandbox":
@@ -174,10 +205,13 @@ class AsyncSandboxes:
         scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
         path = f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes"
 
-        body = dict(params)
-        if not body.get("region"):
-            body["region"] = self._client._resolve_region()
-        data = await self._client._transport.request("POST", path, body=body)
+        body = _prepare_create_params(self._client, params)
+        raw = await self._client._transport.request(
+            "POST",
+            path,
+            body=body.model_dump(exclude_unset=True),
+        )
+        data = coerce_model(SandboxData, raw)
         return AsyncSandbox(self, data, scope)
 
     async def list(
@@ -193,19 +227,20 @@ class AsyncSandboxes:
         scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
         path = f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes"
 
-        query = {}
+        query: dict[str, Any] = {}
         if page is not None:
             query["page"] = page
         if limit is not None:
             query["limit"] = limit
 
-        data = await self._client._transport.request("GET", path, query=query)
-        wrapped_items = [AsyncSandbox(self, item, scope) for item in data["items"]]
+        raw = await self._client._transport.request("GET", path, query=query)
+        page_data = coerce_model(SandboxListResponse, raw)
+        wrapped_items = [AsyncSandbox(self, item, scope) for item in page_data.items]
         return AsyncSandboxPage(
             items=wrapped_items,
-            total=data["total"],
-            page=data["page"],
-            limit=data["limit"],
+            total=page_data.total,
+            page=page_data.page,
+            limit=page_data.limit,
         )
 
     async def get(
@@ -220,7 +255,8 @@ class AsyncSandboxes:
         scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
         path = f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes/{id}"
 
-        data = await self._client._transport.request("GET", path)
+        raw = await self._client._transport.request("GET", path)
+        data = coerce_model(SandboxData, raw)
         return AsyncSandbox(self, data, scope)
 
     async def pause(
@@ -235,7 +271,8 @@ class AsyncSandboxes:
         scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
         path = f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes/{id}/pause"
 
-        data = await self._client._transport.request("POST", path)
+        raw = await self._client._transport.request("POST", path)
+        data = coerce_model(SandboxData, raw)
         return AsyncSandbox(self, data, scope)
 
     async def resume(
@@ -250,7 +287,8 @@ class AsyncSandboxes:
         scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
         path = f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes/{id}/resume"
 
-        data = await self._client._transport.request("POST", path)
+        raw = await self._client._transport.request("POST", path)
+        data = coerce_model(SandboxData, raw)
         return AsyncSandbox(self, data, scope)
 
     async def delete(
@@ -280,7 +318,7 @@ class AsyncSandboxes:
             f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes/{id}/metrics"
         )
 
-        query = {}
+        query: dict[str, Any] = {}
         if from_ is not None:
             query["from"] = from_
         if to is not None:
@@ -288,4 +326,5 @@ class AsyncSandboxes:
         if step is not None:
             query["step"] = step
 
-        return await self._client._transport.request("GET", path, query=query)
+        raw = await self._client._transport.request("GET", path, query=query)
+        return coerce_model(SandboxMetricsResponse, raw)

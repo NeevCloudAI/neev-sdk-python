@@ -1,6 +1,6 @@
 import asyncio
 import time
-from typing import Any
+from typing import Any, cast
 
 import httpx
 
@@ -117,8 +117,8 @@ class ControlTransport:
 
     def _parse_error_body(self, response: httpx.Response) -> dict[str, Any] | None:
         parsed = self._parse_json(response)
-        if parsed is not None:
-            return parsed
+        if isinstance(parsed, dict):
+            return cast(dict[str, Any], parsed)
         if response.text:
             return {"details": response.text}
         return None
@@ -225,8 +225,8 @@ class AsyncControlTransport:
 
     def _parse_error_body(self, response: httpx.Response) -> dict[str, Any] | None:
         parsed = self._parse_json(response)
-        if parsed is not None:
-            return parsed
+        if isinstance(parsed, dict):
+            return cast(dict[str, Any], parsed)
         if response.text:
             return {"details": response.text}
         return None

@@ -1,5 +1,9 @@
 from typing import Any
 
+from pydantic import ValidationError as PydanticValidationError
+
+from neevai.generated.aiagent import ErrorResponse
+
 
 class NeevAIError(Exception):
     """Base exception for all errors raised by the NeevAI SDK."""
@@ -38,8 +42,9 @@ class APIError(NeevAIError):
     ):
         self.status_code = status_code
         self.body = body
-        self.code = body.get("error") if body else None
-        self.details = body.get("details") if body else None
+        parsed = _parse_error_body(body)
+        self.code = parsed.error if parsed else (body.get("error") if body else None)
+        self.details = parsed.details if parsed else (body.get("details") if body else None)
         self.request_id = request_id
         self.request_method = request_method
         self.request_url = request_url
@@ -112,6 +117,15 @@ class InternalServerError(APIError):
     """5xx - The server failed to handle a valid request."""
 
     pass
+
+
+def _parse_error_body(body: dict[str, Any] | None) -> ErrorResponse | None:
+    if not body:
+        return None
+    try:
+        return ErrorResponse.model_validate(body)
+    except PydanticValidationError:
+        return None
 
 
 def error_from_status(

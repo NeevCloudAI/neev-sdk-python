@@ -1,6 +1,17 @@
 import base64
 import json
 
+from pydantic import TypeAdapter
+
+from neevai.dataplane.schemas import (
+    ErrorFrame,
+    ExecFrame,
+    ExitFrame,
+    FileListResponse,
+    FileWriteResponse,
+    StderrFrame,
+    StdoutFrame,
+)
 from neevai.errors import NeevAIError, error_from_status
 from neevai.transport.dataplane import AsyncDataplaneTransport, DataplaneTransport
 from neevai.types import ExecResult, FileEntry
@@ -15,6 +26,17 @@ REASON_STATUS: dict[str, int] = {
     "unavailable": 503,
     "internal": 500,
 }
+
+_EXEC_FRAME_ADAPTER: TypeAdapter[ExecFrame] = TypeAdapter(ExecFrame)
+
+
+def _parse_exec_frame(raw: object) -> ExecFrame:
+    return _EXEC_FRAME_ADAPTER.validate_python(raw)
+
+
+def _entries_from_response(data: object) -> list[FileEntry]:
+    parsed = FileListResponse.model_validate(data)
+    return [FileEntry.model_validate(entry.model_dump()) for entry in parsed.entries]
 
 
 class SandboxFiles:
@@ -35,8 +57,8 @@ class SandboxFiles:
             headers={"Content-Type": "application/octet-stream"},
             content=content,
         )
-        data = response.json()
-        return {"bytes_written": data["bytes_written"]}
+        parsed = FileWriteResponse.model_validate(response.json())
+        return {"bytes_written": parsed.bytes_written}
 
     def read(self, path: str, cwd: str | None = None) -> bytes:
         """Reads a file from the sandbox and returns its raw binary bytes."""
@@ -75,20 +97,7 @@ class SandboxFiles:
             headers={"Content-Type": "application/json"},
             body=body,
         )
-        data = response.json()
-        return [
-            FileEntry(
-                name=entry["name"],
-                type=entry["type"],
-                path=entry["path"],
-                size=entry["size"],
-                mode=entry["mode"],
-                permissions=entry["permissions"],
-                modified_time=entry["modified_time"],
-                symlink_target=entry.get("symlink_target"),
-            )
-            for entry in data.get("entries", [])
-        ]
+        return _entries_from_response(response.json())
 
 
 class SandboxConnection:
@@ -150,23 +159,20 @@ class SandboxConnection:
             trimmed = line.strip()
             if not trimmed:
                 continue
-            frame = json.loads(trimmed)
-            frame_type = frame.get("type")
+            frame = _parse_exec_frame(json.loads(trimmed))
 
-            if frame_type == "stdout":
-                if "data" in frame:
-                    stdout_chunks.append(base64.b64decode(frame["data"]))
-            elif frame_type == "stderr":
-                if "data" in frame:
-                    stderr_chunks.append(base64.b64decode(frame["data"]))
-            elif frame_type == "exit":
-                exit_code = frame.get("exit_code", 0)
-            elif frame_type == "error":
-                reason_code = frame.get("reason_code", "internal")
-                status = REASON_STATUS.get(reason_code, 500)
+            if isinstance(frame, StdoutFrame):
+                stdout_chunks.append(base64.b64decode(frame.data))
+            elif isinstance(frame, StderrFrame):
+                stderr_chunks.append(base64.b64decode(frame.data))
+            elif isinstance(frame, ExitFrame):
+                exit_code = frame.exit_code
+            else:
+                assert isinstance(frame, ErrorFrame)
+                status = REASON_STATUS.get(frame.reason_code, 500)
                 raise error_from_status(
                     status,
-                    {"error": reason_code, "details": frame.get("message")},
+                    {"error": frame.reason_code, "details": frame.message},
                     None,
                 )
 
@@ -201,8 +207,8 @@ class AsyncSandboxFiles:
             headers={"Content-Type": "application/octet-stream"},
             content=content,
         )
-        data = response.json()
-        return {"bytes_written": data["bytes_written"]}
+        parsed = FileWriteResponse.model_validate(response.json())
+        return {"bytes_written": parsed.bytes_written}
 
     async def read(self, path: str, cwd: str | None = None) -> bytes:
         """Reads a file asynchronously, returning its raw binary bytes."""
@@ -242,20 +248,7 @@ class AsyncSandboxFiles:
             headers={"Content-Type": "application/json"},
             body=body,
         )
-        data = response.json()
-        return [
-            FileEntry(
-                name=entry["name"],
-                type=entry["type"],
-                path=entry["path"],
-                size=entry["size"],
-                mode=entry["mode"],
-                permissions=entry["permissions"],
-                modified_time=entry["modified_time"],
-                symlink_target=entry.get("symlink_target"),
-            )
-            for entry in data.get("entries", [])
-        ]
+        return _entries_from_response(response.json())
 
 
 class AsyncSandboxConnection:
@@ -317,23 +310,20 @@ class AsyncSandboxConnection:
             trimmed = line.strip()
             if not trimmed:
                 continue
-            frame = json.loads(trimmed)
-            frame_type = frame.get("type")
+            frame = _parse_exec_frame(json.loads(trimmed))
 
-            if frame_type == "stdout":
-                if "data" in frame:
-                    stdout_chunks.append(base64.b64decode(frame["data"]))
-            elif frame_type == "stderr":
-                if "data" in frame:
-                    stderr_chunks.append(base64.b64decode(frame["data"]))
-            elif frame_type == "exit":
-                exit_code = frame.get("exit_code", 0)
-            elif frame_type == "error":
-                reason_code = frame.get("reason_code", "internal")
-                status = REASON_STATUS.get(reason_code, 500)
+            if isinstance(frame, StdoutFrame):
+                stdout_chunks.append(base64.b64decode(frame.data))
+            elif isinstance(frame, StderrFrame):
+                stderr_chunks.append(base64.b64decode(frame.data))
+            elif isinstance(frame, ExitFrame):
+                exit_code = frame.exit_code
+            else:
+                assert isinstance(frame, ErrorFrame)
+                status = REASON_STATUS.get(frame.reason_code, 500)
                 raise error_from_status(
                     status,
-                    {"error": reason_code, "details": frame.get("message")},
+                    {"error": frame.reason_code, "details": frame.message},
                     None,
                 )
 

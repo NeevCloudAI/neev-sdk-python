@@ -44,7 +44,7 @@ def main() -> None:
             print(f"ready at {sandbox.connect_url}")
 
             metrics = sandbox.metrics()
-            print(f"metric series: {[s['metric'] for s in metrics.get('series', [])]}")
+            print(f"metric series: {[s.metric for s in metrics.series]}")
 
             sandbox.pause()
             print(f"paused (replicas: {sandbox.replicas})")

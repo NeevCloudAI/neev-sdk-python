@@ -215,9 +215,9 @@ class AsyncDataplaneTransport:
                 timeout=self.timeout,
             ) as response:
                 if not response.is_success:
-                    await response.read()
+                    await response.aread()
                     raise self._daemon_error(response)
-                async for line in response.iter_lines():
+                async for line in response.aiter_lines():
                     yield line
         except httpx.TimeoutException as e:
             from neevai.errors import APITimeoutError

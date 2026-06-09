@@ -23,9 +23,11 @@ uv sync --extra dev
 | `uv run ruff format --check .` | Check formatting                               |
 | `uv run ruff format .`     | Apply formatting fixes                              |
 | `uv run pytest -v`         | Run the unit tests                                  |
+| `uv run pyright`           | Static type check (Pyright)                         |
+| `uv run mypy`              | Static type check (mypy)                            |
 | `uv run python scripts/gen_types.py` | Regenerate OpenAPI types from `specs/`     |
 
-Before opening a PR, make sure `uv run ruff check .`, `uv run ruff format --check .`, and `uv run pytest -v` all pass.
+Before opening a PR, make sure `uv run ruff check .`, `uv run ruff format --check .`, `uv run pyright`, `uv run mypy`, and `uv run pytest -v` all pass.
 
 ## Architecture: hybrid autogen + hand-written wrapper
 
@@ -53,7 +55,7 @@ Until a spec exists, a resource may use `client.raw.request()` with hand-written
 
 ## Code conventions
 
-- **Generated code is not edited by hand.** `src/neevai/generated/` is produced by `scripts/gen_types.py` from the vendored specs. To change types, update the spec source and regenerate.
+- **Generated code is not edited by hand.** `src/neevai/generated/` is produced by `scripts/gen_types.py` from the vendored specs using `--output-model-type pydantic_v2.BaseModel`. To change types, update the spec source and regenerate.
 - Every exported function, method, and class carries a docstring describing what it does.
 - New runtime code ships with unit tests.
 - Formatting and linting are enforced by Ruff — run `uv run ruff check .` and `uv run ruff format .` before committing.

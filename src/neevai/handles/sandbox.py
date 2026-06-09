@@ -1,15 +1,14 @@
 import time
-from collections.abc import Callable
-from typing import TYPE_CHECKING
+from collections.abc import Callable, Mapping
+from typing import TYPE_CHECKING, Any
 
 from neevai.errors import NeevAIError
-from neevai.types import SandboxData, SandboxMetricsResponse, SandboxPhase, Scope
+from neevai.types import ExecResult, SandboxData, SandboxMetricsResponse, SandboxPhase, Scope
 
 if TYPE_CHECKING:
     from neevai.dataplane.sandboxd import (
         AsyncSandboxConnection,
         AsyncSandboxFiles,
-        ExecResult,
         SandboxConnection,
         SandboxFiles,
     )
@@ -27,84 +26,107 @@ def _wait_timeout_message(sandbox: "Sandbox | AsyncSandbox", timeout_ms: int) ->
     )
 
 
+def _coerce_sandbox_data(data: SandboxData | Mapping[str, Any]) -> SandboxData:
+    if isinstance(data, SandboxData):
+        return data
+    return SandboxData.model_validate(data)
+
+
+def _state_as_json(state: SandboxData) -> dict[str, Any]:
+    return state.model_dump(mode="json")
+
+
 class Sandbox:
     """Synchronous lifecycle handle for a single sandbox.
 
     Updates its state in-place and caches the data-plane connection.
     """
 
-    def __init__(self, sandboxes: "Sandboxes", data: SandboxData, scope: Scope | None = None):
+    def __init__(
+        self,
+        sandboxes: "Sandboxes | None",
+        data: SandboxData | Mapping[str, Any],
+        scope: Scope | None = None,
+    ):
         self.sandboxes = sandboxes
-        self._state = data
+        self._state = _coerce_sandbox_data(data)
         self.scope = scope
         self._conn: SandboxConnection | None = None
 
     @property
     def id(self) -> str:
         """Sandbox UUID."""
-        return self._state["id"]
+        return str(self._state.id)
 
     @property
     def name(self) -> str:
         """Human-readable sandbox name."""
-        return self._state["name"]
+        return self._state.name
 
     @property
     def phase(self) -> SandboxPhase:
         """Current lifecycle phase as last fetched from the server."""
-        return self._state["phase"]
+        return self._state.phase.value
 
     @property
     def replicas(self) -> int:
         """Desired replica count (0 when paused, 1 when running)."""
-        return self._state["replicas"]
+        return int(_state_as_json(self._state)["replicas"])
 
     @property
     def connect_url(self) -> str | None:
         """Direct address of the sandbox daemon, or None if not ready/configured."""
-        return self._state.get("connect_url")
+        return self._state.connect_url
 
     @property
-    def data(self) -> SandboxData:
-        """Full raw sandbox record exactly as returned by the API."""
-        return self._state
+    def data(self) -> dict[str, Any]:
+        """Full raw sandbox record as a JSON-compatible dict."""
+        return _state_as_json(self._state)
 
-    def to_json(self) -> SandboxData:
+    def to_json(self) -> dict[str, Any]:
         """Returns the raw record so json.dumps(sandbox.to_json()) matches the API shape."""
-        return self._state
+        return _state_as_json(self._state)
 
     def refresh(self) -> "Sandbox":
         """Re-fetches the sandbox and updates this handle's state in place."""
+        if self.sandboxes is None:
+            raise NeevAIError("Cannot refresh a sandbox handle with no client context.")
         fresh = self.sandboxes.get(
             self.id,
             org_id=self.scope.org_id if self.scope else None,
             project_id=self.scope.project_id if self.scope else None,
         )
-        self._state = fresh.data
+        self._state = fresh._state
         return self
 
     def pause(self) -> "Sandbox":
         """Pauses the sandbox (scales to 0 replicas) and updates this handle in place."""
+        if self.sandboxes is None:
+            raise NeevAIError("Cannot pause a sandbox handle with no client context.")
         next_state = self.sandboxes.pause(
             self.id,
             org_id=self.scope.org_id if self.scope else None,
             project_id=self.scope.project_id if self.scope else None,
         )
-        self._state = next_state.data
+        self._state = next_state._state
         return self
 
     def resume(self) -> "Sandbox":
         """Resumes the sandbox (scales to 1 replica) and updates this handle in place."""
+        if self.sandboxes is None:
+            raise NeevAIError("Cannot resume a sandbox handle with no client context.")
         next_state = self.sandboxes.resume(
             self.id,
             org_id=self.scope.org_id if self.scope else None,
             project_id=self.scope.project_id if self.scope else None,
         )
-        self._state = next_state.data
+        self._state = next_state._state
         return self
 
     def delete(self) -> None:
         """Permanently deletes the sandbox."""
+        if self.sandboxes is None:
+            raise NeevAIError("Cannot delete a sandbox handle with no client context.")
         self.sandboxes.delete(
             self.id,
             org_id=self.scope.org_id if self.scope else None,
@@ -118,6 +140,8 @@ class Sandbox:
         step: str | None = None,
     ) -> SandboxMetricsResponse:
         """Queries live health metrics for this sandbox."""
+        if self.sandboxes is None:
+            raise NeevAIError("Cannot query metrics on a sandbox handle with no client context.")
         return self.sandboxes.metrics(
             self.id,
             from_=from_,
@@ -168,7 +192,7 @@ class Sandbox:
         env: dict[str, str] | None = None,
         timeout_ms: int | None = None,
         stdin: str | None = None,
-    ) -> "ExecResult":
+    ) -> ExecResult:
         """Runs a command inside the sandbox."""
         return self._connection().exec(
             command=command,
@@ -188,11 +212,12 @@ class Sandbox:
                 )
             from neevai.dataplane.sandboxd import SandboxConnection
 
+            assert self.sandboxes is not None
+            read_timeout = self.sandboxes._client._transport.timeout.read or 60.0
             self._conn = SandboxConnection(
                 connect_url=connect_url,
                 api_key=self.sandboxes._client._transport.api_key,
-                timeout_ms=self.sandboxes._client._transport.timeout.read
-                * 1000.0,  # Match client timeout
+                timeout_ms=int(read_timeout * 1000.0),
             )
         return self._conn
 
@@ -203,67 +228,80 @@ class AsyncSandbox:
     Updates its state in-place and caches the async data-plane connection.
     """
 
-    def __init__(self, sandboxes: "AsyncSandboxes", data: SandboxData, scope: Scope | None = None):
+    def __init__(
+        self,
+        sandboxes: "AsyncSandboxes | None",
+        data: SandboxData | Mapping[str, Any],
+        scope: Scope | None = None,
+    ):
         self.sandboxes = sandboxes
-        self._state = data
+        self._state = _coerce_sandbox_data(data)
         self.scope = scope
         self._conn: AsyncSandboxConnection | None = None
 
     @property
     def id(self) -> str:
-        return self._state["id"]
+        return str(self._state.id)
 
     @property
     def name(self) -> str:
-        return self._state["name"]
+        return self._state.name
 
     @property
     def phase(self) -> SandboxPhase:
-        return self._state["phase"]
+        return self._state.phase.value
 
     @property
     def replicas(self) -> int:
-        return self._state["replicas"]
+        return int(_state_as_json(self._state)["replicas"])
 
     @property
     def connect_url(self) -> str | None:
-        return self._state.get("connect_url")
+        return self._state.connect_url
 
     @property
-    def data(self) -> SandboxData:
-        return self._state
+    def data(self) -> dict[str, Any]:
+        return _state_as_json(self._state)
 
-    def to_json(self) -> SandboxData:
-        return self._state
+    def to_json(self) -> dict[str, Any]:
+        return _state_as_json(self._state)
 
     async def refresh(self) -> "AsyncSandbox":
+        if self.sandboxes is None:
+            raise NeevAIError("Cannot refresh a sandbox handle with no client context.")
         fresh = await self.sandboxes.get(
             self.id,
             org_id=self.scope.org_id if self.scope else None,
             project_id=self.scope.project_id if self.scope else None,
         )
-        self._state = fresh.data
+        self._state = fresh._state
         return self
 
     async def pause(self) -> "AsyncSandbox":
+        if self.sandboxes is None:
+            raise NeevAIError("Cannot pause a sandbox handle with no client context.")
         next_state = await self.sandboxes.pause(
             self.id,
             org_id=self.scope.org_id if self.scope else None,
             project_id=self.scope.project_id if self.scope else None,
         )
-        self._state = next_state.data
+        self._state = next_state._state
         return self
 
     async def resume(self) -> "AsyncSandbox":
+        if self.sandboxes is None:
+            raise NeevAIError("Cannot resume a sandbox handle with no client context.")
         next_state = await self.sandboxes.resume(
             self.id,
             org_id=self.scope.org_id if self.scope else None,
             project_id=self.scope.project_id if self.scope else None,
         )
-        self._state = next_state.data
+        self._state = next_state._state
         return self
 
     async def delete(self) -> None:
+        if self.sandboxes is None:
+            raise NeevAIError("Cannot delete a sandbox handle with no client context.")
         await self.sandboxes.delete(
             self.id,
             org_id=self.scope.org_id if self.scope else None,
@@ -276,6 +314,8 @@ class AsyncSandbox:
         to: str | None = None,
         step: str | None = None,
     ) -> SandboxMetricsResponse:
+        if self.sandboxes is None:
+            raise NeevAIError("Cannot query metrics on a sandbox handle with no client context.")
         return await self.sandboxes.metrics(
             self.id,
             from_=from_,
@@ -323,7 +363,7 @@ class AsyncSandbox:
         env: dict[str, str] | None = None,
         timeout_ms: int | None = None,
         stdin: str | None = None,
-    ) -> "ExecResult":
+    ) -> ExecResult:
         return await self._connection().exec(
             command=command,
             args=args,
@@ -342,9 +382,11 @@ class AsyncSandbox:
                 )
             from neevai.dataplane.sandboxd import AsyncSandboxConnection
 
+            assert self.sandboxes is not None
+            read_timeout = self.sandboxes._client._transport.timeout.read or 60.0
             self._conn = AsyncSandboxConnection(
                 connect_url=connect_url,
                 api_key=self.sandboxes._client._transport.api_key,
-                timeout_ms=self.sandboxes._client._transport.timeout.read * 1000.0,
+                timeout_ms=int(read_timeout * 1000.0),
             )
         return self._conn

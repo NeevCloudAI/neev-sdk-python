@@ -1,10 +1,21 @@
 from dataclasses import dataclass
-from typing import Literal, TypedDict
+from typing import Literal
 
-try:
-    from typing import NotRequired
-except ImportError:
-    from typing_extensions import NotRequired
+from pydantic import BaseModel
+
+__all__ = [
+    "CreateSandboxParams",
+    "EnvVar",
+    "ExecResult",
+    "FileEntry",
+    "MetricSeries",
+    "SandboxData",
+    "SandboxListResponse",
+    "SandboxMetricsResponse",
+    "SandboxPhase",
+    "SandboxPhaseEnum",
+    "Scope",
+]
 
 # Public re-exports of generated types. These are aliased into
 # SDK-friendly names and consumed by `from neevai.types import ...` in
@@ -28,8 +39,11 @@ from neevai.generated.aiagent import (  # noqa: F401
     SandboxMetricsResponse as SandboxMetricsResponse,
 )
 from neevai.generated.aiagent import (  # noqa: F401
-    SandboxPhase as SandboxPhase,
+    SandboxPhase as SandboxPhaseEnum,
 )
+
+# String phase literals for backward-compatible comparisons in consumer code.
+SandboxPhase = Literal["Pending", "Ready", "NotReady", "Unknown", "Paused"]
 
 
 @dataclass
@@ -40,8 +54,9 @@ class Scope:
     project_id: str
 
 
-# File system types representing entries in a sandbox directory listing.
-class FileEntry(TypedDict):
+class FileEntry(BaseModel):
+    """Entry in a sandbox directory listing."""
+
     name: str
     type: Literal["file", "directory", "symlink"]
     path: str
@@ -49,11 +64,12 @@ class FileEntry(TypedDict):
     mode: int
     permissions: str
     modified_time: str
-    symlink_target: NotRequired[str]
+    symlink_target: str | None = None
 
 
-# Buffered execution result representing stdout, stderr and exit code of a command.
-class ExecResult(TypedDict):
+class ExecResult(BaseModel):
+    """Buffered execution result: stdout, stderr, and exit code."""
+
     stdout: str
     stderr: str
     exit_code: int

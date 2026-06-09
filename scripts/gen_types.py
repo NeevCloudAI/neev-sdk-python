@@ -46,7 +46,7 @@ def generate(spec: pathlib.Path) -> None:
             "--output",
             str(output),
             "--output-model-type",
-            "typing.TypedDict",
+            "pydantic_v2.BaseModel",
         ],
         check=True,
     )

@@ -302,7 +302,7 @@ components:
 
     Sandbox:
       type: object
-      required: [id, org_id, project_id, name, namespace, region, image, phase, replicas, created_at, updated_at]
+      required: [id, org_id, project_id, name, region, image, phase, replicas, created_at, updated_at]
       properties:
         id:         { type: string, format: uuid }
         org_id:     { type: string }

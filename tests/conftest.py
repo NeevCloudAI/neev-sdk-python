@@ -7,6 +7,7 @@ all test modules.
 
 import json
 import re
+import uuid
 from datetime import datetime, timezone
 from typing import Any
 
@@ -18,6 +19,10 @@ _FAKE_DB: dict[str, Any] = {
     "sandboxes": {},
     "next_id": 1,
 }
+
+
+def _sandbox_id(n: int) -> str:
+    return str(uuid.UUID(int=n))
 
 
 def _control_response(
@@ -60,14 +65,13 @@ def _control_response(
                 )
             if method == "POST":
                 now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-                sid = str(_FAKE_DB["next_id"])
+                sid = _sandbox_id(_FAKE_DB["next_id"])
                 _FAKE_DB["next_id"] += 1
                 sandbox = {
                     "id": sid,
                     "org_id": org_id,
                     "project_id": project_id,
                     "name": (body or {}).get("name", "test-sandbox"),
-                    "namespace": (body or {}).get("namespace", "default"),
                     "region": (body or {}).get("region", "us-east-1"),
                     "image": (body or {}).get("image", "ubuntu:22.04"),
                     "command": (body or {}).get("command"),
@@ -111,9 +115,9 @@ def _control_response(
                 200,
                 {
                     "sandbox_id": sandbox_id,
-                    "from": (query or {}).get("from", ""),
-                    "to": (query or {}).get("to", ""),
-                    "step": (query or {}).get("step", ""),
+                    "from": (query or {}).get("from", "2026-01-01T00:00:00Z"),
+                    "to": (query or {}).get("to", "2026-01-01T01:00:00Z"),
+                    "step": (query or {}).get("step", "1m"),
                     "series": [],
                 },
             )
@@ -126,7 +130,7 @@ def _control_response(
         return json_resp(200, {"items": items})
 
     if path == "/v1/sandboxes" and method == "POST":
-        sid = str(_FAKE_DB["next_id"])
+        sid = _sandbox_id(_FAKE_DB["next_id"])
         _FAKE_DB["next_id"] += 1
         now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         sandbox = {
@@ -134,7 +138,6 @@ def _control_response(
             "org_id": "",
             "project_id": "",
             "name": (body or {}).get("name", "test-sandbox"),
-            "namespace": "default",
             "region": "us-east-1",
             "image": (body or {}).get("image", "ubuntu:22.04"),
             "phase": "Pending",

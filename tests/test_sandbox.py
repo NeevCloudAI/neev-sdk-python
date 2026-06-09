@@ -1,5 +1,7 @@
 """Basic sanity tests for the Sandbox handle (sync)."""
 
+import uuid
+
 import pytest
 
 from neevai.client import NeevAI
@@ -7,13 +9,12 @@ from neevai.errors import NeevAIError
 from neevai.handles.sandbox import Sandbox
 
 
-def test_sandbox_properties():
-    data = {
-        "id": "s1",
+def _sandbox_data(**overrides):
+    base = {
+        "id": "00000000-0000-0000-0000-000000000001",
         "org_id": "org1",
         "project_id": "proj1",
         "name": "test-sandbox",
-        "namespace": "default",
         "region": "us-east-1",
         "image": "ubuntu:22.04",
         "phase": "Ready",
@@ -22,48 +23,31 @@ def test_sandbox_properties():
         "created_at": "2026-01-01T00:00:00Z",
         "updated_at": "2026-01-01T00:00:00Z",
     }
+    base.update(overrides)
+    return base
+
+
+def test_sandbox_properties():
+    data = _sandbox_data()
     sb = Sandbox(None, data)
-    assert sb.id == "s1"
+    assert sb.id == "00000000-0000-0000-0000-000000000001"
     assert sb.name == "test-sandbox"
     assert sb.phase == "Ready"
     assert sb.replicas == 1
     assert sb.connect_url == "https://sbx.example.com"
-    assert sb.to_json() == data
+    assert sb.to_json()["id"] == data["id"]
+    assert sb.to_json()["name"] == data["name"]
 
 
 def test_wait_until_ready_ready_phase():
-    data = {
-        "id": "s1",
-        "org_id": "org1",
-        "project_id": "proj1",
-        "name": "test",
-        "namespace": "default",
-        "region": "us-east-1",
-        "image": "ubuntu:22.04",
-        "phase": "Ready",
-        "replicas": 1,
-        "created_at": "2026-01-01T00:00:00Z",
-        "updated_at": "2026-01-01T00:00:00Z",
-    }
+    data = _sandbox_data(connect_url=None)
     sb = Sandbox(None, data)
     result = sb.wait_until_ready(timeout_ms=100)
     assert result is sb
 
 
 def test_wait_until_ready_paused_raises():
-    data = {
-        "id": "s1",
-        "org_id": "org1",
-        "project_id": "proj1",
-        "name": "test",
-        "namespace": "default",
-        "region": "us-east-1",
-        "image": "ubuntu:22.04",
-        "phase": "Paused",
-        "replicas": 0,
-        "created_at": "2026-01-01T00:00:00Z",
-        "updated_at": "2026-01-01T00:00:00Z",
-    }
+    data = _sandbox_data(phase="Paused", replicas=0, connect_url=None)
     sb = Sandbox(None, data)
     with pytest.raises(NeevAIError, match="Paused"):
         sb.wait_until_ready(timeout_ms=100)
@@ -84,6 +68,6 @@ def test_sandbox_refresh(control_transport):
 
     sb.refresh()
     assert sb.phase == "Pending"
-    assert sb.id is not None
+    assert sb.id == str(uuid.UUID(int=1))
 
     client.close()

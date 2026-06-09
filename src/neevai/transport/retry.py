@@ -13,7 +13,7 @@ def calculate_backoff(attempt: int) -> float:
     """
     base = min(0.250 * (2**attempt), 8.0)
     # Match TS jitter: base * (0.5 + random * 0.5)
-    return base * (0.5 + random.random() * 0.5)
+    return float(base * (0.5 + random.random() * 0.5))
 
 
 def parse_retry_after(header: str | None) -> float | None:

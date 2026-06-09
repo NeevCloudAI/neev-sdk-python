@@ -3,73 +3,75 @@
 
 from __future__ import annotations
 
-from typing import Literal, TypeAlias, TypedDict
+from enum import Enum
+from uuid import UUID
 
-from typing_extensions import NotRequired
+from pydantic import AwareDatetime, BaseModel, Field, conint, constr
 
 
-class ErrorResponse(TypedDict):
+class ErrorResponse(BaseModel):
     error: str
-    details: NotRequired[str]
+    details: str | None = None
 
 
-class EnvVar(TypedDict):
+class EnvVar(BaseModel):
     name: str
     value: str
 
 
-SandboxPhase: TypeAlias = Literal["Pending", "Ready", "NotReady", "Unknown", "Paused"]
+class SandboxPhase(Enum):
+    Pending = "Pending"
+    Ready = "Ready"
+    NotReady = "NotReady"
+    Unknown = "Unknown"
+    Paused = "Paused"
 
 
-class Sandbox(TypedDict):
-    id: str
+class Sandbox(BaseModel):
+    id: UUID
     org_id: str
     project_id: str
     name: str
-    namespace: str
+    namespace: str | None = None
     region: str
     image: str
-    command: NotRequired[list[str]]
-    env: NotRequired[list[EnvVar]]
+    command: list[str] | None = None
+    env: list[EnvVar] | None = None
     phase: SandboxPhase
-    fqdn: NotRequired[str]
-    connect_url: NotRequired[str]
-    replicas: int
-    k8s_uid: NotRequired[str]
-    created_at: str
-    updated_at: str
+    fqdn: str | None = None
+    connect_url: str | None = None
+    replicas: conint(ge=0, le=1)
+    k8s_uid: str | None = None
+    created_at: AwareDatetime
+    updated_at: AwareDatetime
 
 
-class CreateSandboxRequest(TypedDict):
-    name: str
-    sandbox_template_id: str
-    namespace: NotRequired[str]
+class CreateSandboxRequest(BaseModel):
+    name: constr(min_length=1)
+    sandbox_template_id: constr(min_length=1)
+    namespace: str | None = None
     region: str
-    image: NotRequired[str]
-    command: NotRequired[list[str]]
-    env: NotRequired[list[EnvVar]]
+    image: constr(min_length=1) | None = None
+    command: list[str] | None = None
+    env: list[EnvVar] | None = None
 
 
-class SandboxListResponse(TypedDict):
+class SandboxListResponse(BaseModel):
     items: list[Sandbox]
     total: int
     page: int
     limit: int
 
 
-class MetricSeries(TypedDict):
+class MetricSeries(BaseModel):
     metric: str
-    unit: NotRequired[str]
+    unit: str | None = None
     points: list[list[float]]
 
 
-SandboxMetricsResponse = TypedDict(
-    "SandboxMetricsResponse",
-    {
-        "sandbox_id": str,
-        "from": str,
-        "to": str,
-        "step": str,
-        "series": list[MetricSeries],
-    },
-)
+class SandboxMetricsResponse(BaseModel):
+    sandbox_id: UUID
+    from_: AwareDatetime = Field(..., alias="from")
+    to: AwareDatetime
+    step: str
+    series: list[MetricSeries]
