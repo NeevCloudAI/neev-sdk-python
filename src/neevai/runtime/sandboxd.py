@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 import httpx
 from pydantic import TypeAdapter
 
+from neevai.errors import NeevAIError, error_from_status
 from neevai.runtime.schemas import (
     ErrorFrame,
     ExecFrame,
@@ -16,7 +17,6 @@ from neevai.runtime.schemas import (
     StderrFrame,
     StdoutFrame,
 )
-from neevai.errors import NeevAIError, error_from_status
 from neevai.transport.runtime import AsyncDataplaneTransport, DataplaneTransport
 from neevai.types import ExecResult, ExecStreamEvent, FileEntry
 

@@ -6,9 +6,14 @@ import json
 import httpx
 import pytest
 
+from neevai.errors import (
+    APITimeoutError,
+    NeevAIError,
+    NotFoundError,
+    PermissionDeniedError,
+)
 from neevai.runtime.sandboxd import AsyncSandboxConnection, SandboxConnection
-from neevai.errors import APIConnectionError, APITimeoutError, NeevAIError, NotFoundError, PermissionDeniedError
-from neevai.transport.runtime import AsyncDataplaneTransport, DataplaneTransport
+from neevai.transport.runtime import DataplaneTransport
 
 
 def _ndjson_lines(frames: list[dict]) -> bytes:

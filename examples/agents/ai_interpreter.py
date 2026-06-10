@@ -23,10 +23,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import httpx
+from utils.model_config import NEEV_INFERENCE_BASE_URL, NEEV_MODEL, neev_inference_api_key
 
 from neevai import NeevAI
-
-from utils.model_config import NEEV_INFERENCE_BASE_URL, NEEV_MODEL, neev_inference_api_key
 
 TASK = (
     "Print every prime number below 50, one per line, then on the last line print "

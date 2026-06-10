@@ -13,9 +13,7 @@ NEEV_INFERENCE_BASE_URL = os.environ.get(
 
 
 def neev_inference_api_key() -> str:
-    key = os.environ.get("NEEV_INFERENCE_API_KEY") or os.environ.get(
-        "NEEVCLOUD_INFERENCE_API_KEY"
-    )
+    key = os.environ.get("NEEV_INFERENCE_API_KEY") or os.environ.get("NEEVCLOUD_INFERENCE_API_KEY")
     if not key:
         key = os.environ.get("NEEVCLOUD_API_KEY")
     if not key:

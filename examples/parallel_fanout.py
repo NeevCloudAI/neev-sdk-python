@@ -36,9 +36,7 @@ def _rand_suffix() -> str:
 
 
 def sum_range(sandbox, start: int, end: int) -> int:
-    script = (
-        f"s=0; i={start}; while [ $i -le {end} ]; do s=$((s+i)); i=$((i+1)); done; echo $s"
-    )
+    script = f"s=0; i={start}; while [ $i -le {end} ]; do s=$((s+i)); i=$((i+1)); done; echo $s"
     result = sandbox.exec(["sh", "-c", script])
     if result.exit_code != 0:
         raise RuntimeError(f"shard [{start},{end}] failed: {result.stderr}")
@@ -47,9 +45,7 @@ def sum_range(sandbox, start: int, end: int) -> int:
 
 def main() -> None:
     size = (TOTAL + SHARDS - 1) // SHARDS
-    slices = [
-        {"from": i * size + 1, "to": min((i + 1) * size, TOTAL)} for i in range(SHARDS)
-    ]
+    slices = [{"from": i * size + 1, "to": min((i + 1) * size, TOTAL)} for i in range(SHARDS)]
 
     with NeevAI() as client:
         log(f"provisioning {SHARDS} sandboxes ({TEMPLATE}, {REGION})…")

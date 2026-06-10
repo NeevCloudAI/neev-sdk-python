@@ -60,9 +60,7 @@ class AsyncTemplates:
     def __init__(self, client: "AsyncNeevAI"):
         self._client = client
 
-    async def list(
-        self, page: int | None = None, limit: int | None = None
-    ) -> AsyncTemplatePage:
+    async def list(self, page: int | None = None, limit: int | None = None) -> AsyncTemplatePage:
         """Lists available sandbox templates asynchronously."""
         raw = await self._client._transport.request(
             "GET",

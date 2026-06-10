@@ -13,13 +13,13 @@ from neevai.types import (
 )
 
 if TYPE_CHECKING:
+    from neevai.resources.sandboxes import AsyncSandboxes, Sandboxes
     from neevai.runtime.sandboxd import (
         AsyncSandboxConnection,
         AsyncSandboxFiles,
         SandboxConnection,
         SandboxFiles,
     )
-    from neevai.resources.sandboxes import AsyncSandboxes, Sandboxes
 
 DEFAULT_WAIT_TIMEOUT_MS = 120_000
 DEFAULT_POLL_INTERVAL_MS = 2_000
