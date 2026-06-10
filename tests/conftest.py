@@ -17,6 +17,17 @@ import pytest
 # Simple in‑memory store to simulate backend state for sandbox resources
 _FAKE_DB: dict[str, Any] = {
     "sandboxes": {},
+    "templates": {
+        "sb-ubuntu-26-04-minimal": {
+            "id": "sb-ubuntu-26-04-minimal",
+            "name": "Ubuntu 26.04 Minimal",
+            "description": "Minimal Ubuntu template",
+            "category": "standard",
+            "status": "active",
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z",
+        }
+    },
     "next_id": 1,
 }
 
@@ -122,6 +133,65 @@ def _control_response(
                 },
             )
 
+        return json_resp(400, {"message": "bad request"})
+
+    # ---- Sandbox templates ----------------------------------------------------
+    if path == "/api/v1beta1/sandbox-templates" and method == "GET":
+        items = list(_FAKE_DB["templates"].values())
+        return json_resp(
+            200,
+            {
+                "items": items,
+                "total": len(items),
+                "page": int((query or {}).get("page", 1)),
+                "limit": int((query or {}).get("limit", 20)),
+            },
+        )
+
+    m_template = re.match(r"^/api/v1beta1/sandbox-templates/([^/]+)$", path)
+    if m_template and method == "GET":
+        template_id = m_template.group(1)
+        template = _FAKE_DB["templates"].get(template_id)
+        if not template:
+            return json_resp(404, {"message": "not found"})
+        return json_resp(200, template)
+
+    if path == "/api/v1beta1/sandbox-templates" and method == "GET":
+        return json_resp(
+            200,
+            {
+                "items": [
+                    {
+                        "id": "sb-ubuntu-26-04-minimal",
+                        "name": "Ubuntu 26.04 Minimal",
+                        "description": "Minimal Ubuntu template",
+                        "category": "standard",
+                        "status": "active",
+                        "created_at": "2026-01-01T00:00:00Z",
+                        "updated_at": "2026-01-01T00:00:00Z",
+                    }
+                ],
+                "total": 1,
+                "page": 1,
+                "limit": 20,
+            },
+        )
+
+    if path.startswith("/api/v1beta1/sandbox-templates/"):
+        template_id = path.rsplit("/", 1)[-1]
+        if method == "GET":
+            return json_resp(
+                200,
+                {
+                    "id": template_id,
+                    "name": "Ubuntu 26.04 Minimal",
+                    "description": "Minimal Ubuntu template",
+                    "category": "standard",
+                    "status": "active",
+                    "created_at": "2026-01-01T00:00:00Z",
+                    "updated_at": "2026-01-01T00:00:00Z",
+                },
+            )
         return json_resp(400, {"message": "bad request"})
 
     # ---- Fallback: simple /v1/sandboxes paths (backward compat) -----------------

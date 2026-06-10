@@ -7,7 +7,7 @@ import httpx
 import pytest
 
 from neevai.errors import APIConnectionError, APITimeoutError, NotFoundError
-from neevai.transport.control import (
+from neevai.transport.lifecycle import (
     ControlTransport,
     calculate_backoff,
     parse_retry_after,

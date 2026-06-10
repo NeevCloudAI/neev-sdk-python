@@ -207,6 +207,49 @@ paths:
         "404": { $ref: '#/components/responses/NotFound' }
         "500": { $ref: '#/components/responses/InternalServerError' }
 
+  /api/v1beta1/sandbox-templates:
+    get:
+      tags: [Sandbox Templates]
+      summary: List sandbox templates
+      description: |
+        Returns platform-managed sandbox runtime templates available for
+        sandbox create. Only templates with status `active` or `deprecated`
+        are returned. Registry paths are operator-internal and are not exposed.
+      operationId: listSandboxTemplates
+      parameters:
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        "200":
+          description: Paginated list of sandbox templates
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SandboxTemplateListResponse' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "500": { $ref: '#/components/responses/InternalServerError' }
+
+  /api/v1beta1/sandbox-templates/{template_id}:
+    get:
+      tags: [Sandbox Templates]
+      summary: Get a sandbox template
+      description: |
+        Returns one platform-managed sandbox template by id (e.g.
+        `sb-ubuntu-26-04-minimal`). Use the template `name` at sandbox create.
+      operationId: getSandboxTemplate
+      parameters:
+        - { $ref: '#/components/parameters/SandboxTemplateID' }
+      responses:
+        "200":
+          description: Sandbox template details
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SandboxTemplate' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        "500": { $ref: '#/components/responses/InternalServerError' }
+
 components:
 
   securitySchemes:
@@ -248,6 +291,13 @@ components:
       in: query
       required: false
       schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    SandboxTemplateID:
+      name: template_id
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^sb-[a-zA-Z0-9-]+$'
 
   responses:
     BadRequest:
@@ -340,6 +390,47 @@ components:
         items: { type: array, items: { $ref: '#/components/schemas/Sandbox' } }
         total: { type: integer }
         page:  { type: integer }
+        limit: { type: integer }
+
+    SandboxTemplateCategory:
+      type: string
+      enum: [standard, browser]
+
+    SandboxTemplateStatus:
+      type: string
+      enum: [active, deprecated, disabled]
+
+    SandboxTemplate:
+      type: object
+      required: [id, name, description, category, status, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          pattern: '^sb-[a-zA-Z0-9-]+$'
+        name:
+          type: string
+        description:
+          type: string
+        category:
+          $ref: '#/components/schemas/SandboxTemplateCategory'
+        status:
+          $ref: '#/components/schemas/SandboxTemplateStatus'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    SandboxTemplateListResponse:
+      type: object
+      required: [items, total, page, limit]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/SandboxTemplate' }
+        total: { type: integer }
+        page: { type: integer }
         limit: { type: integer }
 
     MetricSeries:

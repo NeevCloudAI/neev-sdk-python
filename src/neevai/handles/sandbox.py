@@ -1,12 +1,19 @@
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import AsyncGenerator, Callable, Generator, Mapping
 from typing import TYPE_CHECKING, Any
 
 from neevai.errors import NeevAIError
-from neevai.types import ExecResult, SandboxData, SandboxMetricsResponse, SandboxPhase, Scope
+from neevai.types import (
+    ExecResult,
+    ExecStreamEvent,
+    SandboxData,
+    SandboxMetricsResponse,
+    SandboxPhase,
+    Scope,
+)
 
 if TYPE_CHECKING:
-    from neevai.dataplane.sandboxd import (
+    from neevai.runtime.sandboxd import (
         AsyncSandboxConnection,
         AsyncSandboxFiles,
         SandboxConnection,
@@ -203,6 +210,25 @@ class Sandbox:
             stdin=stdin,
         )
 
+    def exec_stream(
+        self,
+        command: str | list[str],
+        args: list[str] | None = None,
+        cwd: str | None = None,
+        env: dict[str, str] | None = None,
+        timeout_ms: int | None = None,
+        stdin: str | None = None,
+    ) -> Generator[ExecStreamEvent, None, None]:
+        """Runs a command and yields stdout/stderr chunks as they arrive, then an exit event."""
+        yield from self._connection().exec_stream(
+            command=command,
+            args=args,
+            cwd=cwd,
+            env=env,
+            timeout_ms=timeout_ms,
+            stdin=stdin,
+        )
+
     def _connection(self) -> "SandboxConnection":
         if not self._conn:
             connect_url = self.connect_url
@@ -210,7 +236,7 @@ class Sandbox:
                 raise NeevAIError(
                     f"Sandbox {self.id} has no connect_url yet; it must be Ready before file or exec operations."
                 )
-            from neevai.dataplane.sandboxd import SandboxConnection
+            from neevai.runtime.sandboxd import SandboxConnection
 
             assert self.sandboxes is not None
             read_timeout = self.sandboxes._client._transport.timeout.read or 60.0
@@ -373,6 +399,25 @@ class AsyncSandbox:
             stdin=stdin,
         )
 
+    async def exec_stream(
+        self,
+        command: str | list[str],
+        args: list[str] | None = None,
+        cwd: str | None = None,
+        env: dict[str, str] | None = None,
+        timeout_ms: int | None = None,
+        stdin: str | None = None,
+    ) -> AsyncGenerator[ExecStreamEvent, None]:
+        async for event in self._connection().exec_stream(
+            command=command,
+            args=args,
+            cwd=cwd,
+            env=env,
+            timeout_ms=timeout_ms,
+            stdin=stdin,
+        ):
+            yield event
+
     def _connection(self) -> "AsyncSandboxConnection":
         if not self._conn:
             connect_url = self.connect_url
@@ -380,7 +425,7 @@ class AsyncSandbox:
                 raise NeevAIError(
                     f"Sandbox {self.id} has no connect_url yet; it must be Ready before file or exec operations."
                 )
-            from neevai.dataplane.sandboxd import AsyncSandboxConnection
+            from neevai.runtime.sandboxd import AsyncSandboxConnection
 
             assert self.sandboxes is not None
             read_timeout = self.sandboxes._client._transport.timeout.read or 60.0

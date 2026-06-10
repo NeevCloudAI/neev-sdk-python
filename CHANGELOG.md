@@ -8,6 +8,10 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `sandbox.exec_stream()` on sync and async handles — yields incremental stdout/stderr/exit NDJSON events; buffered `exec()` now drains `exec_stream()` internally.
+- `client.templates` resource — `list()` and `get()` for platform sandbox-template catalogue.
+- Runnable examples: `parallel_fanout.py`, `sandbox_metrics.py`, `streaming_exec.py`, and agent demos under `examples/agents/`.
+- Optional dependency group `agents` (`langchain`, `langchain-openai`, `langgraph`) for LangChain example.
 - Initial SDK scaffold: `NeevAI` and `AsyncNeevAI` client with env/option config resolution.
 - `neev.sandboxes` resource — `create`, `list`, `get`, `pause`, `resume`, `delete`, `metrics`.
 - `Sandbox` handle with `refresh`, `wait_until_ready`, `pause`, `resume`, `delete`, `metrics`.

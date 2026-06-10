@@ -5,7 +5,8 @@ import httpx
 
 from neevai.errors import NeevAIError
 from neevai.resources.sandboxes import AsyncSandboxes, Sandboxes
-from neevai.transport.control import (
+from neevai.resources.templates import AsyncTemplates, Templates
+from neevai.transport.lifecycle import (
     AsyncControlTransport,
     AsyncRawClient,
     ControlTransport,
@@ -58,6 +59,7 @@ class NeevAI:
 
         self.raw = RawClient(self._transport)
         self.sandboxes = Sandboxes(self)
+        self.templates = Templates(self)
 
     def close(self) -> None:
         """Closes the underlying HTTP client transport connections."""
@@ -136,6 +138,7 @@ class AsyncNeevAI:
 
         self.raw = AsyncRawClient(self._transport)
         self.sandboxes = AsyncSandboxes(self)
+        self.templates = AsyncTemplates(self)
 
     async def aclose(self) -> None:
         """Closes the underlying HTTP client transport connections asynchronously."""

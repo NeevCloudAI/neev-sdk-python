@@ -1,6 +1,6 @@
-"""Canonical ``<dataplane>`` slot — data-plane clients (connection + files + exec)."""
+"""Canonical ``<runtime>`` slot — data-plane clients (connection + files + exec)."""
 
-from neevai.dataplane.sandboxd import (
+from neevai.runtime.sandboxd import (
     AsyncSandboxConnection,
     AsyncSandboxFiles,
     SandboxConnection,
