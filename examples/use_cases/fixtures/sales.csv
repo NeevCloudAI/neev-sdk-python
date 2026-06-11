@@ -1,0 +1,21 @@
+date,product,region,units,revenue
+2024-01-05,Widget A,North,12,240.00
+2024-01-12,Widget B,North,8,200.00
+2024-01-19,Gadget X,North,5,175.00
+2024-01-26,Widget A,South,15,300.00
+2024-02-02,Gadget X,South,7,245.00
+2024-02-09,Widget B,East,10,250.00
+2024-02-16,Widget A,East,20,400.00
+2024-02-23,Gadget X,West,3,105.00
+2024-03-01,Widget B,West,9,225.00
+2024-03-08,Widget A,North,18,360.00
+2024-03-15,Gadget X,North,6,210.00
+2024-03-22,Widget B,South,11,275.00
+2024-03-29,Widget A,South,22,440.00
+2024-04-05,Gadget X,East,4,140.00
+2024-04-12,Widget B,East,14,350.00
+2024-04-19,Widget A,West,16,320.00
+2024-04-26,Gadget X,West,2,70.00
+2024-05-03,Widget B,North,13,325.00
+2024-05-10,Widget A,North,25,500.00
+2024-05-17,Gadget X,South,8,280.00

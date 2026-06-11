@@ -61,6 +61,32 @@ export NEEVCLOUD_INFERENCE_API_KEY=...   # inference key
 sandbox, and its output streams to your terminal live. See
 [`agents/README.md`](./agents/README.md) for framework-by-framework detail.
 
+## Use-Case Examples (agent + sandbox)
+
+[`use_cases/`](./use_cases/) contains three hand-rolled agent demos backed by a
+shared [`StreamingAgentLoop`](./agents/utils/agent_loop.py). Every example
+registers only a `run_shell` tool — the model writes shell, it executes in the
+sandbox, and artifacts are automatically downloaded.
+
+| Example | What it demonstrates | Artifact |
+|---------|----------------------|----------|
+| [`repo_analyzer.py`](./use_cases/repo_analyzer.py) | Clone & audit untrusted code in isolation | stdout |
+| [`data_analysis.py`](./use_cases/data_analysis.py) | pandas/matplotlib CSV analysis | `output/chart.png` |
+| [`browser_agent.py`](./use_cases/browser_agent.py) | Playwright browser automation | `output/results.json` |
+
+See [`use_cases/README.md`](./use_cases/README.md) for detailed docs.
+
+```sh
+# Hero example — repo analyzer
+python examples/use_cases/repo_analyzer.py
+
+# Data analysis with automatic chart download
+python examples/use_cases/data_analysis.py
+
+# Browser automation
+python examples/use_cases/browser_agent.py --query "AI"
+```
+
 ## Step-by-step: run every example
 
 Do the [Quick setup](#quick-setup-once) once, then run each in order. Each
@@ -111,6 +137,9 @@ uv run --extra agents python examples/agents/langchain_agent.py
 | `NEEVCLOUD_SANDBOX_TEMPLATE_ID` | sandbox create | `sb-ubuntu-26-04-minimal` |
 | `NEEVCLOUD_INFERENCE_API_KEY` | model examples | falls back to `NEEVCLOUD_API_KEY` |
 | `NEEVCLOUD_INFERENCE_BASE_URL` | model examples | production inference endpoint |
+| `NEEV_MODEL` | model + use_cases | `gpt-oss-120b` |
+| `NEEVCLOUD_PYTHON_SANDBOX_IMAGE` | `data_analysis.py`, `browser_agent.py` | `ghcr.io/neevcloud/sandbox-python:3.12` (`data_analysis` default; `browser_agent` optional speedup) |
+| `NEEVAI_USE_CASE_MAX_STEPS` | use_cases | `12` |
 
 ## Notes
 

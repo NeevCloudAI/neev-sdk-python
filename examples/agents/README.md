@@ -79,3 +79,43 @@ inside the sandbox. A successful run prints:
 Right after the sandbox reaches Ready, its data-plane hostname can take a few
 seconds to resolve, so the first tool call may need a moment — the agent loop
 waits and retries on its own (`recursion_limit: 100` for LangGraph).
+
+## Shared helpers
+
+### `utils/agent_loop.py`
+
+Tool-agnostic ``StreamingAgentLoop`` used by the ``use_cases`` examples. It
+drives a chat-completion model, dispatches tool calls to caller-provided
+handlers, and streams tool output live.
+
+```python
+from utils.agent_loop import (
+    RUN_SHELL_TOOL,
+    StreamingAgentLoop,
+    make_run_shell_handler,
+    pull_artifact,
+)
+
+loop = StreamingAgentLoop(
+    sandbox,
+    system_prompt="You are a coding assistant.",
+    tools=[RUN_SHELL_TOOL],
+    handlers={"run_shell": make_run_shell_handler(sandbox)},
+    max_steps=12,
+)
+final = loop.run("Your task description here.")
+```
+
+``pull_artifact(sandbox, remote_path, output_dir)`` reads a file from the
+sandbox and writes it to a local output directory — used by
+``data_analysis.py`` (``chart.png``) and ``browser_agent.py`` (``results.json``).
+
+### `utils/model_config.py`
+
+Shared model configuration — endpoint URL, API key resolution, and model name
+(overridable via ``NEEV_MODEL``).
+
+### `utils/sandbox_tool.py`
+
+``SandboxCodeExecutor`` — wraps ``NeevAI`` + one sandbox with ``run_python`` /
+``run_shell`` convenience methods. Used by ``langchain_agent.py``.
