@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 __all__ = [
     "CreateSandboxParams",
+    "CreateSnapshotParams",
     "CreateSnapshotRequest",
     "EnvVar",
     "ExecResult",
@@ -100,6 +101,13 @@ class SandboxData(_GeneratedSandbox):
     """
 
     phase: str  # type: ignore[assignment]  # pyright: ignore[reportIncompatibleVariableOverride]
+
+
+class CreateSnapshotParams(BaseModel):
+    """Caller-facing params for creating a sandbox snapshot (excludes ``include_memory``)."""
+
+    name: str | None = None
+    retain_for: str | None = None
 
 
 class SandboxListResponse(BaseModel):

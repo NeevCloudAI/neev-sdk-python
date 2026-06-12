@@ -1,14 +1,18 @@
+from __future__ import annotations
+
 import time
 from collections.abc import AsyncGenerator, Callable, Generator, Mapping
 from typing import TYPE_CHECKING, Any
 
-from neevai.errors import NeevAIError
+from neevai.errors import APIConnectionError, APIError, APITimeoutError, NeevAIError
 from neevai.types import (
+    CreateSnapshotParams,
     ExecResult,
     ExecStreamEvent,
     SandboxData,
     SandboxMetricsResponse,
     Scope,
+    Snapshot,
 )
 
 if TYPE_CHECKING:
@@ -22,14 +26,39 @@ if TYPE_CHECKING:
 
 DEFAULT_WAIT_TIMEOUT_MS = 120_000
 DEFAULT_POLL_INTERVAL_MS = 2_000
+DEFAULT_DATAPLANE_PROBE_TIMEOUT_MS = 5_000
 
 
-def _wait_timeout_message(sandbox: "Sandbox | AsyncSandbox", timeout_ms: int) -> str:
+def _wait_timeout_message(
+    sandbox: Sandbox | AsyncSandbox,
+    timeout_ms: int,
+    *,
+    waiting_for_dataplane: bool = False,
+) -> str:
+    if waiting_for_dataplane:
+        return (
+            f"Sandbox {sandbox.id} control plane is Ready but the data-plane "
+            f"daemon at {sandbox.connect_url} did not become reachable within "
+            f"{timeout_ms}ms."
+        )
     return (
         f"Sandbox {sandbox.id} did not become Ready within {timeout_ms}ms "
         f"(phase: {sandbox.phase}, replicas: {sandbox.replicas}, "
         f"connect_url: {sandbox.connect_url or '<none>'})."
     )
+
+
+def _runtime_wait_timeout_message(sandbox: Sandbox | AsyncSandbox, timeout_ms: int) -> str:
+    return (
+        f"Sandbox {sandbox.id} data-plane did not become reachable within {timeout_ms}ms "
+        f"(connect_url: {sandbox.connect_url or '<none>'})."
+    )
+
+
+def _is_transient_runtime_error(exc: Exception) -> bool:
+    if isinstance(exc, (APIConnectionError, APITimeoutError)):
+        return True
+    return isinstance(exc, APIError) and exc.status_code in (502, 503, 504)
 
 
 def _coerce_sandbox_data(data: SandboxData | Mapping[str, Any]) -> SandboxData:
@@ -50,7 +79,7 @@ class Sandbox:
 
     def __init__(
         self,
-        sandboxes: "Sandboxes | None",
+        sandboxes: Sandboxes | None,
         data: SandboxData | Mapping[str, Any],
         scope: Scope | None = None,
     ):
@@ -93,19 +122,22 @@ class Sandbox:
         """Returns the raw record so json.dumps(sandbox.to_json()) matches the API shape."""
         return _state_as_json(self._state)
 
-    def refresh(self) -> "Sandbox":
+    def refresh(self) -> Sandbox:
         """Re-fetches the sandbox and updates this handle's state in place."""
         if self.sandboxes is None:
             raise NeevAIError("Cannot refresh a sandbox handle with no client context.")
+        previous_connect_url = self.connect_url
         fresh = self.sandboxes.get(
             self.id,
             org_id=self.scope.org_id if self.scope else None,
             project_id=self.scope.project_id if self.scope else None,
         )
         self._state = fresh._state
+        if self.connect_url != previous_connect_url:
+            self._invalidate_connection()
         return self
 
-    def pause(self, *, preserve_memory: bool | None = None) -> "Sandbox":
+    def pause(self, *, preserve_memory: bool | None = None) -> Sandbox:
         """Pauses the sandbox (scales to 0 replicas) and updates this handle in place."""
         if self.sandboxes is None:
             raise NeevAIError("Cannot pause a sandbox handle with no client context.")
@@ -116,9 +148,10 @@ class Sandbox:
             project_id=self.scope.project_id if self.scope else None,
         )
         self._state = next_state._state
+        self._invalidate_connection()
         return self
 
-    def resume(self) -> "Sandbox":
+    def resume(self) -> Sandbox:
         """Resumes the sandbox (scales to 1 replica) and updates this handle in place."""
         if self.sandboxes is None:
             raise NeevAIError("Cannot resume a sandbox handle with no client context.")
@@ -128,6 +161,7 @@ class Sandbox:
             project_id=self.scope.project_id if self.scope else None,
         )
         self._state = next_state._state
+        self._invalidate_connection()
         return self
 
     def delete(self) -> None:
@@ -158,12 +192,63 @@ class Sandbox:
             project_id=self.scope.project_id if self.scope else None,
         )
 
+    def snapshot(
+        self,
+        params: CreateSnapshotParams | Mapping[str, Any] | None = None,
+    ) -> Snapshot:
+        """Captures a snapshot of this sandbox (returns immediately with status Pending)."""
+        if self.sandboxes is None:
+            raise NeevAIError("Cannot snapshot a sandbox handle with no client context.")
+        return self.sandboxes.create_snapshot(
+            self.id,
+            params,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+        )
+
+    def snapshots(self) -> list[Snapshot]:
+        """Lists snapshots taken from this sandbox."""
+        if self.sandboxes is None:
+            raise NeevAIError("Cannot list snapshots on a sandbox handle with no client context.")
+        return self.sandboxes.list_snapshots(
+            self.id,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+        )
+
+    def restore(self, snapshot_id: str) -> Sandbox:
+        """Restores this sandbox in place from a snapshot."""
+        if self.sandboxes is None:
+            raise NeevAIError("Cannot restore a sandbox handle with no client context.")
+        next_state = self.sandboxes.restore(
+            self.id,
+            snapshot_id,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+        )
+        self._state = next_state._state
+        self._invalidate_connection()
+        if self.phase == "Ready" and self.connect_url:
+            self._wait_for_runtime_ready()
+        return self
+
+    def fork(self, name: str) -> Sandbox:
+        """Forks this sandbox into a new sandbox seeded from its current state."""
+        if self.sandboxes is None:
+            raise NeevAIError("Cannot fork a sandbox handle with no client context.")
+        return self.sandboxes.fork(
+            self.id,
+            name,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+        )
+
     def wait_until_ready(
         self,
         timeout_ms: int = DEFAULT_WAIT_TIMEOUT_MS,
         poll_interval_ms: int = DEFAULT_POLL_INTERVAL_MS,
-        on_poll: Callable[["Sandbox"], None] | None = None,
-    ) -> "Sandbox":
+        on_poll: Callable[[Sandbox], None] | None = None,
+    ) -> Sandbox:
         """Polls until the sandbox reaches the Ready phase.
 
         Fails fast if Paused, or throws NeevAIError if the timeout is reached first.
@@ -173,6 +258,14 @@ class Sandbox:
             if on_poll is not None:
                 on_poll(self)
             if self.phase == "Ready":
+                if self.connect_url:
+                    remaining = deadline - (time.time() * 1000.0)
+                    if remaining <= 0:
+                        raise NeevAIError(_wait_timeout_message(self, timeout_ms))
+                    self._wait_for_runtime_ready(
+                        timeout_ms=int(remaining),
+                        poll_interval_ms=poll_interval_ms,
+                    )
                 return self
             if self.phase == "Paused":
                 raise NeevAIError(
@@ -187,7 +280,7 @@ class Sandbox:
             self.refresh()
 
     @property
-    def files(self) -> "SandboxFiles":
+    def files(self) -> SandboxFiles:
         """Exposes files operations on the sandbox daemon."""
         return self._connection().files
 
@@ -229,13 +322,74 @@ class Sandbox:
             stdin=stdin,
         )
 
-    def _connection(self) -> "SandboxConnection":
+    def _invalidate_connection(self) -> None:
+        if self._conn is not None:
+            self._conn.close()
+            self._conn = None
+
+    def _probe_runtime(
+        self,
+        timeout_ms: int = DEFAULT_DATAPLANE_PROBE_TIMEOUT_MS,
+    ) -> bool:
+        """Probe the sandbox daemon with a fresh connection (never cached on the handle)."""
+        connect_url = self.connect_url
+        if not connect_url or self.sandboxes is None:
+            return False
+
+        from neevai.runtime.sandboxd import SandboxConnection
+
+        conn = SandboxConnection(
+            connect_url=connect_url,
+            api_key=self.sandboxes._client._transport.api_key,
+            timeout_ms=timeout_ms,
+        )
+        try:
+            conn._transport.request(
+                method="POST",
+                path="/v1/files/list",
+                headers={"Content-Type": "application/json"},
+                body={"path": "."},
+            )
+            return True
+        except Exception as exc:
+            if _is_transient_runtime_error(exc):
+                return False
+            raise
+        finally:
+            conn.close()
+
+    def _wait_for_runtime_ready(
+        self,
+        timeout_ms: int = DEFAULT_WAIT_TIMEOUT_MS,
+        poll_interval_ms: int = DEFAULT_POLL_INTERVAL_MS,
+    ) -> None:
+        if not self.connect_url:
+            return
+
+        self._invalidate_connection()
+
+        deadline = (time.time() * 1000.0) + timeout_ms
+        delay_s = poll_interval_ms / 1000.0
+        while True:
+            if self._probe_runtime():
+                return
+
+            remaining = deadline - (time.time() * 1000.0)
+            if remaining <= 0:
+                raise NeevAIError(_runtime_wait_timeout_message(self, timeout_ms))
+
+            time.sleep(min(delay_s, remaining / 1000.0))
+            delay_s = min(delay_s * 1.5, poll_interval_ms * 4 / 1000.0)
+
+    def _connection(self) -> SandboxConnection:
+        connect_url = self.connect_url
+        if not connect_url:
+            raise NeevAIError(
+                f"Sandbox {self.id} has no connect_url yet; it must be Ready before file or exec operations."
+            )
+        if self._conn is not None and self._conn._transport.connect_url != connect_url.rstrip("/"):
+            self._invalidate_connection()
         if not self._conn:
-            connect_url = self.connect_url
-            if not connect_url:
-                raise NeevAIError(
-                    f"Sandbox {self.id} has no connect_url yet; it must be Ready before file or exec operations."
-                )
             from neevai.runtime.sandboxd import SandboxConnection
 
             assert self.sandboxes is not None
@@ -256,7 +410,7 @@ class AsyncSandbox:
 
     def __init__(
         self,
-        sandboxes: "AsyncSandboxes | None",
+        sandboxes: AsyncSandboxes | None,
         data: SandboxData | Mapping[str, Any],
         scope: Scope | None = None,
     ):
@@ -293,18 +447,21 @@ class AsyncSandbox:
     def to_json(self) -> dict[str, Any]:
         return _state_as_json(self._state)
 
-    async def refresh(self) -> "AsyncSandbox":
+    async def refresh(self) -> AsyncSandbox:
         if self.sandboxes is None:
             raise NeevAIError("Cannot refresh a sandbox handle with no client context.")
+        previous_connect_url = self.connect_url
         fresh = await self.sandboxes.get(
             self.id,
             org_id=self.scope.org_id if self.scope else None,
             project_id=self.scope.project_id if self.scope else None,
         )
         self._state = fresh._state
+        if self.connect_url != previous_connect_url:
+            await self._invalidate_connection()
         return self
 
-    async def pause(self, *, preserve_memory: bool | None = None) -> "AsyncSandbox":
+    async def pause(self, *, preserve_memory: bool | None = None) -> AsyncSandbox:
         if self.sandboxes is None:
             raise NeevAIError("Cannot pause a sandbox handle with no client context.")
         next_state = await self.sandboxes.pause(
@@ -314,9 +471,10 @@ class AsyncSandbox:
             project_id=self.scope.project_id if self.scope else None,
         )
         self._state = next_state._state
+        await self._invalidate_connection()
         return self
 
-    async def resume(self) -> "AsyncSandbox":
+    async def resume(self) -> AsyncSandbox:
         if self.sandboxes is None:
             raise NeevAIError("Cannot resume a sandbox handle with no client context.")
         next_state = await self.sandboxes.resume(
@@ -325,6 +483,7 @@ class AsyncSandbox:
             project_id=self.scope.project_id if self.scope else None,
         )
         self._state = next_state._state
+        await self._invalidate_connection()
         return self
 
     async def delete(self) -> None:
@@ -353,12 +512,59 @@ class AsyncSandbox:
             project_id=self.scope.project_id if self.scope else None,
         )
 
+    async def snapshot(
+        self,
+        params: CreateSnapshotParams | Mapping[str, Any] | None = None,
+    ) -> Snapshot:
+        if self.sandboxes is None:
+            raise NeevAIError("Cannot snapshot a sandbox handle with no client context.")
+        return await self.sandboxes.create_snapshot(
+            self.id,
+            params,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+        )
+
+    async def snapshots(self) -> list[Snapshot]:
+        if self.sandboxes is None:
+            raise NeevAIError("Cannot list snapshots on a sandbox handle with no client context.")
+        return await self.sandboxes.list_snapshots(
+            self.id,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+        )
+
+    async def restore(self, snapshot_id: str) -> AsyncSandbox:
+        if self.sandboxes is None:
+            raise NeevAIError("Cannot restore a sandbox handle with no client context.")
+        next_state = await self.sandboxes.restore(
+            self.id,
+            snapshot_id,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+        )
+        self._state = next_state._state
+        await self._invalidate_connection()
+        if self.phase == "Ready" and self.connect_url:
+            await self._wait_for_runtime_ready()
+        return self
+
+    async def fork(self, name: str) -> AsyncSandbox:
+        if self.sandboxes is None:
+            raise NeevAIError("Cannot fork a sandbox handle with no client context.")
+        return await self.sandboxes.fork(
+            self.id,
+            name,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+        )
+
     async def wait_until_ready(
         self,
         timeout_ms: int = DEFAULT_WAIT_TIMEOUT_MS,
         poll_interval_ms: int = DEFAULT_POLL_INTERVAL_MS,
-        on_poll: Callable[["AsyncSandbox"], None] | None = None,
-    ) -> "AsyncSandbox":
+        on_poll: Callable[[AsyncSandbox], None] | None = None,
+    ) -> AsyncSandbox:
         deadline = (time.time() * 1000.0) + timeout_ms
         import asyncio
 
@@ -366,6 +572,14 @@ class AsyncSandbox:
             if on_poll is not None:
                 on_poll(self)
             if self.phase == "Ready":
+                if self.connect_url:
+                    remaining = deadline - (time.time() * 1000.0)
+                    if remaining <= 0:
+                        raise NeevAIError(_wait_timeout_message(self, timeout_ms))
+                    await self._wait_for_runtime_ready(
+                        timeout_ms=int(remaining),
+                        poll_interval_ms=poll_interval_ms,
+                    )
                 return self
             if self.phase == "Paused":
                 raise NeevAIError(
@@ -380,7 +594,7 @@ class AsyncSandbox:
             await self.refresh()
 
     @property
-    def files(self) -> "AsyncSandboxFiles":
+    def files(self) -> AsyncSandboxFiles:
         return self._connection().files
 
     async def exec(
@@ -420,13 +634,73 @@ class AsyncSandbox:
         ):
             yield event
 
-    def _connection(self) -> "AsyncSandboxConnection":
+    async def _invalidate_connection(self) -> None:
+        if self._conn is not None:
+            await self._conn.aclose()
+            self._conn = None
+
+    async def _probe_runtime(
+        self,
+        timeout_ms: int = DEFAULT_DATAPLANE_PROBE_TIMEOUT_MS,
+    ) -> bool:
+        connect_url = self.connect_url
+        if not connect_url or self.sandboxes is None:
+            return False
+
+        from neevai.runtime.sandboxd import AsyncSandboxConnection
+
+        conn = AsyncSandboxConnection(
+            connect_url=connect_url,
+            api_key=self.sandboxes._client._transport.api_key,
+            timeout_ms=timeout_ms,
+        )
+        try:
+            await conn._transport.request(
+                method="POST",
+                path="/v1/files/list",
+                headers={"Content-Type": "application/json"},
+                body={"path": "."},
+            )
+            return True
+        except Exception as exc:
+            if _is_transient_runtime_error(exc):
+                return False
+            raise
+        finally:
+            await conn.aclose()
+
+    async def _wait_for_runtime_ready(
+        self,
+        timeout_ms: int = DEFAULT_WAIT_TIMEOUT_MS,
+        poll_interval_ms: int = DEFAULT_POLL_INTERVAL_MS,
+    ) -> None:
+        if not self.connect_url:
+            return
+
+        import asyncio
+
+        await self._invalidate_connection()
+
+        deadline = (time.time() * 1000.0) + timeout_ms
+        delay_s = poll_interval_ms / 1000.0
+        while True:
+            if await self._probe_runtime():
+                return
+
+            remaining = deadline - (time.time() * 1000.0)
+            if remaining <= 0:
+                raise NeevAIError(_runtime_wait_timeout_message(self, timeout_ms))
+
+            await asyncio.sleep(min(delay_s, remaining / 1000.0))
+            delay_s = min(delay_s * 1.5, poll_interval_ms * 4 / 1000.0)
+
+    def _connection(self) -> AsyncSandboxConnection:
+        connect_url = self.connect_url
+        if not connect_url:
+            raise NeevAIError(
+                f"Sandbox {self.id} has no connect_url yet; it must be Ready before file or exec operations."
+            )
         if not self._conn:
-            connect_url = self.connect_url
-            if not connect_url:
-                raise NeevAIError(
-                    f"Sandbox {self.id} has no connect_url yet; it must be Ready before file or exec operations."
-                )
             from neevai.runtime.sandboxd import AsyncSandboxConnection
 
             assert self.sandboxes is not None

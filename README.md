@@ -152,6 +152,7 @@ See [`examples/README.md`](examples/README.md) for the full catalogue and learni
 | ------- | ------------- |
 | [`templates_list.py`](examples/templates_list.py) | List templates → get by id → create sandbox |
 | [`sandbox_lifecycle.py`](examples/sandbox_lifecycle.py) | Create → wait → metrics → pause → delete |
+| [`snapshot_fork_restore.py`](examples/snapshot_fork_restore.py) | Snapshot → `from_snapshot` rollback → fork |
 | [`async_sandbox.py`](examples/async_sandbox.py) | End-to-end `AsyncNeevAI` workflow |
 | [`files_api.py`](examples/files_api.py) | `files.write` / `read_text` / `list` |
 | [`streaming_exec.py`](examples/streaming_exec.py) | Live `sandbox.exec_stream()` output |

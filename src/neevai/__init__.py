@@ -25,7 +25,13 @@ from neevai.runtime import (
     SandboxFiles,
 )
 from neevai.transport.lifecycle import AsyncRawClient, RawClient
-from neevai.types import Scope
+from neevai.types import (
+    CreateSnapshotParams,
+    Scope,
+    Snapshot,
+    SnapshotListResponse,
+    SnapshotStatus,
+)
 
 __all__ = [
     "NeevAI",
@@ -39,6 +45,10 @@ __all__ = [
     "SandboxFiles",
     "AsyncSandboxFiles",
     "Scope",
+    "Snapshot",
+    "SnapshotStatus",
+    "CreateSnapshotParams",
+    "SnapshotListResponse",
     "NeevAIError",
     "APIConnectionError",
     "APITimeoutError",

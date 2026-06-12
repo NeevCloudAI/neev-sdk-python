@@ -23,6 +23,12 @@ which examples demonstrate which APIs, see
   - [resume](#clientsandboxesresumeid-org_idnone-project_idnone)
   - [delete](#clientsandboxesdeleteid-org_idnone-project_idnone)
   - [metrics](#clientsandboxesmetricsid-from_none-to-none-step-none-org_idnone-project_idnone)
+  - [create_snapshot](#clientsandboxescreate_snapshotid-paramsnone-org_idnone-project_idnone)
+  - [list_snapshots](#clientsandboxeslist_snapshotsid-page-none-limit-none-org_idnone-project_idnone)
+  - [get_snapshot](#clientsandboxesget_snapshotsnapshot_id-org_idnone-project_idnone)
+  - [delete_snapshot](#clientsandboxesdelete_snapshotsnapshot_id-org_idnone-project_idnone)
+  - [restore](#clientsandboxesrestoreid-snapshot_id-org_idnone-project_idnone)
+  - [fork](#clientsandboxesforkid-name-org_idnone-project_idnone)
 - [Templates resource](#templates-resource)
 - [Sandbox handle](#sandbox-handle)
 - [Exec and streaming](#exec-and-streaming)
@@ -56,7 +62,15 @@ Everything in `neevai.__all__`:
 | `SandboxFiles` | class | `runtime/sandboxd.py` |
 | `AsyncSandboxFiles` | class | `runtime/sandboxd.py` |
 | `Scope` | dataclass | `types.py` |
+| `Snapshot` | model | generated |
+| `SnapshotStatus` | enum | generated |
+| `CreateSnapshotParams` | model | `types.py` |
+| `SnapshotListResponse` | model | generated |
 | `NeevAIError` … `InternalServerError` | exceptions | `errors.py` |
+| `Snapshot` | model | `generated/aiagent.py` |
+| `SnapshotStatus` | enum | generated |
+| `CreateSnapshotParams` | model | `types.py` |
+| `SnapshotListResponse` | model | generated |
 
 Types exported from `neevai.types.__all__`:
 
@@ -164,11 +178,20 @@ sandbox = client.sandboxes.create({
     "env": [{"name": "LOG_LEVEL", "value": "debug"}],
 })
 sandbox.wait_until_ready()
+
+# Or provision from a snapshot:
+restored = client.sandboxes.create({
+    "name": "restored-agent",
+    "sandbox_template_id": "tmpl-abc123",
+    "region": "as-south-1",
+    "from_snapshot": str(snap.id),
+})
 ```
 
 **Async:** `sandbox = await client.sandboxes.create(...)`
 
-**Example:** [`sandbox_lifecycle.py`](../examples/sandbox_lifecycle.py)
+**Examples:** [`sandbox_lifecycle.py`](../examples/sandbox_lifecycle.py),
+[`snapshot_fork_restore.py`](../examples/snapshot_fork_restore.py) (`from_snapshot`)
 
 ### `client.sandboxes.list(page=None, limit=None, org_id=None, project_id=None)`
 
@@ -259,6 +282,130 @@ for series in metrics.series:
 
 **Example:** [`sandbox_metrics.py`](../examples/sandbox_metrics.py)
 
+### `client.sandboxes.create_snapshot(id, params=None, org_id=None, project_id=None)`
+
+Creates a filesystem snapshot of a sandbox. Returns immediately with
+`status=Pending`; poll `get_snapshot` until `Ready` before restoring.
+
+**Parameters:**
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| `id` | `str` | Sandbox UUID to snapshot |
+| `params` | `CreateSnapshotParams \| Mapping[str, Any] \| None` | Optional `name`, `retain_for` (TTL duration) |
+| `org_id` / `project_id` | `str \| None` | Override client scope |
+
+The SDK always sends `include_memory: false` on the wire.
+
+**Returns:** `Snapshot` with `status` typically `Pending`.
+
+```python
+pending = client.sandboxes.create_snapshot(sandbox.id, {"name": "demo-snap"})
+# or via handle:
+pending = sandbox.snapshot({"name": "demo-snap"})
+```
+
+**Async:** `pending = await client.sandboxes.create_snapshot(...)`
+
+**Example:** [`snapshot_fork_restore.py`](../examples/snapshot_fork_restore.py)
+
+### `client.sandboxes.list_snapshots(id, page=None, limit=None, org_id=None, project_id=None)`
+
+Lists snapshots captured from a sandbox.
+
+**Returns:** `list[Snapshot]` (pagination items unwrapped).
+
+```python
+snaps = client.sandboxes.list_snapshots(sandbox.id)
+# or via handle:
+snaps = sandbox.snapshots()
+```
+
+**Async:** `snaps = await client.sandboxes.list_snapshots(...)`
+
+### `client.sandboxes.get_snapshot(snapshot_id, org_id=None, project_id=None)`
+
+Fetches snapshot metadata by project-scoped snapshot ID. Use to poll snapshot
+status after `create_snapshot`.
+
+**Returns:** `Snapshot`.
+
+**Raises:** `NotFoundError` if the snapshot does not exist.
+
+```python
+current = client.sandboxes.get_snapshot(str(pending.id))
+if current.status == SnapshotStatus.Ready:
+    ...
+```
+
+**Async:** `current = await client.sandboxes.get_snapshot(...)`
+
+**Example:** [`snapshot_fork_restore.py`](../examples/snapshot_fork_restore.py)
+
+### `client.sandboxes.delete_snapshot(snapshot_id, org_id=None, project_id=None)`
+
+Permanently deletes a snapshot. Returns `None`.
+
+```python
+client.sandboxes.delete_snapshot(str(snap.id))
+```
+
+**Async:** `await client.sandboxes.delete_snapshot(...)`
+
+**Example:** [`snapshot_fork_restore.py`](../examples/snapshot_fork_restore.py)
+
+### `client.sandboxes.restore(id, snapshot_id, org_id=None, project_id=None)`
+
+Restores a sandbox **in place** from a snapshot. Overwrites the sandbox's
+filesystem with the snapshot contents.
+
+**Returns:** Updated `Sandbox` handle.
+
+**Note:** Prefer creating a new sandbox with `from_snapshot` in create params for
+rollback workflows — see [`snapshot_fork_restore.py`](../examples/snapshot_fork_restore.py).
+In-place restore may leave an empty workspace on some backends.
+
+```python
+restored = client.sandboxes.restore(sandbox.id, str(snap.id))
+# or via handle (updates state in place, invalidates data-plane connection):
+sandbox.restore(str(snap.id))
+```
+
+**Async:** `restored = await client.sandboxes.restore(...)`
+
+### `client.sandboxes.fork(id, name, org_id=None, project_id=None)`
+
+Forks a sandbox into a **new** sandbox seeded from its current filesystem state.
+
+**Returns:** New `Sandbox` handle for the fork.
+
+```python
+fork = client.sandboxes.fork(sandbox.id, "fork-name")
+# or via handle:
+fork = sandbox.fork("fork-name")
+```
+
+**Async:** `fork = await client.sandboxes.fork(...)`
+
+**Example:** [`snapshot_fork_restore.py`](../examples/snapshot_fork_restore.py)
+
+### Restore via `from_snapshot` on create
+
+To roll back without mutating the original sandbox, pass `from_snapshot` when
+creating a new sandbox:
+
+```python
+restored = client.sandboxes.create({
+    "name": "restored-from-snap",
+    "sandbox_template_id": template_id,
+    "region": "as-south-1",
+    "from_snapshot": str(snap.id),
+})
+restored.wait_until_ready()
+```
+
+**Example:** [`snapshot_fork_restore.py`](../examples/snapshot_fork_restore.py)
+
 ---
 
 ## Templates resource
@@ -321,11 +468,13 @@ print(sandbox.phase, sandbox.replicas)
 
 ### `sandbox.wait_until_ready(timeout_ms=120000, poll_interval_ms=2000, on_poll=None)`
 
-Polls `refresh()` until `phase == "Ready"`.
+Polls `refresh()` until `phase == "Ready"`, then probes the data-plane daemon
+at `connect_url` (via a short-lived connection) until file/exec operations are
+reachable. This two-phase wait covers control-plane Ready and runtime readiness.
 
 **Raises:**
 
-- `NeevAIError` on timeout
+- `NeevAIError` on timeout (control plane or data plane)
 - `NeevAIError` if sandbox is `Paused` (call `resume()` first)
 
 Optional `on_poll` callback receives the handle on each poll iteration — useful for
@@ -354,6 +503,47 @@ sandbox.wait_until_ready()
 ### `sandbox.metrics(from_=None, to=None, step=None)`
 
 Same as `client.sandboxes.metrics(self.id, ...)` using the handle's scope.
+
+### `sandbox.snapshot(params=None)` / `sandbox.snapshots()`
+
+Convenience wrappers for `create_snapshot` and `list_snapshots` on this sandbox.
+
+`snapshot` returns a `Snapshot` model (not a handle). `snapshots` returns `list[Snapshot]`.
+
+```python
+pending = sandbox.snapshot({"name": "demo-snap"})
+all_snaps = sandbox.snapshots()
+```
+
+**Example:** [`snapshot_fork_restore.py`](../examples/snapshot_fork_restore.py)
+
+### `sandbox.restore(snapshot_id)` / `sandbox.fork(name)`
+
+`restore` delegates to `client.sandboxes.restore`, updates handle state in place,
+invalidates the cached data-plane connection, and returns `self`. `fork` returns a
+new `Sandbox` handle.
+
+For rollback workflows, prefer `client.sandboxes.create({..., "from_snapshot": ...})`
+over in-place `restore` — see
+[`snapshot_fork_restore.py`](../examples/snapshot_fork_restore.py).
+
+```python
+# In-place restore (mutates this sandbox):
+sandbox.restore(str(snap.id))
+
+# Recommended rollback — new sandbox from snapshot:
+restored = client.sandboxes.create({
+    "name": "restored",
+    "sandbox_template_id": template_id,
+    "region": region,
+    "from_snapshot": str(snap.id),
+})
+
+fork = sandbox.fork("fork-name")
+```
+
+**Example:** [`snapshot_fork_restore.py`](../examples/snapshot_fork_restore.py) (`fork`,
+`from_snapshot` create)
 
 ### `sandbox.to_json()`
 
@@ -552,6 +742,36 @@ Import from `neevai.types`. Control-plane models are generated from
 `specs/aiagent.yaml` (regenerate with `scripts/gen_types.py`). After spec changes,
 manually verify field tables here and in [`api-reference.md`](./api-reference.md).
 
+### `CreateSnapshotParams`
+
+Caller-facing snapshot create options (`types.py`). The SDK sets `include_memory`
+to `false` on the wire.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `name` | `str \| None` | no |
+| `retain_for` | `str \| None` | no (TTL duration, e.g. `"720h"`; omitted = no expiry) |
+
+### `Snapshot`
+
+Generated snapshot metadata record.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `id` | `UUID` | yes |
+| `sandbox_id` | `UUID` | yes |
+| `org_id` | `str` | yes |
+| `project_id` | `str` | yes |
+| `name` | `str \| None` | no |
+| `status` | `SnapshotStatus` | yes (`Pending`, `Running`, `Ready`, `Failed`) |
+| `include_memory` | `bool` | yes |
+| `source_region` | `str` | yes |
+| `size_bytes` | `int \| None` | no |
+| `error_message` | `str \| None` | no |
+| `expires_at` | `datetime \| None` | no |
+| `created_at` | `datetime` | yes |
+| `updated_at` | `datetime` | yes |
+
 ### `CreateSandboxParams`
 
 Alias for generated `CreateSandboxRequest`.
@@ -565,6 +785,43 @@ Alias for generated `CreateSandboxRequest`.
 | `resources` | `SandboxResources \| None` | no |
 | `egress` | `SandboxEgressConfig \| None` | no |
 | `from_snapshot` | `UUID \| None` | no |
+
+### `CreateSnapshotParams`
+
+Hand-written caller-facing params for snapshot creation. The SDK always sets
+`include_memory: false` on the wire.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `name` | `str \| None` | no |
+| `retain_for` | `str \| None` | no (TTL duration, e.g. `"720h"`) |
+
+### `Snapshot`
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `id` | `UUID` | yes |
+| `sandbox_id` | `UUID` | yes |
+| `org_id` | `str` | yes |
+| `project_id` | `str` | yes |
+| `name` | `str \| None` | no |
+| `status` | `SnapshotStatus` | yes |
+| `include_memory` | `bool` | yes |
+| `source_region` | `str` | yes |
+| `size_bytes` | `int \| None` | no |
+| `error_message` | `str \| None` | no |
+| `expires_at` | `datetime \| None` | no |
+| `created_at` | `datetime` | yes |
+| `updated_at` | `datetime` | yes |
+
+### `SnapshotListResponse`
+
+| Field | Type |
+| ----- | ---- |
+| `items` | `list[Snapshot]` |
+| `total` | `int` |
+| `page` | `int` |
+| `limit` | `int` |
 
 ### `EnvVar`
 
@@ -796,6 +1053,12 @@ Compact reviewer index. Each symbol should also appear in
 | `Sandboxes.resume` | method | `Sandbox` |
 | `Sandboxes.delete` | method | `None` |
 | `Sandboxes.metrics` | method | `SandboxMetricsResponse` |
+| `Sandboxes.create_snapshot` | method | `Snapshot` |
+| `Sandboxes.list_snapshots` | method | `list[Snapshot]` |
+| `Sandboxes.get_snapshot` | method | `Snapshot` |
+| `Sandboxes.delete_snapshot` | method | `None` |
+| `Sandboxes.restore` | method | `Sandbox` |
+| `Sandboxes.fork` | method | `Sandbox` |
 | `AsyncSandboxes.*` | methods | Same as sync with `await`; returns `AsyncSandbox` / `AsyncSandboxPage` |
 
 ### Templates resource (`resources/templates.py`)
@@ -816,6 +1079,8 @@ Compact reviewer index. Each symbol should also appear in
 | `Sandbox.refresh` | method | Re-fetch from control plane → `Sandbox` |
 | `Sandbox.wait_until_ready` | method | Poll until `Ready` |
 | `Sandbox.pause` / `.resume` | methods | Return updated `Sandbox` |
+| `Sandbox.snapshot` / `.snapshots` | methods | `Snapshot` / `list[Snapshot]` |
+| `Sandbox.restore` / `.fork` | methods | `Sandbox` (restore updates in place) |
 | `Sandbox.delete` | method | `None` |
 | `Sandbox.metrics` | method | `SandboxMetricsResponse` |
 | `Sandbox.exec` | method | `ExecResult` |
@@ -857,6 +1122,14 @@ Compact reviewer index. Each symbol should also appear in
 - `Sandbox.pause()` / `.resume()` return updated handles (not `None`).
 - `connect_url` is a property on `Sandbox`, not a method.
 - File and exec paths are workspace-relative; absolute paths are rejected.
+- Snapshot create returns `Pending` immediately; poll `get_snapshot` until `Ready`.
+- The SDK sets `include_memory: false` on snapshot create requests.
+- For rollback, prefer `sandboxes.create({..., "from_snapshot": snapshot_id})` over
+  in-place `restore()` — some backends may return an empty workspace after in-place
+  restore.
+- `restore()`, `pause()`, and `resume()` invalidate the cached data-plane connection
+  on the handle; call `wait_until_ready()` again before file/exec operations when
+  needed.
 
 ---
 
