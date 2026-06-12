@@ -57,13 +57,10 @@ from neevai.generated.aiagent import (  # noqa: F401
     RestoreSandboxRequest as RestoreSandboxRequest,
 )
 from neevai.generated.aiagent import (  # noqa: F401
-    Sandbox as SandboxData,
+    Sandbox as _GeneratedSandbox,
 )
 from neevai.generated.aiagent import (  # noqa: F401
     SandboxEgressConfig as SandboxEgressConfig,
-)
-from neevai.generated.aiagent import (  # noqa: F401
-    SandboxListResponse as SandboxListResponse,
 )
 from neevai.generated.aiagent import (  # noqa: F401
     SandboxMetricsResponse as SandboxMetricsResponse,
@@ -90,8 +87,26 @@ from neevai.generated.aiagent import (  # noqa: F401
     SnapshotStatus as SnapshotStatus,
 )
 
-# String phase literals for backward-compatible comparisons in consumer code.
-SandboxPhase = Literal["Pending", "Ready", "NotReady", "Unknown", "Paused"]
+# Steady-state phases from the OpenAPI spec, plus transitional values the API may
+# return during pause/resume reconciliation (not listed in the spec enum).
+SandboxPhase = Literal["Pending", "Ready", "NotReady", "Unknown", "Paused", "Pausing", "Resuming"]
+
+
+class SandboxData(_GeneratedSandbox):
+    """Sandbox record with relaxed ``phase`` validation.
+
+    The control plane may return transitional or future phase strings beyond the
+    OpenAPI ``SandboxPhase`` enum; accept any string at the SDK boundary.
+    """
+
+    phase: str  # type: ignore[assignment]  # pyright: ignore[reportIncompatibleVariableOverride]
+
+
+class SandboxListResponse(BaseModel):
+    items: list[SandboxData]
+    total: int
+    page: int
+    limit: int
 
 
 @dataclass

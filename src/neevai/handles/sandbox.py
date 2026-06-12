@@ -8,7 +8,6 @@ from neevai.types import (
     ExecStreamEvent,
     SandboxData,
     SandboxMetricsResponse,
-    SandboxPhase,
     Scope,
 )
 
@@ -71,9 +70,9 @@ class Sandbox:
         return self._state.name
 
     @property
-    def phase(self) -> SandboxPhase:
+    def phase(self) -> str:
         """Current lifecycle phase as last fetched from the server."""
-        return self._state.phase.value
+        return self._state.phase
 
     @property
     def replicas(self) -> int:
@@ -275,8 +274,9 @@ class AsyncSandbox:
         return self._state.name
 
     @property
-    def phase(self) -> SandboxPhase:
-        return self._state.phase.value
+    def phase(self) -> str:
+        """Current lifecycle phase as last fetched from the server."""
+        return self._state.phase
 
     @property
     def replicas(self) -> int:
