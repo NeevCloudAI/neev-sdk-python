@@ -199,9 +199,11 @@ sandbox = client.sandboxes.get("550e8400-e29b-41d4-a716-446655440000")
 print(sandbox.phase, sandbox.connect_url)
 ```
 
-### `client.sandboxes.pause(id, org_id=None, project_id=None)`
+### `client.sandboxes.pause(id, *, preserve_memory=None, org_id=None, project_id=None)`
 
-Scales the sandbox to 0 replicas. Control-plane phase becomes `Paused`.
+Scales the sandbox to 0 replicas. Control-plane phase becomes `Paused`. When
+`preserve_memory` is set, it is sent in the request body (`PauseSandboxRequest`);
+omit it to use the server default (`true`).
 
 **Returns:** Updated `Sandbox` handle (not `None`).
 
@@ -556,13 +558,13 @@ Alias for generated `CreateSandboxRequest`.
 
 | Field | Type | Required |
 | ----- | ---- | -------- |
-| `name` | `str` | yes |
-| `sandbox_template_id` | `str` | yes |
-| `region` | `str` | yes (auto-filled from client if omitted at API boundary) |
-| `namespace` | `str \| None` | no |
-| `image` | `str \| None` | no |
-| `command` | `list[str] \| None` | no |
+| `name` | `str` (DNS-1123 label, max 63) | yes |
+| `sandbox_template_id` | `str` (`sb-…` pattern) | no |
+| `region` | `str \| None` | no (auto-filled from client if omitted at API boundary) |
 | `env` | `list[EnvVar] \| None` | no |
+| `resources` | `SandboxResources \| None` | no |
+| `egress` | `SandboxEgressConfig \| None` | no |
+| `from_snapshot` | `UUID \| None` | no |
 
 ### `EnvVar`
 
@@ -581,16 +583,17 @@ Full control-plane sandbox record (alias for generated `Sandbox`).
 | `org_id` | `str` | yes |
 | `project_id` | `str` | yes |
 | `name` | `str` | yes |
-| `namespace` | `str \| None` | no |
 | `region` | `str` | yes |
-| `image` | `str` | yes |
+| `image` | `str` | yes (from template) |
 | `command` | `list[str] \| None` | no |
 | `env` | `list[EnvVar] \| None` | no |
+| `resources` | `SandboxResources \| None` | no |
 | `phase` | `SandboxPhaseEnum` | yes |
-| `fqdn` | `str \| None` | no |
 | `connect_url` | `str \| None` | no |
 | `replicas` | `int` (0–1) | yes |
-| `k8s_uid` | `str \| None` | no |
+| `egress` | `SandboxEgressConfig \| None` | no |
+| `sandbox_template_id` | `str \| None` | no |
+| `created_by` | `str \| None` | no |
 | `created_at` | `datetime` | yes |
 | `updated_at` | `datetime` | yes |
 

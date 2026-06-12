@@ -6,7 +6,15 @@ from __future__ import annotations
 from enum import Enum
 from uuid import UUID
 
-from pydantic import AwareDatetime, BaseModel, Field, conint, constr
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    ConfigDict,
+    Field,
+    confloat,
+    conint,
+    constr,
+)
 
 
 class ErrorResponse(BaseModel):
@@ -27,40 +35,106 @@ class SandboxPhase(Enum):
     Paused = "Paused"
 
 
-class Sandbox(BaseModel):
-    id: UUID
+class SandboxResources(BaseModel):
+    cpu: confloat(ge=0.5, le=8.0, multiple_of=0.5) | None = Field(
+        None, description="vCPUs. Multiples of 0.5, from 0.5 to 8.", examples=[1]
+    )
+    memory_gb: conint(ge=1, le=16) | None = Field(
+        None, description="Memory in GB, from 1 to 16.", examples=[2]
+    )
+    disk_gb: conint(ge=10, le=100, multiple_of=10) | None = Field(
+        None,
+        description="Ephemeral disk in GB. Multiples of 10, from 10 to 100.",
+        examples=[10],
+    )
+
+
+class PauseSandboxRequest(BaseModel):
+    preserve_memory: bool | None = Field(
+        True,
+        description="When true, capture FS+process memory as an implicit snapshot before\nterminating the pod. The snapshot is auto-consumed on the next resume.\n",
+    )
+
+
+class SnapshotStatus(Enum):
+    Pending = "Pending"
+    Running = "Running"
+    Ready = "Ready"
+    Failed = "Failed"
+
+
+class Snapshot(BaseModel):
+    id: UUID = Field(..., description="Snapshot UUID.")
+    sandbox_id: UUID = Field(..., description="UUID of the source sandbox.")
     org_id: str
     project_id: str
-    name: str
-    namespace: str | None = None
-    region: str
-    image: str
-    command: list[str] | None = None
-    env: list[EnvVar] | None = None
-    phase: SandboxPhase
-    fqdn: str | None = None
-    connect_url: str | None = None
-    replicas: conint(ge=0, le=1)
-    k8s_uid: str | None = None
+    name: str | None = Field(None, description="Optional customer-supplied name.")
+    status: SnapshotStatus
+    include_memory: bool = Field(..., description="True = FS+memory captured; false = FS only.")
+    source_region: str = Field(..., description="DP cluster slug where the blob lives.")
+    size_bytes: int | None = Field(
+        None, description="Uncompressed blob size. Null until status=Ready."
+    )
+    error_message: str | None = Field(
+        None, description="Failure detail. Null unless status=Failed."
+    )
+    expires_at: AwareDatetime | None = Field(
+        None, description="When the platform will GC this snapshot. Null = no expiry."
+    )
     created_at: AwareDatetime
     updated_at: AwareDatetime
 
 
-class CreateSandboxRequest(BaseModel):
-    name: constr(min_length=1)
-    sandbox_template_id: constr(min_length=1)
-    namespace: str | None = None
-    region: str
-    image: constr(min_length=1) | None = None
-    command: list[str] | None = None
-    env: list[EnvVar] | None = None
-
-
-class SandboxListResponse(BaseModel):
-    items: list[Sandbox]
+class SnapshotListResponse(BaseModel):
+    items: list[Snapshot]
     total: int
     page: int
     limit: int
+
+
+class CreateSnapshotRequest(BaseModel):
+    name: str | None = Field(None, description="Optional human-readable name for this snapshot.")
+    include_memory: bool | None = Field(
+        False,
+        description="Capture process memory in addition to filesystem. Currently forced to false (RootFS only); memory capture is not yet supported.",
+    )
+    retain_for: str | None = Field(
+        None,
+        description='Duration string (e.g. "720h" = 30 days) controlling snapshot TTL.\n"0" or omitted means no expiry.\n',
+    )
+
+
+class RestoreSandboxRequest(BaseModel):
+    snapshot_id: UUID = Field(
+        ...,
+        description="UUID of the snapshot to restore from. Must belong to this sandbox\nor another sandbox in the same project.\n",
+    )
+
+
+class ForkSandboxRequest(BaseModel):
+    name: constr(pattern=r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", min_length=1, max_length=63) = Field(
+        ...,
+        description="Name for the new forked sandbox. Must be unique within the project.",
+    )
+
+
+class Mode(Enum):
+    deny_all = "deny_all"
+    allow_list = "allow_list"
+
+
+class Protocol(Enum):
+    TCP = "TCP"
+    UDP = "UDP"
+
+
+class SandboxEgressRule(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    host: str = Field(..., description="IP address, CIDR block, or domain name")
+    ports: list[int] | None = None
+    protocol: Protocol | None = None
 
 
 class SandboxTemplateCategory(Enum):
@@ -92,14 +166,100 @@ class SandboxTemplateListResponse(BaseModel):
 
 
 class MetricSeries(BaseModel):
-    metric: str
-    unit: str | None = None
-    points: list[list[float]]
+    metric: str = Field(
+        ...,
+        description='Stable metric key from the v1 catalogue (e.g. "cpu_usage_cores", "memory_usage_bytes").',
+    )
+    unit: str | None = Field(
+        None,
+        description='Unit of the values (e.g. "cores", "bytes", "count", "ratio").',
+    )
+    points: list[list[float]] = Field(
+        ...,
+        description="Time-ordered [unix_seconds, value] pairs. Empty when the sandbox emitted no samples in the window.",
+    )
 
 
 class SandboxMetricsResponse(BaseModel):
     sandbox_id: UUID
     from_: AwareDatetime = Field(..., alias="from")
     to: AwareDatetime
-    step: str
+    step: str = Field(..., description="Resolution actually used after server-side clamping.")
     series: list[MetricSeries]
+
+
+class SandboxEgressConfig(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    mode: Mode | None = Field(
+        "deny_all",
+        description="The egress mode. deny_all blocks all egress. allow_list restricts egress to the specified allowed destinations.",
+    )
+    allow_internet: bool | None = Field(
+        False,
+        description="Escape hatch: if true, allows 0.0.0.0/0 (the entire internet). Strictly audit-logged.",
+    )
+    allow: list[SandboxEgressRule] | None = Field(
+        None, description="List of egress rules for host/IP destinations to allow."
+    )
+
+
+class Sandbox(BaseModel):
+    id: UUID
+    org_id: str
+    project_id: str
+    name: str
+    region: str = Field(..., description="Region where the sandbox runs.", examples=["dev"])
+    image: str
+    command: list[str] | None = None
+    env: list[EnvVar] | None = None
+    resources: SandboxResources | None = None
+    phase: SandboxPhase
+    connect_url: str | None = Field(
+        None,
+        description="Public URL the SDK calls (API key + X-Sandbox-Id). null when not configured.",
+    )
+    replicas: conint(ge=0, le=1) = Field(..., description="0 = paused, 1 = running.")
+    egress: SandboxEgressConfig | None = None
+    sandbox_template_id: str | None = Field(
+        None,
+        description="Catalogue template id from create when one was provided; null otherwise.",
+    )
+    created_by: str | None = Field(
+        None,
+        description="Identity that created the sandbox (user id, or API key id for key-authenticated calls); null for sandboxes created before this was recorded.",
+    )
+    created_at: AwareDatetime
+    updated_at: AwareDatetime
+
+
+class CreateSandboxRequest(BaseModel):
+    name: constr(pattern=r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", min_length=1, max_length=63) = Field(
+        ...,
+        description="Sandbox name. Used verbatim as the Sandbox CR name and as a routing\nlabel, so it must be a valid DNS-1123 label: lowercase alphanumeric\ncharacters or '-', starting and ending with an alphanumeric, max 63\ncharacters.\n",
+        examples=["my-sandbox"],
+    )
+    region: str | None = Field(
+        None,
+        description="Region to provision in; omit to use the platform default.",
+        examples=["dev"],
+    )
+    env: list[EnvVar] | None = None
+    resources: SandboxResources | None = None
+    egress: SandboxEgressConfig | None = None
+    sandbox_template_id: constr(pattern=r"^sb-[a-zA-Z0-9-]+$", min_length=1) | None = Field(
+        None,
+        description="Catalogue template id (e.g. sb-ubuntu-26-04-minimal). The server\nvalidates the template exists and is active, then provisions the\nsandbox image and command from that template.\n",
+    )
+    from_snapshot: UUID | None = Field(
+        None,
+        description="When set, the new sandbox is restored from this snapshot instead of\ncold-starting from the image. Snapshot must belong to the same\nproject. Sizing and region must match the snapshot's origin.\n",
+    )
+
+
+class SandboxListResponse(BaseModel):
+    items: list[Sandbox]
+    total: int
+    page: int
+    limit: int

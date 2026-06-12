@@ -26,13 +26,11 @@ def _first_sandbox_id() -> str:
 
 def test_sandboxes_create(mock_transport):
     client = _make_client(mock_transport)
-    sb = client.sandboxes.create(
-        {"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal", "image": "ubuntu:22.04"}
-    )
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
     assert sb.id == _first_sandbox_id()
     assert sb.name == "s1"
     assert sb.phase == "Pending"
-    assert sb.data.get("namespace") is None
+    assert sb.data.get("sandbox_template_id") == "sb-ubuntu-24-04-minimal"
     client.close()
 
 
@@ -42,7 +40,6 @@ def test_sandboxes_create_with_model_instance(mock_transport):
         name="s1",
         sandbox_template_id="sb-ubuntu-24-04-minimal",
         region="us-east-1",
-        image="ubuntu:22.04",
     )
     sb = client.sandboxes.create(params)
     assert sb.name == "s1"
@@ -51,9 +48,7 @@ def test_sandboxes_create_with_model_instance(mock_transport):
 
 def test_sandboxes_create_injects_default_region(mock_transport):
     client = _make_client(mock_transport, region="eu-central-1")
-    sb = client.sandboxes.create(
-        {"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal", "image": "ubuntu:22.04"}
-    )
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
     assert sb.data["region"] == "eu-central-1"
     client.close()
 
@@ -65,7 +60,6 @@ def test_sandboxes_create_explicit_region_overrides_default(mock_transport):
             "name": "s1",
             "sandbox_template_id": "sb-ubuntu-24-04-minimal",
             "region": "ap-south-1",
-            "image": "ubuntu:22.04",
         }
     )
     assert sb.data["region"] == "ap-south-1"
@@ -85,7 +79,6 @@ def test_sandboxes_create_raises_when_region_missing(mock_transport, monkeypatch
             {
                 "name": "s1",
                 "sandbox_template_id": "sb-ubuntu-24-04-minimal",
-                "image": "ubuntu:22.04",
             }
         )
     client.close()
@@ -94,7 +87,7 @@ def test_sandboxes_create_raises_when_region_missing(mock_transport, monkeypatch
 def test_sandboxes_get(mock_transport):
     client = _make_client(mock_transport)
     created = client.sandboxes.create(
-        {"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal", "image": "ubuntu:22.04"}
+        {"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"}
     )
     fetched = client.sandboxes.get(created.id)
     assert fetched.id == created.id
@@ -104,12 +97,8 @@ def test_sandboxes_get(mock_transport):
 
 def test_sandboxes_list(mock_transport):
     client = _make_client(mock_transport)
-    client.sandboxes.create(
-        {"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal", "image": "ubuntu:22.04"}
-    )
-    client.sandboxes.create(
-        {"name": "s2", "sandbox_template_id": "sb-ubuntu-24-04-minimal", "image": "ubuntu:22.04"}
-    )
+    client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
+    client.sandboxes.create({"name": "s2", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
 
     page = client.sandboxes.list()
     assert len(page.items) == 2
@@ -120,9 +109,7 @@ def test_sandboxes_list(mock_transport):
 
 def test_sandboxes_delete(mock_transport):
     client = _make_client(mock_transport)
-    sb = client.sandboxes.create(
-        {"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal", "image": "ubuntu:22.04"}
-    )
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
     client.sandboxes.delete(sb.id)
     with pytest.raises(NotFoundError):
         client.sandboxes.get(sb.id)
@@ -131,9 +118,7 @@ def test_sandboxes_delete(mock_transport):
 
 def test_sandboxes_pause_resume(mock_transport):
     client = _make_client(mock_transport)
-    sb = client.sandboxes.create(
-        {"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal", "image": "ubuntu:22.04"}
-    )
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
     paused = client.sandboxes.pause(sb.id)
     assert paused.phase == "Paused"
     resumed = client.sandboxes.resume(sb.id)
@@ -143,9 +128,7 @@ def test_sandboxes_pause_resume(mock_transport):
 
 def test_sandboxes_metrics(mock_transport):
     client = _make_client(mock_transport)
-    sb = client.sandboxes.create(
-        {"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal", "image": "ubuntu:22.04"}
-    )
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
     metrics = client.sandboxes.metrics(sb.id)
     assert str(metrics.sandbox_id) == sb.id
     assert metrics.series == []
@@ -161,9 +144,7 @@ def test_sandboxes_get_not_found(mock_transport):
 
 def test_sandboxes_get_invalid_response_raises(mock_transport, monkeypatch):
     client = _make_client(mock_transport)
-    sb = client.sandboxes.create(
-        {"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal", "image": "ubuntu:22.04"}
-    )
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
 
     original_request = client._transport.request
 

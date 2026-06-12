@@ -36,6 +36,36 @@ def _sandbox_id(n: int) -> str:
     return str(uuid.UUID(int=n))
 
 
+def _make_sandbox_record(
+    *,
+    sid: str,
+    org_id: str,
+    project_id: str,
+    body: dict[str, Any] | None,
+    now: str,
+) -> dict[str, Any]:
+    req = body or {}
+    return {
+        "id": sid,
+        "org_id": org_id,
+        "project_id": project_id,
+        "name": req.get("name", "test-sandbox"),
+        "region": req.get("region", "us-east-1"),
+        "image": "ubuntu:22.04",
+        "command": None,
+        "env": req.get("env"),
+        "resources": req.get("resources"),
+        "phase": "Pending",
+        "connect_url": None,
+        "replicas": 0,
+        "egress": None,
+        "sandbox_template_id": req.get("sandbox_template_id"),
+        "created_by": None,
+        "created_at": now,
+        "updated_at": now,
+    }
+
+
 def _control_response(
     method: str, path: str, query: dict[str, Any] | None, body: Any
 ) -> httpx.Response:
@@ -78,20 +108,13 @@ def _control_response(
                 now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
                 sid = _sandbox_id(_FAKE_DB["next_id"])
                 _FAKE_DB["next_id"] += 1
-                sandbox = {
-                    "id": sid,
-                    "org_id": org_id,
-                    "project_id": project_id,
-                    "name": (body or {}).get("name", "test-sandbox"),
-                    "region": (body or {}).get("region", "us-east-1"),
-                    "image": (body or {}).get("image", "ubuntu:22.04"),
-                    "command": (body or {}).get("command"),
-                    "env": (body or {}).get("env"),
-                    "phase": "Pending",
-                    "replicas": 0,
-                    "created_at": now,
-                    "updated_at": now,
-                }
+                sandbox = _make_sandbox_record(
+                    sid=sid,
+                    org_id=org_id,
+                    project_id=project_id,
+                    body=body,
+                    now=now,
+                )
                 _FAKE_DB["sandboxes"][sid] = sandbox
                 return json_resp(201, sandbox)
             return json_resp(400, {"message": "bad request"})
@@ -203,18 +226,13 @@ def _control_response(
         sid = _sandbox_id(_FAKE_DB["next_id"])
         _FAKE_DB["next_id"] += 1
         now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-        sandbox = {
-            "id": sid,
-            "org_id": "",
-            "project_id": "",
-            "name": (body or {}).get("name", "test-sandbox"),
-            "region": "us-east-1",
-            "image": (body or {}).get("image", "ubuntu:22.04"),
-            "phase": "Pending",
-            "replicas": 0,
-            "created_at": now,
-            "updated_at": now,
-        }
+        sandbox = _make_sandbox_record(
+            sid=sid,
+            org_id="",
+            project_id="",
+            body=body,
+            now=now,
+        )
         _FAKE_DB["sandboxes"][sid] = sandbox
         return json_resp(201, sandbox)
 

@@ -121,7 +121,6 @@ def test_control_transport_sanity(control_transport):
         body={
             "name": "s1",
             "sandbox_template_id": "sb-ubuntu-24-04-minimal",
-            "image": "ubuntu:22.04",
         },
     )
     assert created["name"] == "s1"

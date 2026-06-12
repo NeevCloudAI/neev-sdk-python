@@ -77,9 +77,7 @@ _PACKAGE_INSTALLERS: tuple[tuple[tuple[str, ...], str], ...] = (
 )
 
 
-def _exec_sh(
-    sandbox: Sandbox, script: str, *, timeout_ms: int | None = None
-) -> ExecResult:
+def _exec_sh(sandbox: Sandbox, script: str, *, timeout_ms: int | None = None) -> ExecResult:
     command: list[str] = ["sh", "-c", script]
     if timeout_ms is None:
         return sandbox.exec(command)
@@ -176,9 +174,7 @@ def _bootstrap_failure_message(tool: str, details: str, *, required: bool) -> st
     )
 
 
-def create_standard_sandbox(
-    client: NeevAI, region: str | None = None
-) -> Sandbox:
+def create_standard_sandbox(client: NeevAI, region: str | None = None) -> Sandbox:
     template_id = os.environ.get("NEEVCLOUD_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-minimal")
     resolved_region = region or os.environ.get("NEEVCLOUD_REGION", "as-south-1")
     suffix = hex(int(time.time() * 1e6))[-6:]
@@ -309,9 +305,7 @@ def _extract_archive_from_host(sandbox: Sandbox, archive: bytes) -> None:
             sandbox.files.write(f"repo/{relative}", extracted.read())
 
 
-def _clone_via_archive_in_sandbox(
-    sandbox: Sandbox, owner: str, repo: str
-) -> bool:
+def _clone_via_archive_in_sandbox(sandbox: Sandbox, owner: str, repo: str) -> bool:
     downloader = _resolve_tool_path(sandbox, "curl") or _resolve_tool_path(sandbox, "wget")
     if downloader is None or not _has_tool(sandbox, "tar"):
         return False
