@@ -73,24 +73,16 @@ def main() -> None:
             templates_path = "/api/v1beta1/sandbox-templates"
             templates = client.raw.request("GET", templates_path, query={"limit": 3})
             items: list[Any] = (
-                cast(list[Any], templates.get("items", []))
-                if isinstance(templates, dict)
-                else []
+                cast(list[Any], templates.get("items", [])) if isinstance(templates, dict) else []
             )
             print(f"raw templates: {len(items)} item(s)")
             for item in items:
                 print(f"  {item.get('id')} — {item.get('name')}")
 
             # --- List sandboxes ---
-            sandboxes_path = (
-                f"/api/v1beta1/orgs/{org_id}/projects/{project_id}/sandboxes"
-            )
+            sandboxes_path = f"/api/v1beta1/orgs/{org_id}/projects/{project_id}/sandboxes"
             sandboxes = client.raw.request("GET", sandboxes_path, query={"limit": 5})
-            total: int = (
-                cast(int, sandboxes.get("total", 0))
-                if isinstance(sandboxes, dict)
-                else 0
-            )
+            total: int = cast(int, sandboxes.get("total", 0)) if isinstance(sandboxes, dict) else 0
             print(f"raw sandboxes: {total} total in project")
         except NeevAIError as e:
             print(f"Error: {e}", file=sys.stderr)

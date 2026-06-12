@@ -61,9 +61,7 @@ def test_sandbox_refresh(control_transport):
         region="us-east-1",
         client=control_transport,
     )
-    sb = client.sandboxes.create(
-        {"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal", "image": "ubuntu:22.04"}
-    )
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
     assert sb.phase == "Pending"
 
     sb.refresh()

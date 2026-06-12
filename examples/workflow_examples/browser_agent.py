@@ -53,9 +53,7 @@ HERE = Path(__file__).resolve().parent
 OUTPUT_DIR = HERE / "output"
 
 
-def create_browser_sandbox(
-    client: NeevAI, region: str | None = None
-) -> Sandbox:
+def create_browser_sandbox(client: NeevAI, region: str | None = None) -> Sandbox:
     template_id = os.environ.get("NEEVCLOUD_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-minimal")
     resolved_region = region or os.environ.get("NEEVCLOUD_REGION", "as-south-1")
     suffix = hex(int(time.time() * 1e6))[-6:]

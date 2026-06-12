@@ -116,6 +116,11 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
+
 import httpx
 from utils.model_config import NEEV_INFERENCE_BASE_URL, NEEV_MODEL, neev_inference_api_key
 
@@ -194,7 +199,7 @@ def _rand_suffix() -> str:
 
 
 def main() -> None:
-    line(_bold("AI code-interpreter (gpt-oss-120b → Neev sandbox)"))
+    line(_bold("AI code-interpreter (gpt-oss-120b -> Neev sandbox)"))
     line(_dim(f"task: {TASK}"))
 
     with NeevAI() as client:

@@ -27,10 +27,10 @@ Subcommands
 
 | Command | Description | Notable flags |
 |---------|-------------|---------------|
-| ``create`` | Provision a new sandbox | ``--name``, ``--template-id``, ``--image``, ``--wait`` |
+| ``create`` | Provision a new sandbox | ``--name``, ``--template-id``, ``--wait`` |
 | ``list`` | Paginated sandbox list | ``--page``, ``--limit`` |
 | ``get`` | Fetch one sandbox by ID | — |
-| ``pause`` | Scale to 0 replicas | — |
+| ``pause`` | Scale to 0 replicas | ``--preserve-memory`` / ``--no-preserve-memory`` |
 | ``resume`` | Scale back to 1 replica | — |
 | ``delete`` | Permanently remove | — |
 | ``metrics`` | Query health metrics | ``--from``, ``--to``, ``--step`` |
@@ -74,7 +74,6 @@ from neevai.errors import NeevAIError
 from neevai.handles.sandbox import Sandbox
 
 # Tunable defaults — override via environment variables listed in the docstring.
-DEFAULT_IMAGE = "ghcr.io/neevcloud/sandbox-python:3.12"
 WAIT_TIMEOUT_MS = int(os.environ.get("NEEVAI_WAIT_TIMEOUT_MS", "300000"))
 
 
@@ -114,7 +113,6 @@ def _cmd_create(client: NeevAI, args: argparse.Namespace) -> None:
         {
             "name": args.name,
             "sandbox_template_id": template_id,
-            "image": args.image,
         }
     )
     if args.wait:
@@ -151,7 +149,10 @@ def _cmd_get(client: NeevAI, args: argparse.Namespace) -> None:
 
 def _cmd_pause(client: NeevAI, args: argparse.Namespace) -> None:
     """Pause a sandbox (scale to 0 replicas)."""
-    sandbox = client.sandboxes.pause(args.sandbox_id)
+    pause_kwargs: dict[str, Any] = {}
+    if args.preserve_memory is not None:
+        pause_kwargs["preserve_memory"] = args.preserve_memory
+    sandbox = client.sandboxes.pause(args.sandbox_id, **pause_kwargs)
     _print_sandbox(sandbox, as_json=args.json)
 
 
@@ -204,11 +205,6 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Sandbox template ID (default: NEEVCLOUD_SANDBOX_TEMPLATE_ID).",
     )
     create.add_argument(
-        "--image",
-        default=DEFAULT_IMAGE,
-        help=f"Container image (default: {DEFAULT_IMAGE}).",
-    )
-    create.add_argument(
         "--wait",
         action="store_true",
         help="Block until the sandbox is ready after create.",
@@ -223,6 +219,13 @@ def _build_parser() -> argparse.ArgumentParser:
 
     pause = subparsers.add_parser("pause", help="Pause a sandbox (scale to 0 replicas).")
     pause.add_argument("sandbox_id", help="Sandbox UUID.")
+    pause.add_argument(
+        "--preserve-memory",
+        dest="preserve_memory",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Capture FS+memory snapshot before pause (server default: true).",
+    )
 
     resume = subparsers.add_parser("resume", help="Resume a paused sandbox.")
     resume.add_argument("sandbox_id", help="Sandbox UUID.")

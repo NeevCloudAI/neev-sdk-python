@@ -5,20 +5,29 @@ from pydantic import BaseModel
 
 __all__ = [
     "CreateSandboxParams",
+    "CreateSnapshotRequest",
     "EnvVar",
     "ExecResult",
     "ExecStreamEvent",
     "ExitStreamEvent",
     "FileEntry",
+    "ForkSandboxRequest",
     "MetricSeries",
+    "PauseSandboxParams",
+    "RestoreSandboxRequest",
     "SandboxData",
+    "SandboxEgressConfig",
     "SandboxListResponse",
     "SandboxMetricsResponse",
     "SandboxPhase",
     "SandboxPhaseEnum",
+    "SandboxResources",
     "SandboxTemplate",
     "SandboxTemplateListResponse",
     "Scope",
+    "Snapshot",
+    "SnapshotListResponse",
+    "SnapshotStatus",
     "StderrStreamEvent",
     "StdoutStreamEvent",
 ]
@@ -30,13 +39,28 @@ from neevai.generated.aiagent import (  # noqa: F401
     CreateSandboxRequest as CreateSandboxParams,
 )
 from neevai.generated.aiagent import (  # noqa: F401
+    CreateSnapshotRequest as CreateSnapshotRequest,
+)
+from neevai.generated.aiagent import (  # noqa: F401
     EnvVar as EnvVar,
+)
+from neevai.generated.aiagent import (  # noqa: F401
+    ForkSandboxRequest as ForkSandboxRequest,
 )
 from neevai.generated.aiagent import (  # noqa: F401
     MetricSeries as MetricSeries,
 )
 from neevai.generated.aiagent import (  # noqa: F401
+    PauseSandboxRequest as PauseSandboxParams,
+)
+from neevai.generated.aiagent import (  # noqa: F401
+    RestoreSandboxRequest as RestoreSandboxRequest,
+)
+from neevai.generated.aiagent import (  # noqa: F401
     Sandbox as SandboxData,
+)
+from neevai.generated.aiagent import (  # noqa: F401
+    SandboxEgressConfig as SandboxEgressConfig,
 )
 from neevai.generated.aiagent import (  # noqa: F401
     SandboxListResponse as SandboxListResponse,
@@ -48,10 +72,22 @@ from neevai.generated.aiagent import (  # noqa: F401
     SandboxPhase as SandboxPhaseEnum,
 )
 from neevai.generated.aiagent import (  # noqa: F401
+    SandboxResources as SandboxResources,
+)
+from neevai.generated.aiagent import (  # noqa: F401
     SandboxTemplate as SandboxTemplate,
 )
 from neevai.generated.aiagent import (  # noqa: F401
     SandboxTemplateListResponse as SandboxTemplateListResponse,
+)
+from neevai.generated.aiagent import (  # noqa: F401
+    Snapshot as Snapshot,
+)
+from neevai.generated.aiagent import (  # noqa: F401
+    SnapshotListResponse as SnapshotListResponse,
+)
+from neevai.generated.aiagent import (  # noqa: F401
+    SnapshotStatus as SnapshotStatus,
 )
 
 # String phase literals for backward-compatible comparisons in consumer code.
