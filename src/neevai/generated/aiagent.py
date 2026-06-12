@@ -63,6 +63,34 @@ class SandboxListResponse(BaseModel):
     limit: int
 
 
+class SandboxTemplateCategory(Enum):
+    standard = "standard"
+    browser = "browser"
+
+
+class SandboxTemplateStatus(Enum):
+    active = "active"
+    deprecated = "deprecated"
+    disabled = "disabled"
+
+
+class SandboxTemplate(BaseModel):
+    id: constr(pattern=r"^sb-[a-zA-Z0-9-]+$")
+    name: str
+    description: str
+    category: SandboxTemplateCategory
+    status: SandboxTemplateStatus
+    created_at: AwareDatetime
+    updated_at: AwareDatetime
+
+
+class SandboxTemplateListResponse(BaseModel):
+    items: list[SandboxTemplate]
+    total: int
+    page: int
+    limit: int
+
+
 class MetricSeries(BaseModel):
     metric: str
     unit: str | None = None

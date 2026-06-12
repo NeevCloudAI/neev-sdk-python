@@ -43,12 +43,21 @@ with NeevAI(api_key="...", org_id="...", project_id="...", region="...") as clie
     client.sandboxes.delete(sandbox.id)
 ```
 
-Runnable examples live under `[examples/](examples/)`. They require
-`NEEVCLOUD_SANDBOX_TEMPLATE_ID` and `NEEVCLOUD_REGION` (or pass `region` on
-the client or per `create()` call).
-See `[examples/sandbox_lifecycle.py](examples/sandbox_lifecycle.py)` for a
-complete walk‑through covering create, wait, metrics, pause, and delete.
-See [`examples/sandbox_lifecycle_controller.py`](examples/sandbox_lifecycle_controller.py) to run individual sandbox operations (`create`, `list`, `get`, `pause`, `resume`, `delete`, `metrics`) from the command line.
+Runnable examples live under [`examples/`](examples/). See [`examples/README.md`](examples/README.md)
+for the full catalogue. Quick start:
+
+| Example | What it shows |
+| ------- | ------------- |
+| [`sandbox_lifecycle.py`](examples/sandbox_lifecycle.py) | Template listing → create → wait → metrics → pause → delete |
+| [`streaming_exec.py`](examples/streaming_exec.py) | Live `sandbox.exec_stream()` output |
+| [`parallel_fanout.py`](examples/parallel_fanout.py) | Concurrent sandboxes + map/reduce |
+| [`sandbox_metrics.py`](examples/sandbox_metrics.py) | Metrics under CPU load |
+| [`agents/ai_interpreter.py`](examples/agents/ai_interpreter.py) | Hand-rolled agent with streaming tool output |
+| [`agents/langchain_agent.py`](examples/agents/langchain_agent.py) | LangGraph ReAct agent (`uv sync --extra agents`) |
+| [`sandbox_lifecycle_controller.py`](examples/sandbox_lifecycle_controller.py) | CLI for individual sandbox CRUD ops |
+
+Set `NEEVCLOUD_API_KEY`, `NEEVCLOUD_ORG_ID`, `NEEVCLOUD_PROJECT_ID`, and `NEEVCLOUD_REGION`.
+Optional: `NEEVCLOUD_SANDBOX_TEMPLATE_ID` (defaults to `sb-ubuntu-26-04-minimal`).
 
 ## Typing and validation
 
@@ -81,8 +90,9 @@ All tests are under the `[tests/](tests/)` directory:
 | `test_errors.py`    | HTTP-status → error-type mapping      |
 | `test_transport.py` | Retry/backoff logic, mock transport   |
 | `test_sandbox.py`   | Sandbox handle properties & lifecycle |
-| `test_sandboxd.py`  | Data‑plane transport & connection     |
+| `test_sandboxd.py`  | Data‑plane transport, exec & exec_stream |
 | `test_sandboxes.py` | Sandboxes resource CRUD operations    |
+| `test_templates.py` | Templates resource list/get           |
 
 ## API overview
 
@@ -117,6 +127,13 @@ Constructor accepts `api_key`, `org_id`, `project_id`, `region`, `base_url`,
 | `delete(id)`        | Permanently delete a sandbox       |
 | `metrics(id, ...)`  | Query live health metrics          |
 
+### Templates resource
+
+| Method              | Description                        |
+| ------------------- | ---------------------------------- |
+| `list(page, limit)` | List platform sandbox templates    |
+| `get(template_id)`  | Get a single template by id        |
+
 ### Sandbox handle
 
 Returned by `create()`, `get()`, etc.
@@ -134,6 +151,7 @@ Returned by `create()`, `get()`, etc.
 | `.resume()`                | Resume this sandbox              |
 | `.delete()`                | Delete this sandbox              |
 | `.exec(command, ...)`      | Run a command inside the sandbox |
+| `.exec_stream(command, ...)` | Stream stdout/stderr chunks as they arrive |
 | `.files.write(path, data)` | Write a file                     |
 | `.files.read(path)`        | Read a file (raw bytes)          |
 | `.files.read_text(path)`   | Read a file (UTF‑8 string)       |
@@ -149,6 +167,16 @@ result = sandbox.exec(["ls", "-la", "/tmp"])
 print(result.stdout)       # combined stdout
 print(result.stderr)       # combined stderr
 print(result.exit_code)    # integer exit code
+```
+
+### Streaming exec
+
+```python
+for event in sandbox.exec_stream(["sh", "-c", "for i in 1 2 3; do echo $i; sleep 1; done"]):
+    if event["type"] == "stdout":
+        print(event["data"], end="")
+    elif event["type"] == "exit":
+        print(f"exit {event['exit_code']}")
 ```
 
 ### Raw client (untyped escape hatch)
