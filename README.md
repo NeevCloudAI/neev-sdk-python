@@ -1,32 +1,127 @@
 # NeevAI Python SDK
 
-Official Python client for the [NeevCloud](https://neevcloud.com) AI platform.
+Official Python client for the [NeevCloud](https://neevcloud.com) AI platform. Use it to
+provision sandboxes, run commands, manage files, and integrate with agent workflows.
+
+## Prerequisites
+
+- **Python ≥ 3.10**
+- **Supported OS:** Windows, macOS, Linux
+- **[uv](https://docs.astral.sh/uv/)** (recommended for running examples from this repo; optional if you use pip and a virtual environment)
+
+See [`docs/getting-started.md`](docs/getting-started.md) for per-OS `uv` install commands and a full walkthrough.
 
 ## Installation
+
+### Option A — PyPI (coming soon; try first)
+
+When the package is published, this is the primary install path:
 
 ```bash
 pip install neevai
 ```
 
-Requires **Python ≥ 3.10**.
+When this succeeds, you are done — skip Option B.
 
-## Repository layout
+If `pip install neevai` fails with **package not found**, use Option B today.
 
-See [docs/architecture.md](docs/architecture.md) for the canonical SDK slot
-layout and how this repo maps Python paths to each slot.
+### Option B — Install from GitHub (recommended today)
 
-## Quick start
-
-Set your API key and default scope as environment variables:
+Clone the repository:
 
 ```bash
-export NEEVCLOUD_API_KEY=your_api_key_here
-export NEEVCLOUD_ORG_ID=your_org_id
-export NEEVCLOUD_PROJECT_ID=your_project_id
-export NEEVCLOUD_REGION=your_region
+git clone https://github.com/NeevCloudAI/neev-sdk-python.git
+cd neev-sdk-python
 ```
 
-Or pass them directly when creating the client:
+**Recommended (uv):**
+
+```bash
+uv sync
+```
+
+`uv sync` creates a local environment and installs the package in editable mode. Run examples from the repo root with `uv run python ...`.
+
+**Fallback (pip + virtual environment):**
+
+| Platform | Commands |
+| -------- | -------- |
+| **Linux / macOS** | `python3 -m venv .venv && source .venv/bin/activate && pip install -e .` |
+| **Windows PowerShell** | `python -m venv .venv; .\.venv\Scripts\Activate.ps1; pip install -e .` |
+| **Windows CMD** | `python -m venv .venv && .venv\Scripts\activate.bat && pip install -e .` |
+
+## Configure credentials
+
+Set these environment variables before running scripts, or pass equivalent kwargs to `NeevAI(...)` / `AsyncNeevAI(...)`.
+
+| Variable | Purpose |
+| -------- | ------- |
+| `NEEVCLOUD_API_KEY` | Bearer token (**required**) |
+| `NEEVCLOUD_ORG_ID` | Default organization ID |
+| `NEEVCLOUD_PROJECT_ID` | Default project ID |
+| `NEEVCLOUD_REGION` | Default deployment region for sandbox create |
+| `NEEVCLOUD_BASE_URL` | Control-plane base URL (default: `https://agent.ai.neevcloud.com`) |
+| `NEEVCLOUD_SANDBOX_TEMPLATE_ID` | Optional template id (defaults to `sb-ubuntu-26-04-minimal` in examples) |
+
+**Linux / macOS (bash/zsh)** — current session:
+
+```bash
+export NEEVCLOUD_API_KEY="your-api-key"
+export NEEVCLOUD_ORG_ID="org-abc123"
+export NEEVCLOUD_PROJECT_ID="proj-xyz789"
+export NEEVCLOUD_REGION="as-south-1"
+```
+
+**Windows PowerShell** — current session:
+
+```powershell
+$env:NEEVCLOUD_API_KEY = "your-api-key"
+$env:NEEVCLOUD_ORG_ID = "org-abc123"
+$env:NEEVCLOUD_PROJECT_ID = "proj-xyz789"
+$env:NEEVCLOUD_REGION = "as-south-1"
+```
+
+**Windows CMD** — current session:
+
+```cmd
+set NEEVCLOUD_API_KEY=your-api-key
+set NEEVCLOUD_ORG_ID=org-abc123
+set NEEVCLOUD_PROJECT_ID=proj-xyz789
+set NEEVCLOUD_REGION=as-south-1
+```
+
+You can also pass credentials directly when creating the client:
+
+```python
+from neevai import NeevAI
+
+with NeevAI(api_key="...", org_id="...", project_id="...", region="...") as client:
+    ...
+```
+
+## Quick start (from clone)
+
+If you just cloned the repo, follow these steps to reach your first successful run:
+
+1. Clone and enter the repo (see [Option B](#option-b-install-from-github-recommended-today) above if you have not already).
+2. Install dependencies: `uv sync` (or use the pip editable fallback for your platform).
+3. Set the four required environment variables (`NEEVCLOUD_API_KEY`, `NEEVCLOUD_ORG_ID`, `NEEVCLOUD_PROJECT_ID`, `NEEVCLOUD_REGION`) using the [platform-specific blocks](#configure-credentials) above.
+4. Verify the install:
+
+   ```bash
+   uv run python -c "from neevai import NeevAI; print('ok')"
+   ```
+
+5. Run your first example:
+
+   ```bash
+   uv run python examples/templates_list.py
+   ```
+
+6. **Expected outcome:** the script lists available sandbox templates, fetches one by id, creates a sandbox from it, waits until it is ready, then deletes it.
+7. **Next:** read [`docs/getting-started.md`](docs/getting-started.md) for full sync/async quick-start scripts and the documentation map.
+
+## Minimal code example
 
 ```python
 from neevai import NeevAI
@@ -43,164 +138,44 @@ with NeevAI(api_key="...", org_id="...", project_id="...", region="...") as clie
     client.sandboxes.delete(sandbox.id)
 ```
 
-Runnable examples live under [`examples/`](examples/). See [`examples/README.md`](examples/README.md)
-for the full catalogue. Quick start:
+## Examples
+
+Runnable examples live under [`examples/`](examples/). From the repo root, run any example with:
+
+```bash
+uv run python examples/<script>.py
+```
+
+See [`examples/README.md`](examples/README.md) for the full catalogue and learning path.
 
 | Example | What it shows |
 | ------- | ------------- |
-| [`sandbox_lifecycle.py`](examples/sandbox_lifecycle.py) | Template listing → create → wait → metrics → pause → delete |
+| [`templates_list.py`](examples/templates_list.py) | List templates → get by id → create sandbox |
+| [`sandbox_lifecycle.py`](examples/sandbox_lifecycle.py) | Create → wait → metrics → pause → delete |
+| [`async_sandbox.py`](examples/async_sandbox.py) | End-to-end `AsyncNeevAI` workflow |
+| [`files_api.py`](examples/files_api.py) | `files.write` / `read_text` / `list` |
 | [`streaming_exec.py`](examples/streaming_exec.py) | Live `sandbox.exec_stream()` output |
-| [`parallel_fanout.py`](examples/parallel_fanout.py) | Concurrent sandboxes + map/reduce |
+| [`parallel_fanout.py`](examples/parallel_fanout.py) | 3 sandboxes, parallel repo analysis, aggregated file counts |
 | [`sandbox_metrics.py`](examples/sandbox_metrics.py) | Metrics under CPU load |
-| [`agents/ai_interpreter.py`](examples/agents/ai_interpreter.py) | Hand-rolled agent with streaming tool output |
-| [`agents/langchain_agent.py`](examples/agents/langchain_agent.py) | LangGraph ReAct agent (`uv sync --extra agents`) |
+| [`raw_request.py`](examples/raw_request.py) | Untyped `client.raw.request()` |
+| [`agent_patterns/minimal_agent.py`](examples/agent_patterns/minimal_agent.py) | Hand-rolled agent with streaming tool output |
+| [`agent_patterns/langchain_agent.py`](examples/agent_patterns/langchain_agent.py) | LangGraph ReAct agent (`uv sync --extra agents`) |
+| [`workflow_examples/repo_analyzer.py`](examples/workflow_examples/repo_analyzer.py) | Clone & audit untrusted repos in a sandbox |
 | [`sandbox_lifecycle_controller.py`](examples/sandbox_lifecycle_controller.py) | CLI for individual sandbox CRUD ops |
 
-Set `NEEVCLOUD_API_KEY`, `NEEVCLOUD_ORG_ID`, `NEEVCLOUD_PROJECT_ID`, and `NEEVCLOUD_REGION`.
-Optional: `NEEVCLOUD_SANDBOX_TEMPLATE_ID` (defaults to `sb-ubuntu-26-04-minimal`).
+## Documentation
 
-## Typing and validation
+Start with [`docs/getting-started.md`](docs/getting-started.md) for installation, credentials, and your first sync/async script.
 
-The package ships a `[py.typed](src/neevai/py.typed)` marker (PEP 561). Control-plane
-JSON is validated at the resource boundary with Pydantic v2 models generated from
-`specs/aiagent.yaml`. `client.sandboxes.create({...})` still accepts plain dict
-literals; pass a `CreateSandboxParams` model instance if you prefer typed input.
+| Doc | Purpose |
+| --- | ------- |
+| [`getting-started.md`](docs/getting-started.md) | Install, env vars, quick starts, doc map |
+| [`api-reference.md`](docs/api-reference.md) | Control-plane vs data-plane API lists + copy-paste snippets |
+| [`api-inventory.md`](docs/api-inventory.md) | Full method signatures, types, errors, symbol index |
+| [`example-coverage.md`](docs/example-coverage.md) | Example catalog and API → examples lookup |
+| [`architecture.md`](docs/architecture.md) | SDK layout and module responsibilities |
 
-`sandbox.data` and `sandbox.to_json()` return JSON-compatible dicts
-(`model_dump(mode="json")`). `client.raw.request()` remains an intentional untyped
-escape hatch for spec-less endpoints.
-
-## Testing
-
-The test suite uses `pytest` and `httpx` mock transports — no network access
-is required.
-
-```bash
-uv sync --extra dev
-uv run pytest -v
-uv run pyright
-uv run mypy
-```
-
-All tests are under the `[tests/](tests/)` directory:
-
-| File                | What it covers                        |
-| ------------------- | ------------------------------------- |
-| `test_client.py`    | Client init (sync & async)            |
-| `test_errors.py`    | HTTP-status → error-type mapping      |
-| `test_transport.py` | Retry/backoff logic, mock transport   |
-| `test_sandbox.py`   | Sandbox handle properties & lifecycle |
-| `test_sandboxd.py`  | Data‑plane transport, exec & exec_stream |
-| `test_sandboxes.py` | Sandboxes resource CRUD operations    |
-| `test_templates.py` | Templates resource list/get           |
-
-## API overview
-
-### Client
-
-```python
-from neevai import NeevAI, AsyncNeevAI
-
-# Sync
-with NeevAI(api_key="...") as client:
-    client.sandboxes.create(...)
-
-# Async
-async with AsyncNeevAI(api_key="...") as client:
-    await client.sandboxes.create(...)
-```
-
-Constructor accepts `api_key`, `org_id`, `project_id`, `region`, `base_url`,
-`timeout_ms` (default 60 s), and `max_retries` (default 2). Defaults for
-`org_id`, `project_id`, and `region` can also be set via `NEEVCLOUD_ORG_ID`,
-`NEEVCLOUD_PROJECT_ID`, and `NEEVCLOUD_REGION`.
-
-### Sandboxes resource
-
-| Method              | Description                        |
-| ------------------- | ---------------------------------- |
-| `create(params)`    | Create a new sandbox               |
-| `list(page, limit)` | List sandboxes (paginated)         |
-| `get(id)`           | Get a single sandbox               |
-| `pause(id)`         | Scale to 0 replicas (Paused phase) |
-| `resume(id)`        | Scale back to 1 replica            |
-| `delete(id)`        | Permanently delete a sandbox       |
-| `metrics(id, ...)`  | Query live health metrics          |
-
-### Templates resource
-
-| Method              | Description                        |
-| ------------------- | ---------------------------------- |
-| `list(page, limit)` | List platform sandbox templates    |
-| `get(template_id)`  | Get a single template by id        |
-
-### Sandbox handle
-
-Returned by `create()`, `get()`, etc.
-
-| Property / Method          | Description                      |
-| -------------------------- | -------------------------------- |
-| `.id`                      | Sandbox UUID                     |
-| `.name`                    | Human-readable name              |
-| `.phase`                   | Current lifecycle phase          |
-| `.replicas`                | Desired replica count            |
-| `.connect_url`             | Daemon address (when Ready)      |
-| `.refresh()`               | Re‑fetch state from server       |
-| `.wait_until_ready(...)`   | Poll until phase is Ready        |
-| `.pause()`                 | Pause this sandbox               |
-| `.resume()`                | Resume this sandbox              |
-| `.delete()`                | Delete this sandbox              |
-| `.exec(command, ...)`      | Run a command inside the sandbox |
-| `.exec_stream(command, ...)` | Stream stdout/stderr chunks as they arrive |
-| `.files.write(path, data)` | Write a file                     |
-| `.files.read(path)`        | Read a file (raw bytes)          |
-| `.files.read_text(path)`   | Read a file (UTF‑8 string)       |
-| `.files.list(path, ...)`   | List directory entries           |
-
-### Exec
-
-```python
-result = sandbox.exec("ls -la /tmp")
-# or with argv (bypasses shell):
-result = sandbox.exec(["ls", "-la", "/tmp"])
-
-print(result.stdout)       # combined stdout
-print(result.stderr)       # combined stderr
-print(result.exit_code)    # integer exit code
-```
-
-### Streaming exec
-
-```python
-for event in sandbox.exec_stream(["sh", "-c", "for i in 1 2 3; do echo $i; sleep 1; done"]):
-    if event["type"] == "stdout":
-        print(event["data"], end="")
-    elif event["type"] == "exit":
-        print(f"exit {event['exit_code']}")
-```
-
-### Raw client (untyped escape hatch)
-
-```python
-resp = client.raw.request("GET", "/api/v1beta1/orgs/.../projects/.../sandboxes")
-```
-
-## Errors
-
-All errors inherit from `NeevAIError`. HTTP errors are mapped to specific
-subclasses:
-
-| Status | Exception                 |
-| ------ | ------------------------- |
-| 400    | `BadRequestError`         |
-| 401    | `AuthenticationError`     |
-| 403    | `PermissionDeniedError`   |
-| 404    | `NotFoundError`           |
-| 409    | `ConflictError`           |
-| 412    | `PreconditionFailedError` |
-| 429    | `RateLimitError`          |
-| 504    | `DeadlineExceededError`   |
-| 5xx    | `InternalServerError`     |
+Contributors: update docs when the public API changes. See [`docs/development.md`](docs/development.md) for the contributor workflow, typing notes, and test commands.
 
 ## License
 

@@ -9,7 +9,7 @@ Demonstrates:
 
 Run::
 
-    python examples/use_cases/browser_agent.py \\
+    uv run python examples/workflow_examples/browser_agent.py \\
         --query "AI"
 """
 
@@ -21,7 +21,7 @@ import sys
 import time
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "agents"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "agent_patterns"))
 
 from utils.agent_loop import (
     RUN_SHELL_TOOL,
@@ -31,6 +31,7 @@ from utils.agent_loop import (
 )
 
 from neevai import NeevAI
+from neevai.handles import Sandbox
 
 SYSTEM_PROMPT = (
     "You are a browser-automation assistant. You have a run_shell tool that executes "
@@ -46,7 +47,7 @@ SYSTEM_PROMPT = (
     "Use <<'PY' heredoc syntax to write the script."
 )
 
-MAX_STEPS = int(os.environ.get("NEEVAI_USE_CASE_MAX_STEPS", "70"))
+MAX_STEPS = int(os.environ.get("NEEVAI_WORKFLOW_MAX_STEPS", "70"))
 
 HERE = Path(__file__).resolve().parent
 OUTPUT_DIR = HERE / "output"
@@ -54,7 +55,7 @@ OUTPUT_DIR = HERE / "output"
 
 def create_browser_sandbox(
     client: NeevAI, region: str | None = None
-) -> NeevAI.handles.sandbox.Sandbox:
+) -> Sandbox:
     template_id = os.environ.get("NEEVCLOUD_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-minimal")
     resolved_region = region or os.environ.get("NEEVCLOUD_REGION", "as-south-1")
     suffix = hex(int(time.time() * 1e6))[-6:]
@@ -75,7 +76,7 @@ def create_browser_sandbox(
     return sandbox
 
 
-def bootstrap(sandbox: NeevAI.handles.sandbox.Sandbox) -> None:
+def bootstrap(sandbox: Sandbox) -> None:
     print("[bootstrap] installing playwright + chromium…", file=sys.stderr)
     result = sandbox.exec(
         ["sh", "-c", "pip install playwright --quiet 2>&1 && playwright install chromium 2>&1"],

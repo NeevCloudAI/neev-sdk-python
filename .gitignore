@@ -206,9 +206,9 @@ tempCodeRunnerFile.py
 # Cursor workspace settings
 .cursor/
 
-# Use-case runtime artifacts
-examples/use_cases/output/*
-!examples/use_cases/output/.gitkeep
+# Workflow example runtime artifacts
+examples/workflow_examples/output/*
+!examples/workflow_examples/output/.gitkeep
 
 # Ruff stuff:
 .ruff_cache/

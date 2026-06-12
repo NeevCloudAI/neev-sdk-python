@@ -36,6 +36,10 @@ uv run python scripts/gen_types.py
 
 Generated files land in `src/neevai/generated/`. **Do not edit them by hand.**
 
+After regenerating types, manually verify type field tables in
+`docs/api-inventory.md` match `src/neevai/generated/`. Type tables live in the
+inventory only — not in `api-reference.md`.
+
 ### Interim: vendored `specs/`
 
 Today, OpenAPI specs are vendored locally under `specs/`. This is an

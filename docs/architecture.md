@@ -7,7 +7,7 @@ control-plane resource (`sandboxes`) backed by a hybrid
 sandboxes.
 
 This document maps the **canonical cross-language SDK layout** to the Python
-implementation. See [CONTRIBUTING.md](../CONTRIBUTING.md) for the slot-based
+implementation. See [CONTRIBUTING.md](../.github/CONTRIBUTING.md) for the slot-based
 checklist when adding new resources.
 
 ---
@@ -21,10 +21,10 @@ neev-sdk-<lang>/
 ├── <root client>      # sync + async root clients  (NeevAI / AsyncNeevAI ⇢ neevsdk.New / async equiv)
 ├── resources/         # hand-written control-plane resource classes (e.g. sandboxes)
 ├── <handle>           # resource handle objects — "handles over raw IDs"
-├── <dataplane>        # data-plane client (sandboxd): connection + files + exec
+├── <runtime>          # data-plane client (sandboxd): connection + files + exec
 ├── transport/
-│   ├── control        #   control-plane transport — WITH retries
-│   ├── dataplane      #   data-plane transport — NO retries (non-idempotent)
+│   ├── lifecycle      #   control-plane transport — WITH retries
+│   ├── runtime        #   data-plane transport — NO retries (non-idempotent)
 │   └── retry          #   backoff/jitter policy
 ├── generated/         # AUTO-GENERATED types from monorepo public-specs/ (never hand-edit; no vendored specs/ dir)
 ├── types              # public type aliases / re-exports (Scope, …)
@@ -41,9 +41,9 @@ neev-sdk-<lang>/
 | `<root client>` | Sync + async entry | `src/neevai/client.py` | `NeevAI`, `AsyncNeevAI` |
 | `resources/` | Control-plane resource classes | `src/neevai/resources/sandboxes.py` | `Sandboxes`, `AsyncSandboxes` |
 | `<handle>` | Resource handle objects | `src/neevai/handles/sandbox.py` | `Sandbox`, `AsyncSandbox` |
-| `<dataplane>` | Data-plane connection + files + exec | `src/neevai/dataplane/sandboxd.py` | `SandboxConnection`, `SandboxFiles`, async variants |
-| `transport/control` | Control-plane HTTP **with retries** | `src/neevai/transport/control.py` | `ControlTransport`, `RawClient` |
-| `transport/dataplane` | Data-plane HTTP **no retries** | `src/neevai/transport/dataplane.py` | `DataplaneTransport` |
+| `<runtime>` | Data-plane connection + files + exec | `src/neevai/runtime/sandboxd.py` | `SandboxConnection`, `SandboxFiles`, async variants |
+| `transport/lifecycle` | Control-plane HTTP **with retries** | `src/neevai/transport/lifecycle.py` | `ControlTransport`, `RawClient` |
+| `transport/runtime` | Data-plane HTTP **no retries** | `src/neevai/transport/runtime.py` | `DataplaneTransport` |
 | `transport/retry` | Backoff/jitter policy | `src/neevai/transport/retry.py` | retry helpers |
 | `generated/` | Auto-generated OpenAPI types | `src/neevai/generated/aiagent.py` | Pydantic `BaseModel` schemas |
 | `types` | Public aliases / shared types | `src/neevai/types.py` | `Scope`, `SandboxData`, … |
@@ -67,14 +67,14 @@ flowchart TB
     NeevAI["NeevAI / AsyncNeevAI client<br/>src/neevai/client.py"]
     Sandboxes["Sandboxes resource<br/>src/neevai/resources/sandboxes.py"]
     SandboxHandle["Sandbox handle<br/>src/neevai/handles/sandbox.py"]
-    Sandboxd["SandboxConnection + SandboxFiles<br/>src/neevai/dataplane/sandboxd.py"]
+    Sandboxd["SandboxConnection + SandboxFiles<br/>src/neevai/runtime/sandboxd.py"]
     Types["Public type aliases<br/>src/neevai/types.py"]
     Errors["Error hierarchy<br/>src/neevai/errors.py"]
   end
 
   subgraph transport [HTTP transport]
-    ControlTransport["ControlTransport (retries)<br/>src/neevai/transport/control.py"]
-    DataplaneTransport["DataPlaneTransport (no retry)<br/>src/neevai/transport/dataplane.py"]
+    ControlTransport["ControlTransport (retries)<br/>src/neevai/transport/lifecycle.py"]
+    DataplaneTransport["DataplaneTransport (no retry)<br/>src/neevai/transport/runtime.py"]
     RawClient["RawClient / AsyncRawClient"]
   end
 
@@ -95,7 +95,7 @@ flowchart TB
   SandboxHandle --> Sandboxd
   Sandboxes --> ControlTransport
   NeevAI --> RawClient
-  NeevAI --> Sandboxd
+  Sandboxd --> DataplaneTransport
   ControlTransport --> ControlPlane
   DataplaneTransport --> DataPlane
 
@@ -103,6 +103,72 @@ flowchart TB
   GenScript -->|"datamodel-code-generator"| GenTypes
   GenTypes --> Types
 ```
+
+---
+
+## Public API surface
+
+The diagram below is the **user-facing call flow** organized along two axes
+that mirror the [layer diagram](#layer-diagram):
+
+1. **Conceptual plane** — **control plane** (agent API) vs **data plane**
+   (sandbox daemon).
+2. **Source modules** — **lifecycle transport** (`transport/lifecycle.py`) vs
+   **runtime** (`runtime/sandboxd.py`, `transport/runtime.py`).
+
+The `Sandbox` handle bridges both planes: lifecycle methods stay on the control
+plane; exec and file I/O cross into the data plane.
+
+```mermaid
+---
+config:
+  layout: elk
+---
+flowchart TB
+ subgraph controlPlane["Control plane — lifecycle transport"]
+        NeevAI["NeevAI / AsyncNeevAI<br>client.py"]
+        Sandboxes["sandboxes resource<br>resources/sandboxes.py"]
+        Templates["templates resource"]
+        Raw["raw.request"]
+        Wait["wait_until_ready / refresh"]
+        LifecycleOps["pause / resume / delete / metrics"]
+        LifecycleTransport["ControlTransport (retries)<br>transport/lifecycle.py"]
+  end
+ subgraph dataPlane["Data plane — runtime"]
+        Exec["exec / exec_stream"]
+        Files["files.write / read / read_text / list"]
+        Sandboxd["SandboxConnection + SandboxFiles<br>runtime/sandboxd.py"]
+        RuntimeTransport["DataplaneTransport (no retry)<br>transport/runtime.py"]
+  end
+    NeevAI --> Sandboxes & Templates & Raw & LifecycleTransport
+    Sandboxes --> SB["Sandbox / AsyncSandbox<br>handles/sandbox.py"] & LifecycleTransport
+    SB --> Wait & LifecycleOps & Exec & Files
+    Wait --> LifecycleTransport
+    LifecycleOps --> LifecycleTransport
+    Exec --> Sandboxd
+    Files --> Sandboxd
+    Sandboxd --> RuntimeTransport
+```
+
+**Control plane (lifecycle transport)** — `NeevAI` / `AsyncNeevAI` expose
+resource objects (`sandboxes`, `templates`) and a low-level `raw.request`
+escape hatch. Handle lifecycle methods (`wait_until_ready`, `refresh`,
+`pause`, `resume`, `delete`, `metrics`) also live here. All of these calls
+route through `ControlTransport` in `transport/lifecycle.py` (retries enabled)
+to the NeevAI agent API.
+
+**Sandbox handle** — `Sandboxes.create`, `get`, and `list` return a `Sandbox`
+(or async variant) rather than a bare ID. The handle is the pivot between
+planes: lifecycle methods delegate to the control plane; `exec`, `exec_stream`,
+and `files.*` delegate to the data plane.
+
+**Data plane (runtime)** — Once a sandbox is ready, `exec`, `exec_stream`, and
+`files.*` are served by `SandboxConnection` / `SandboxFiles` in
+`runtime/sandboxd.py`, which use `DataplaneTransport` in `transport/runtime.py`
+(no retries) against the sandbox daemon.
+
+For method signatures, parameters, and return types, see the
+[API Reference](./api-reference.md).
 
 ---
 
@@ -121,15 +187,17 @@ neev-sdk-python/
 |   |   +-- sandboxes.py
 |   +-- handles/              # Canonical <handle> slot
 |   |   +-- sandbox.py
-|   +-- dataplane/            # Canonical <dataplane> slot
+|   +-- runtime/              # Canonical <runtime> slot (data-plane client)
 |   |   +-- sandboxd.py
+|   |   +-- schemas.py
 |   +-- transport/            # HTTP transport + retry
-|   |   +-- control.py
-|   |   +-- dataplane.py
+|   |   +-- lifecycle.py
+|   |   +-- runtime.py
 |   |   +-- retry.py
 |   +-- client.py             # NeevAI / AsyncNeevAI root client
 |   +-- types.py              # Public type aliases
 |   +-- errors.py
+|   +-- _parse.py             # Internal response coercion helpers
 |   +-- __init__.py           # Package exports
 +-- tests/                    # pytest, mock transport
 +-- examples/
@@ -147,9 +215,9 @@ splitting into separate `sync/` and `async/` trees:
 | `client.py` | `NeevAI` | `AsyncNeevAI` |
 | `resources/sandboxes.py` | `Sandboxes` | `AsyncSandboxes` |
 | `handles/sandbox.py` | `Sandbox` | `AsyncSandbox` |
-| `dataplane/sandboxd.py` | `SandboxConnection`, `SandboxFiles` | `AsyncSandboxConnection`, `AsyncSandboxFiles` |
-| `transport/control.py` | `ControlTransport`, `RawClient` | `AsyncControlTransport`, `AsyncRawClient` |
-| `transport/dataplane.py` | `DataplaneTransport` | `AsyncDataplaneTransport` |
+| `runtime/sandboxd.py` | `SandboxConnection`, `SandboxFiles` | `AsyncSandboxConnection`, `AsyncSandboxFiles` |
+| `transport/lifecycle.py` | `ControlTransport`, `RawClient` | `AsyncControlTransport`, `AsyncRawClient` |
+| `transport/runtime.py` | `DataplaneTransport` | `AsyncDataplaneTransport` |
 
 This is a Python idiom; other language SDKs may use separate trees.
 
@@ -160,9 +228,9 @@ This is a Python idiom; other language SDKs may use separate trees.
 1. **Spec first (control plane)** — update `specs/aiagent.yaml`, then run
    `python scripts/gen_types.py`, then write wrappers.
 2. **Thin generated layer** — types only; all UX lives in `resources/`,
-   handles, and `dataplane/`.
+   handles, and `runtime/`.
 3. **Shared transport pattern** — retrying `ControlTransport` for control
-   plane, non-retrying `DataPlaneTransport` for the data plane.
+   plane, non-retrying `DataplaneTransport` for the data plane.
 4. **Handles over raw IDs** — lifecycle returns `Sandbox` objects so callers
    can chain `create -> wait_until_ready -> files.write -> exec -> delete`.
 5. **Scope model** — `org_id`/`project_id` on client or per-call.

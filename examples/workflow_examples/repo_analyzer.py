@@ -9,7 +9,8 @@ Demonstrates:
 
 Run::
 
-    python examples/use_cases/repo_analyzer.py  --repo https://github.com/tncrayt/react-calculator
+    uv run python examples/workflow_examples/repo_analyzer.py \\
+        --repo https://github.com/tncrayt/react-calculator
 
 """
 
@@ -27,11 +28,13 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "agents"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "agent_patterns"))
 
 from utils.agent_loop import RUN_SHELL_TOOL, StreamingAgentLoop, make_run_shell_handler
 
 from neevai import NeevAI
+from neevai.handles import Sandbox
+from neevai.types import ExecResult
 
 SYSTEM_PROMPT = (
     "You are a code-review assistant. You have a run_shell tool that executes "
@@ -44,7 +47,7 @@ SYSTEM_PROMPT = (
     "Be specific, reference actual file paths and line numbers where relevant."
 )
 
-MAX_STEPS = int(os.environ.get("NEEVAI_USE_CASE_MAX_STEPS", "35"))
+MAX_STEPS = int(os.environ.get("NEEVAI_WORKFLOW_MAX_STEPS", "35"))
 _GIT_STATIC_URL = os.environ.get("NEEV_GIT_STATIC_URL", "").strip()
 
 HERE = Path(__file__).resolve().parent
@@ -75,15 +78,15 @@ _PACKAGE_INSTALLERS: tuple[tuple[tuple[str, ...], str], ...] = (
 
 
 def _exec_sh(
-    sandbox: NeevAI.handles.sandbox.Sandbox, script: str, *, timeout_ms: int | None = None
-):
+    sandbox: Sandbox, script: str, *, timeout_ms: int | None = None
+) -> ExecResult:
     command: list[str] = ["sh", "-c", script]
     if timeout_ms is None:
         return sandbox.exec(command)
     return sandbox.exec(command, timeout_ms=timeout_ms)
 
 
-def _resolve_tool_path(sandbox: NeevAI.handles.sandbox.Sandbox, name: str) -> str | None:
+def _resolve_tool_path(sandbox: Sandbox, name: str) -> str | None:
     result = _exec_sh(
         sandbox,
         (
@@ -99,11 +102,11 @@ def _resolve_tool_path(sandbox: NeevAI.handles.sandbox.Sandbox, name: str) -> st
     return None
 
 
-def _has_tool(sandbox: NeevAI.handles.sandbox.Sandbox, name: str) -> bool:
+def _has_tool(sandbox: Sandbox, name: str) -> bool:
     return _resolve_tool_path(sandbox, name) is not None
 
 
-def _resolve_binary(sandbox: NeevAI.handles.sandbox.Sandbox, candidate: str) -> str | None:
+def _resolve_binary(sandbox: Sandbox, candidate: str) -> str | None:
     if candidate.startswith("/"):
         result = _exec_sh(sandbox, f'[ -x "{candidate}" ] && printf "%s" "{candidate}"')
         if result.exit_code == 0 and result.stdout.strip():
@@ -112,7 +115,7 @@ def _resolve_binary(sandbox: NeevAI.handles.sandbox.Sandbox, candidate: str) -> 
     return _resolve_tool_path(sandbox, candidate)
 
 
-def _install_package(sandbox: NeevAI.handles.sandbox.Sandbox, package: str) -> tuple[bool, str]:
+def _install_package(sandbox: Sandbox, package: str) -> tuple[bool, str]:
     errors: list[str] = []
     for candidates, template in _PACKAGE_INSTALLERS:
         for candidate in candidates:
@@ -129,7 +132,7 @@ def _install_package(sandbox: NeevAI.handles.sandbox.Sandbox, package: str) -> t
     return False, "\n".join(errors)
 
 
-def _install_git_static(sandbox: NeevAI.handles.sandbox.Sandbox) -> bool:
+def _install_git_static(sandbox: Sandbox) -> bool:
     if not _GIT_STATIC_URL:
         return False
 
@@ -175,7 +178,7 @@ def _bootstrap_failure_message(tool: str, details: str, *, required: bool) -> st
 
 def create_standard_sandbox(
     client: NeevAI, region: str | None = None
-) -> NeevAI.handles.sandbox.Sandbox:
+) -> Sandbox:
     template_id = os.environ.get("NEEVCLOUD_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-minimal")
     resolved_region = region or os.environ.get("NEEVCLOUD_REGION", "as-south-1")
     suffix = hex(int(time.time() * 1e6))[-6:]
@@ -195,7 +198,7 @@ def create_standard_sandbox(
     return sandbox
 
 
-def install_git(sandbox: NeevAI.handles.sandbox.Sandbox) -> bool:
+def install_git(sandbox: Sandbox) -> bool:
     """Install git when possible; return True if git is available afterward."""
     if _has_tool(sandbox, "git"):
         print("[bootstrap] git available", file=sys.stderr)
@@ -224,7 +227,7 @@ def install_git(sandbox: NeevAI.handles.sandbox.Sandbox) -> bool:
     return False
 
 
-def ensure_tools(sandbox: NeevAI.handles.sandbox.Sandbox) -> None:
+def ensure_tools(sandbox: Sandbox) -> None:
     """Ensure git (or clone fallback) and optionally ripgrep are available."""
     install_git(sandbox)
 
@@ -279,7 +282,7 @@ def _download_github_archive(owner: str, repo: str) -> tuple[bytes, str]:
     raise RuntimeError(f"Could not download GitHub archive for {owner}/{repo}: {last_error}")
 
 
-def _extract_archive_in_sandbox(sandbox: NeevAI.handles.sandbox.Sandbox) -> bool:
+def _extract_archive_in_sandbox(sandbox: Sandbox) -> bool:
     result = _exec_sh(
         sandbox,
         "mkdir -p /workspace/repo && tar -xzf /workspace/repo.tar.gz -C /workspace/repo --strip-components=1",
@@ -287,7 +290,7 @@ def _extract_archive_in_sandbox(sandbox: NeevAI.handles.sandbox.Sandbox) -> bool
     return result.exit_code == 0
 
 
-def _extract_archive_from_host(sandbox: NeevAI.handles.sandbox.Sandbox, archive: bytes) -> None:
+def _extract_archive_from_host(sandbox: Sandbox, archive: bytes) -> None:
     with tarfile.open(fileobj=io.BytesIO(archive), mode="r:gz") as archive_file:
         members = [member for member in archive_file.getmembers() if member.isfile()]
         if not members:
@@ -307,7 +310,7 @@ def _extract_archive_from_host(sandbox: NeevAI.handles.sandbox.Sandbox, archive:
 
 
 def _clone_via_archive_in_sandbox(
-    sandbox: NeevAI.handles.sandbox.Sandbox, owner: str, repo: str
+    sandbox: Sandbox, owner: str, repo: str
 ) -> bool:
     downloader = _resolve_tool_path(sandbox, "curl") or _resolve_tool_path(sandbox, "wget")
     if downloader is None or not _has_tool(sandbox, "tar"):
@@ -330,7 +333,7 @@ def _clone_via_archive_in_sandbox(
     return False
 
 
-def _clone_from_host(sandbox: NeevAI.handles.sandbox.Sandbox, owner: str, repo: str) -> None:
+def _clone_from_host(sandbox: Sandbox, owner: str, repo: str) -> None:
     print(f"[clone] downloading GitHub archive on host for {owner}/{repo}…", file=sys.stderr)
     archive, branch = _download_github_archive(owner, repo)
     sandbox.files.write("repo.tar.gz", archive)
@@ -346,7 +349,7 @@ def _clone_from_host(sandbox: NeevAI.handles.sandbox.Sandbox, owner: str, repo: 
     print(f"[clone] uploaded extracted archive from host ({branch})", file=sys.stderr)
 
 
-def clone_repo(sandbox: NeevAI.handles.sandbox.Sandbox, repo_url: str) -> None:
+def clone_repo(sandbox: Sandbox, repo_url: str) -> None:
     print(f"[clone] fetching {repo_url}…", file=sys.stderr)
 
     if _has_tool(sandbox, "git"):

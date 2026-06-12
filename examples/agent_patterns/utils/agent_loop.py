@@ -1,11 +1,11 @@
 """
-Tool-agnostic streaming agent loop used by the ``use_cases`` examples.
+Tool-agnostic streaming agent loop used by the ``workflow_examples``.
 
 ``StreamingAgentLoop`` drives a chat-completion model, dispatches tool calls
 to caller-provided handlers, and streams tool output live to the terminal.
 
 ``pull_artifact`` reads a file from the sandbox and saves it to a local
-output directory — the visual payoff for data_analysis and browser_agent.
+output directory — the visual payoff for browser_agent.
 """
 
 from __future__ import annotations
@@ -44,10 +44,10 @@ SYSTEM_DEFAULT = (
 )
 
 
-def make_run_shell_handler(sandbox: Sandbox) -> Callable[[dict], str]:
+def make_run_shell_handler(sandbox: Sandbox) -> Callable[[dict[str, Any]], str]:
     """Return a handler that executes a shell command and streams output live."""
 
-    def handle(tool_call: dict) -> str:
+    def handle(tool_call: dict[str, Any]) -> str:
         command = tool_call.get("command", "")
         print(f"  $ {command}", file=sys.stderr)
 
@@ -135,8 +135,8 @@ class StreamingAgentLoop:
         sandbox: Sandbox,
         *,
         system_prompt: str = SYSTEM_DEFAULT,
-        tools: list[dict] | None = None,
-        handlers: dict[str, Callable[[dict], str]] | None = None,
+        tools: list[dict[str, Any]] | None = None,
+        handlers: dict[str, Callable[[dict[str, Any]], str]] | None = None,
         max_steps: int = 12,
     ):
         self._sandbox = sandbox
