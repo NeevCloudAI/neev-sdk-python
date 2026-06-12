@@ -56,6 +56,7 @@ Examples are organized in three tiers — start at Tier 1 and work your way up:
 examples/
 ├── templates_list.py             ← Tier 1: Core Sandbox
 ├── sandbox_lifecycle.py
+├── snapshot_fork_restore.py
 ├── async_sandbox.py
 ├── files_api.py
 ├── streaming_exec.py
@@ -88,6 +89,7 @@ region). Each provisions a real sandbox and deletes it in a `finally` block.
 |------|--------------|-----|
 | [`templates_list.py`](./templates_list.py) | `templates.list`, `templates.get`, `sandboxes.create`, `wait_until_ready`, `delete` | `uv run python examples/templates_list.py` |
 | [`sandbox_lifecycle.py`](./sandbox_lifecycle.py) | `sandboxes.create`, `wait_until_ready`, `metrics`, `pause`, `delete` | `uv run python examples/sandbox_lifecycle.py` |
+| [`snapshot_fork_restore.py`](./snapshot_fork_restore.py) | `snapshot`, `get_snapshot`, `create` with `from_snapshot`, `fork`, `delete_snapshot` | `uv run python examples/snapshot_fork_restore.py` |
 | [`async_sandbox.py`](./async_sandbox.py) | `AsyncNeevAI`, `sandboxes.create`, `wait_until_ready`, `exec`, `delete` | `uv run python examples/async_sandbox.py` |
 | [`files_api.py`](./files_api.py) | `files.write`, `read_text`, `list(recursive=True)` | `uv run python examples/files_api.py` |
 | [`streaming_exec.py`](./streaming_exec.py) | `exec_stream` — stdout/stderr streamed line-by-line | `uv run python examples/streaming_exec.py` |
@@ -182,38 +184,44 @@ uv run python examples/templates_list.py
 uv run python examples/sandbox_lifecycle.py
 ```
 
-**3. Async workflow**
+**3. Snapshot, restore, and fork**
+
+```sh
+uv run python examples/snapshot_fork_restore.py
+```
+
+**4. Async workflow**
 
 ```sh
 uv run python examples/async_sandbox.py
 ```
 
-**4. Files API**
+**5. Files API**
 
 ```sh
 uv run python examples/files_api.py
 ```
 
-**5. Streaming exec**
+**6. Streaming exec**
 
 ```sh
 uv run python examples/streaming_exec.py
 ```
 
-**6. Parallel fan-out** — three sandboxes analyze public repos in parallel and
+**7. Parallel fan-out** — three sandboxes analyze public repos in parallel and
 print aggregated file counts
 
 ```sh
 uv run python examples/parallel_fanout.py
 ```
 
-**7. Metrics under load**
+**8. Metrics under load**
 
 ```sh
 uv run python examples/sandbox_metrics.py
 ```
 
-**8. Raw request** (optional)
+**9. Raw request** (optional)
 
 ```sh
 uv run python examples/raw_request.py
@@ -222,32 +230,32 @@ uv run python examples/raw_request.py
 The remaining examples need an AI model — set `NEEV_INFERENCE_API_KEY` or
 `NEEVCLOUD_INFERENCE_API_KEY` (see [Tier 2](#tier-2--agent-integration-with-an-ai-model)).
 
-**9. Minimal agent** (no extra deps)
+**10. Minimal agent** (no extra deps)
 
 ```sh
 uv run python examples/agent_patterns/minimal_agent.py
 ```
 
-**10. LangChain**
+**11. LangChain**
 
 ```sh
 uv sync --extra agents
 uv run --extra agents python examples/agent_patterns/langchain_agent.py
 ```
 
-**11. Repository analyzer**
+**12. Repository analyzer**
 
 ```sh
 uv run python examples/workflow_examples/repo_analyzer.py
 ```
 
-**12. Browser automation**
+**13. Browser automation**
 
 ```sh
 uv run python examples/workflow_examples/browser_agent.py
 ```
 
-**13. (Optional) Browser with query filter**
+**14. (Optional) Browser with query filter**
 
 ```sh
 uv run python examples/workflow_examples/browser_agent.py --query "AI"
@@ -269,7 +277,8 @@ uv run python examples/workflow_examples/browser_agent.py --query "AI"
 | `NEEVCLOUD_INFERENCE_BASE_URL` | model examples | alias for inference base URL |
 | `NEEV_MODEL` | model + workflow_examples | `gpt-oss-120b` |
 | `NEEVAI_WORKFLOW_MAX_STEPS` | workflow_examples | `35` (`repo_analyzer`), `70` (`browser_agent`) |
-| `NEEVAI_WAIT_TIMEOUT_MS` | `sandbox_lifecycle.py`, lifecycle controller | `300000` |
+| `NEEVAI_WAIT_TIMEOUT_MS` | `sandbox_lifecycle.py`, `snapshot_fork_restore.py`, lifecycle controller | `300000` |
+| `NEEVAI_SNAPSHOT_POLL_MS` | `snapshot_fork_restore.py` | `3000` |
 | `NEEVAI_STEP_DELAY_SEC` | `sandbox_lifecycle.py` | `3` |
 | `NEEV_GIT_STATIC_URL` | `repo_analyzer.py` | — (optional static git binary URL) |
 

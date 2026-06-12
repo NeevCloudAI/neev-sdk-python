@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -5,9 +7,12 @@ from typing import TYPE_CHECKING, Any
 from neevai._parse import coerce_model, coerce_params
 from neevai.types import (
     CreateSandboxParams,
+    CreateSnapshotParams,
     SandboxData,
     SandboxListResponse,
     SandboxMetricsResponse,
+    Snapshot,
+    SnapshotListResponse,
 )
 
 if TYPE_CHECKING:
@@ -17,7 +22,7 @@ if TYPE_CHECKING:
 
 @dataclass
 class SandboxPage:
-    items: list["Sandbox"]
+    items: list[Sandbox]
     total: int
     page: int
     limit: int
@@ -25,14 +30,14 @@ class SandboxPage:
 
 @dataclass
 class AsyncSandboxPage:
-    items: list["AsyncSandbox"]
+    items: list[AsyncSandbox]
     total: int
     page: int
     limit: int
 
 
 def _prepare_create_params(
-    client: "NeevAI | AsyncNeevAI",
+    client: NeevAI | AsyncNeevAI,
     params: CreateSandboxParams | Mapping[str, Any],
 ) -> CreateSandboxParams:
     if isinstance(params, Mapping):
@@ -44,10 +49,24 @@ def _prepare_create_params(
     return coerce_params(CreateSandboxParams, raw)
 
 
+def _prepare_create_snapshot_body(
+    params: CreateSnapshotParams | Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    if params is None:
+        raw: dict[str, Any] = {}
+    elif isinstance(params, Mapping):
+        raw = dict(params)
+    else:
+        raw = params.model_dump(exclude_unset=True)
+    body = coerce_params(CreateSnapshotParams, raw).model_dump(exclude_unset=True)
+    body["include_memory"] = False
+    return body
+
+
 class Sandboxes:
     """Operations on the /sandboxes API endpoint (control plane, synchronous)."""
 
-    def __init__(self, client: "NeevAI"):
+    def __init__(self, client: NeevAI):
         self._client = client
 
     def create(
@@ -55,7 +74,7 @@ class Sandboxes:
         params: CreateSandboxParams | Mapping[str, Any],
         org_id: str | None = None,
         project_id: str | None = None,
-    ) -> "Sandbox":
+    ) -> Sandbox:
         """Creates a new sandbox in the resolved project context."""
         from neevai.handles.sandbox import Sandbox
 
@@ -66,7 +85,7 @@ class Sandboxes:
         raw = self._client._transport.request(
             "POST",
             path,
-            body=body.model_dump(exclude_unset=True),
+            body=body.model_dump(mode="json", exclude_unset=True),
         )
         data = coerce_model(SandboxData, raw)
         return Sandbox(self, data, scope)
@@ -105,7 +124,7 @@ class Sandboxes:
         id: str,
         org_id: str | None = None,
         project_id: str | None = None,
-    ) -> "Sandbox":
+    ) -> Sandbox:
         """Retrieves details of a specific sandbox."""
         from neevai.handles.sandbox import Sandbox
 
@@ -123,7 +142,7 @@ class Sandboxes:
         preserve_memory: bool | None = None,
         org_id: str | None = None,
         project_id: str | None = None,
-    ) -> "Sandbox":
+    ) -> Sandbox:
         """Scales a sandbox to 0 replicas, putting it in Paused state."""
         from neevai.handles.sandbox import Sandbox
 
@@ -142,7 +161,7 @@ class Sandboxes:
         id: str,
         org_id: str | None = None,
         project_id: str | None = None,
-    ) -> "Sandbox":
+    ) -> Sandbox:
         """Scales a sandbox back to 1 replica, moving it back towards Ready."""
         from neevai.handles.sandbox import Sandbox
 
@@ -191,11 +210,122 @@ class Sandboxes:
         raw = self._client._transport.request("GET", path, query=query)
         return coerce_model(SandboxMetricsResponse, raw)
 
+    def create_snapshot(
+        self,
+        id: str,
+        params: CreateSnapshotParams | Mapping[str, Any] | None = None,
+        org_id: str | None = None,
+        project_id: str | None = None,
+    ) -> Snapshot:
+        """Creates a snapshot of a sandbox (returns immediately with status Pending)."""
+        scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
+        path = (
+            f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}"
+            f"/sandboxes/{id}/snapshots"
+        )
+        body = _prepare_create_snapshot_body(params)
+        raw = self._client._transport.request("POST", path, body=body)
+        return coerce_model(Snapshot, raw)
+
+    def list_snapshots(
+        self,
+        id: str,
+        page: int | None = None,
+        limit: int | None = None,
+        org_id: str | None = None,
+        project_id: str | None = None,
+    ) -> list[Snapshot]:
+        """Lists snapshots taken from a sandbox."""
+        scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
+        path = (
+            f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}"
+            f"/sandboxes/{id}/snapshots"
+        )
+        query: dict[str, Any] = {}
+        if page is not None:
+            query["page"] = page
+        if limit is not None:
+            query["limit"] = limit
+        raw = self._client._transport.request("GET", path, query=query)
+        page_data = coerce_model(SnapshotListResponse, raw)
+        return list(page_data.items)
+
+    def get_snapshot(
+        self,
+        snapshot_id: str,
+        org_id: str | None = None,
+        project_id: str | None = None,
+    ) -> Snapshot:
+        """Retrieves snapshot metadata by ID (project-scoped)."""
+        scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
+        path = (
+            f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}"
+            f"/snapshots/{snapshot_id}"
+        )
+        raw = self._client._transport.request("GET", path)
+        return coerce_model(Snapshot, raw)
+
+    def delete_snapshot(
+        self,
+        snapshot_id: str,
+        org_id: str | None = None,
+        project_id: str | None = None,
+    ) -> None:
+        """Deletes a snapshot permanently."""
+        scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
+        path = (
+            f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}"
+            f"/snapshots/{snapshot_id}"
+        )
+        self._client._transport.request("DELETE", path)
+
+    def restore(
+        self,
+        id: str,
+        snapshot_id: str,
+        org_id: str | None = None,
+        project_id: str | None = None,
+    ) -> Sandbox:
+        """Restores a sandbox in place from a snapshot."""
+        from neevai.handles.sandbox import Sandbox
+
+        scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
+        path = (
+            f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}"
+            f"/sandboxes/{id}/restore"
+        )
+        raw = self._client._transport.request(
+            "POST",
+            path,
+            body={"snapshot_id": snapshot_id},
+        )
+        data = coerce_model(SandboxData, raw)
+        return Sandbox(self, data, scope)
+
+    def fork(
+        self,
+        id: str,
+        name: str,
+        org_id: str | None = None,
+        project_id: str | None = None,
+    ) -> Sandbox:
+        """Forks a sandbox into a new sandbox seeded from its current state."""
+        from neevai.handles.sandbox import Sandbox
+
+        scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
+        path = (
+            f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}"
+            f"/sandboxes/{id}/fork"
+        )
+        raw = self._client._transport.request("POST", path, body={"name": name})
+        data = coerce_model(SandboxData, raw)
+        return Sandbox(self, data, scope)
+
 
 class AsyncSandboxes:
     """Operations on the /sandboxes API endpoint (control plane, asynchronous)."""
 
-    def __init__(self, client: "AsyncNeevAI"):
+    def __init__(self, client: AsyncNeevAI):
         self._client = client
 
     async def create(
@@ -203,7 +333,7 @@ class AsyncSandboxes:
         params: CreateSandboxParams | Mapping[str, Any],
         org_id: str | None = None,
         project_id: str | None = None,
-    ) -> "AsyncSandbox":
+    ) -> AsyncSandbox:
         """Creates a new sandbox asynchronously."""
         from neevai.handles.sandbox import AsyncSandbox
 
@@ -214,7 +344,7 @@ class AsyncSandboxes:
         raw = await self._client._transport.request(
             "POST",
             path,
-            body=body.model_dump(exclude_unset=True),
+            body=body.model_dump(mode="json", exclude_unset=True),
         )
         data = coerce_model(SandboxData, raw)
         return AsyncSandbox(self, data, scope)
@@ -253,7 +383,7 @@ class AsyncSandboxes:
         id: str,
         org_id: str | None = None,
         project_id: str | None = None,
-    ) -> "AsyncSandbox":
+    ) -> AsyncSandbox:
         """Retrieves details of a specific sandbox asynchronously."""
         from neevai.handles.sandbox import AsyncSandbox
 
@@ -271,7 +401,7 @@ class AsyncSandboxes:
         preserve_memory: bool | None = None,
         org_id: str | None = None,
         project_id: str | None = None,
-    ) -> "AsyncSandbox":
+    ) -> AsyncSandbox:
         """Scales a sandbox to 0 replicas asynchronously."""
         from neevai.handles.sandbox import AsyncSandbox
 
@@ -290,7 +420,7 @@ class AsyncSandboxes:
         id: str,
         org_id: str | None = None,
         project_id: str | None = None,
-    ) -> "AsyncSandbox":
+    ) -> AsyncSandbox:
         """Scales a sandbox back to 1 replica asynchronously."""
         from neevai.handles.sandbox import AsyncSandbox
 
@@ -338,3 +468,114 @@ class AsyncSandboxes:
 
         raw = await self._client._transport.request("GET", path, query=query)
         return coerce_model(SandboxMetricsResponse, raw)
+
+    async def create_snapshot(
+        self,
+        id: str,
+        params: CreateSnapshotParams | Mapping[str, Any] | None = None,
+        org_id: str | None = None,
+        project_id: str | None = None,
+    ) -> Snapshot:
+        """Creates a snapshot of a sandbox asynchronously."""
+        scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
+        path = (
+            f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}"
+            f"/sandboxes/{id}/snapshots"
+        )
+        body = _prepare_create_snapshot_body(params)
+        raw = await self._client._transport.request("POST", path, body=body)
+        return coerce_model(Snapshot, raw)
+
+    async def list_snapshots(
+        self,
+        id: str,
+        page: int | None = None,
+        limit: int | None = None,
+        org_id: str | None = None,
+        project_id: str | None = None,
+    ) -> list[Snapshot]:
+        """Lists snapshots taken from a sandbox asynchronously."""
+        scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
+        path = (
+            f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}"
+            f"/sandboxes/{id}/snapshots"
+        )
+        query: dict[str, Any] = {}
+        if page is not None:
+            query["page"] = page
+        if limit is not None:
+            query["limit"] = limit
+        raw = await self._client._transport.request("GET", path, query=query)
+        page_data = coerce_model(SnapshotListResponse, raw)
+        return list(page_data.items)
+
+    async def get_snapshot(
+        self,
+        snapshot_id: str,
+        org_id: str | None = None,
+        project_id: str | None = None,
+    ) -> Snapshot:
+        """Retrieves snapshot metadata by ID asynchronously."""
+        scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
+        path = (
+            f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}"
+            f"/snapshots/{snapshot_id}"
+        )
+        raw = await self._client._transport.request("GET", path)
+        return coerce_model(Snapshot, raw)
+
+    async def delete_snapshot(
+        self,
+        snapshot_id: str,
+        org_id: str | None = None,
+        project_id: str | None = None,
+    ) -> None:
+        """Deletes a snapshot asynchronously."""
+        scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
+        path = (
+            f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}"
+            f"/snapshots/{snapshot_id}"
+        )
+        await self._client._transport.request("DELETE", path)
+
+    async def restore(
+        self,
+        id: str,
+        snapshot_id: str,
+        org_id: str | None = None,
+        project_id: str | None = None,
+    ) -> AsyncSandbox:
+        """Restores a sandbox in place from a snapshot asynchronously."""
+        from neevai.handles.sandbox import AsyncSandbox
+
+        scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
+        path = (
+            f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}"
+            f"/sandboxes/{id}/restore"
+        )
+        raw = await self._client._transport.request(
+            "POST",
+            path,
+            body={"snapshot_id": snapshot_id},
+        )
+        data = coerce_model(SandboxData, raw)
+        return AsyncSandbox(self, data, scope)
+
+    async def fork(
+        self,
+        id: str,
+        name: str,
+        org_id: str | None = None,
+        project_id: str | None = None,
+    ) -> AsyncSandbox:
+        """Forks a sandbox into a new sandbox asynchronously."""
+        from neevai.handles.sandbox import AsyncSandbox
+
+        scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
+        path = (
+            f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}"
+            f"/sandboxes/{id}/fork"
+        )
+        raw = await self._client._transport.request("POST", path, body={"name": name})
+        data = coerce_model(SandboxData, raw)
+        return AsyncSandbox(self, data, scope)

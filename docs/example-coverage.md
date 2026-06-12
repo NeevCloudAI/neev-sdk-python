@@ -14,22 +14,28 @@ path and run commands, see [`examples/README.md`](../examples/README.md).
 | ------------ | ---------- | --------------- |
 | `NeevAI(...)` | tier-1, `agent_patterns/*`, `workflow_examples/*`, `sandbox_lifecycle_controller.py` | `with NeevAI() as client:` |
 | `AsyncNeevAI(...)` | `async_sandbox.py` | `async with AsyncNeevAI() as client:` |
-| `client.sandboxes.create` | tier-1, `agent_patterns/*`, `workflow_examples/*`, `sandbox_lifecycle_controller.py` | `sandbox = client.sandboxes.create({...})` |
+| `client.sandboxes.create` | tier-1, `agent_patterns/*`, `workflow_examples/*`, `sandbox_lifecycle_controller.py`, `snapshot_fork_restore.py` | `sandbox = client.sandboxes.create({...})` |
+| `client.sandboxes.create` (`from_snapshot`) | `snapshot_fork_restore.py` | `restored = client.sandboxes.create({..., "from_snapshot": snapshot_id})` |
 | `client.sandboxes.list` | `sandbox_lifecycle_controller.py` | `page = client.sandboxes.list(page=1, limit=20)` |
 | `client.sandboxes.get` | `sandbox_lifecycle_controller.py` | `sandbox = client.sandboxes.get(sandbox_id)` |
 | `client.sandboxes.pause` | `sandbox_lifecycle_controller.py` | `sandbox = client.sandboxes.pause(sandbox_id)` |
 | `client.sandboxes.resume` | `sandbox_lifecycle_controller.py` | `sandbox = client.sandboxes.resume(sandbox_id)` |
 | `client.sandboxes.delete` | `sandbox_lifecycle_controller.py` | `client.sandboxes.delete(sandbox_id)` |
 | `client.sandboxes.metrics` | `sandbox_lifecycle_controller.py` | `metrics = client.sandboxes.metrics(sandbox_id)` |
+| `client.sandboxes.create_snapshot` | `snapshot_fork_restore.py` (via `sandbox.snapshot`) | `pending = sandbox.snapshot({"name": "demo-snap"})` |
+| `client.sandboxes.get_snapshot` | `snapshot_fork_restore.py` | `snap = client.sandboxes.get_snapshot(snapshot_id)` |
+| `client.sandboxes.delete_snapshot` | `snapshot_fork_restore.py` | `client.sandboxes.delete_snapshot(snapshot_id)` |
+| `sandbox.snapshot` | `snapshot_fork_restore.py` | `pending = sandbox.snapshot({"name": "demo-snap"})` |
+| `sandbox.fork` | `snapshot_fork_restore.py` | `fork = restored.fork("snapshot-fork")` |
 | `client.templates.list` | `templates_list.py` | `page = client.templates.list(limit=10)` |
 | `client.templates.get` | `templates_list.py` | `tpl = client.templates.get(template_id)` |
 | `client.raw.request` | `raw_request.py` | `data = client.raw.request("GET", path, query={...})` |
 | `sandbox.wait_until_ready` | tier-1 (except `raw_request.py`), `agent_patterns/*`, `workflow_examples/*` | `sandbox.wait_until_ready(timeout_ms=120_000)` |
 | `sandbox.exec` | `parallel_fanout.py`, `async_sandbox.py`, `sandbox_metrics.py`, `agent_patterns/*`, `workflow_examples/*` | `result = sandbox.exec(["echo", "hi"])` / `await sandbox.exec(...)` |
 | `sandbox.exec_stream` | `streaming_exec.py`, `agent_patterns/minimal_agent.py`, `agent_patterns/utils/agent_loop.py` | `for event in sandbox.exec_stream(cmd):` |
-| `sandbox.files.write` | `files_api.py`, `agent_patterns/utils/sandbox_tool.py`, `workflow_examples/repo_analyzer.py` | `sandbox.files.write("path.txt", "content")` |
+| `sandbox.files.write` | `files_api.py`, `snapshot_fork_restore.py`, `agent_patterns/utils/sandbox_tool.py`, `workflow_examples/repo_analyzer.py` | `sandbox.files.write("demo/message.txt", "original state")` |
 | `sandbox.files.read` | `agent_patterns/utils/agent_loop.py` | `data = sandbox.files.read("path.txt")` |
-| `sandbox.files.read_text` | `files_api.py` | `text = sandbox.files.read_text("demo/hello.txt")` |
+| `sandbox.files.read_text` | `files_api.py`, `snapshot_fork_restore.py` | `text = sandbox.files.read_text("demo/message.txt")` |
 | `sandbox.files.list` | `files_api.py` | `entries = sandbox.files.list("demo", recursive=True)` |
 | `sandbox.metrics` | `sandbox_lifecycle.py`, `sandbox_metrics.py` | `metrics = sandbox.metrics()` |
 | `sandbox.pause` | `sandbox_lifecycle.py` | `sandbox.pause()` |
@@ -46,6 +52,7 @@ path and run commands, see [`examples/README.md`](../examples/README.md).
 | ------- | ---- | ------- |
 | Templates list & create | `examples/templates_list.py` | List templates, get by id, create sandbox, wait, delete |
 | Sandbox lifecycle | `examples/sandbox_lifecycle.py` | Create → wait → metrics → pause → delete |
+| Snapshot fork & restore | `examples/snapshot_fork_restore.py` | Write state → snapshot → modify → `from_snapshot` create → fork → cleanup |
 | Async workflow | `examples/async_sandbox.py` | `AsyncNeevAI` create → wait → exec → delete |
 | Files API | `examples/files_api.py` | Write, read_text, list (recursive) |
 | Streaming exec | `examples/streaming_exec.py` | `exec_stream` with progress output |

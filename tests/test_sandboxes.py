@@ -7,7 +7,8 @@ import pytest
 from neevai._parse import ResponseValidationError
 from neevai.client import NeevAI
 from neevai.errors import NeevAIError, NotFoundError
-from neevai.types import CreateSandboxParams
+from neevai.generated.aiagent import SnapshotStatus
+from neevai.types import CreateSandboxParams, Snapshot
 
 
 def _make_client(mock_transport, region: str = "us-east-1") -> NeevAI:
@@ -22,6 +23,26 @@ def _make_client(mock_transport, region: str = "us-east-1") -> NeevAI:
 
 def _first_sandbox_id() -> str:
     return str(uuid.UUID(int=1))
+
+
+def _first_snapshot_id() -> str:
+    return str(uuid.UUID(int=0x1001))
+
+
+def snapshot_data(**overrides) -> dict:
+    base = {
+        "id": "22222222-2222-2222-2222-222222222222",
+        "sandbox_id": "11111111-1111-1111-1111-111111111111",
+        "org_id": "org1",
+        "project_id": "proj1",
+        "status": "Pending",
+        "include_memory": False,
+        "source_region": "us-east-1",
+        "created_at": "2026-06-05T00:00:00Z",
+        "updated_at": "2026-06-05T00:00:00Z",
+    }
+    base.update(overrides)
+    return base
 
 
 def test_sandboxes_create(mock_transport):
@@ -218,4 +239,147 @@ def test_sandboxes_get_invalid_response_raises(mock_transport, monkeypatch):
 
     with pytest.raises(ResponseValidationError):
         client.sandboxes.get(sb.id)
+    client.close()
+
+
+def test_sandboxes_create_snapshot(mock_transport):
+    client = _make_client(mock_transport)
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
+
+    captured_bodies: list[dict | None] = []
+    original_request = client._transport.request
+
+    def capturing_request(method, path, query=None, body=None):
+        captured_bodies.append(body)
+        return original_request(method, path, query=query, body=body)
+
+    client._transport.request = capturing_request  # type: ignore[method-assign]
+
+    snap = client.sandboxes.create_snapshot(sb.id, {"name": "demo-snap"})
+    assert captured_bodies == [{"name": "demo-snap", "include_memory": False}]
+    assert str(snap.id) == _first_snapshot_id()
+    assert snap.status == SnapshotStatus.Pending
+    assert snap.include_memory is False
+    client.close()
+
+
+def test_sandboxes_list_snapshots(mock_transport):
+    client = _make_client(mock_transport)
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
+    client.sandboxes.create_snapshot(sb.id, {"name": "snap-a"})
+    client.sandboxes.create_snapshot(sb.id, {"name": "snap-b"})
+
+    snaps = client.sandboxes.list_snapshots(sb.id)
+    assert len(snaps) == 2
+    assert all(isinstance(s, Snapshot) for s in snaps)
+    assert {s.name for s in snaps} == {"snap-a", "snap-b"}
+    client.close()
+
+
+def test_sandboxes_get_and_delete_snapshot(mock_transport):
+    client = _make_client(mock_transport)
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
+    created = client.sandboxes.create_snapshot(sb.id, {"name": "snap-x"})
+
+    fetched = client.sandboxes.get_snapshot(str(created.id))
+    assert fetched.id == created.id
+    assert fetched.name == "snap-x"
+
+    client.sandboxes.delete_snapshot(str(created.id))
+    with pytest.raises(NotFoundError):
+        client.sandboxes.get_snapshot(str(created.id))
+    client.close()
+
+
+def test_sandboxes_get_snapshot_not_found(mock_transport):
+    client = _make_client(mock_transport)
+    with pytest.raises(NotFoundError):
+        client.sandboxes.get_snapshot("00000000-0000-0000-0000-000000000099")
+    client.close()
+
+
+def test_sandboxes_restore(mock_transport):
+    client = _make_client(mock_transport)
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
+    snap = client.sandboxes.create_snapshot(sb.id, {"name": "restore-me"})
+
+    captured_bodies: list[dict | None] = []
+    original_request = client._transport.request
+
+    def capturing_request(method, path, query=None, body=None):
+        captured_bodies.append(body)
+        return original_request(method, path, query=query, body=body)
+
+    client._transport.request = capturing_request  # type: ignore[method-assign]
+
+    restored = client.sandboxes.restore(sb.id, str(snap.id))
+    assert captured_bodies == [{"snapshot_id": str(snap.id)}]
+    assert restored.id == sb.id
+    assert restored.phase == "Pending"
+    client.close()
+
+
+def test_sandboxes_fork(mock_transport):
+    client = _make_client(mock_transport)
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
+
+    captured_bodies: list[dict | None] = []
+    original_request = client._transport.request
+
+    def capturing_request(method, path, query=None, body=None):
+        captured_bodies.append(body)
+        return original_request(method, path, query=query, body=body)
+
+    client._transport.request = capturing_request  # type: ignore[method-assign]
+
+    forked = client.sandboxes.fork(sb.id, "snapshot-fork")
+    assert captured_bodies == [{"name": "snapshot-fork"}]
+    assert forked.name == "snapshot-fork"
+    assert forked.id != sb.id
+    client.close()
+
+
+def test_sandbox_handle_snapshot_methods(mock_transport):
+    client = _make_client(mock_transport)
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
+
+    captured: list[tuple[str, str]] = []
+    original_request = client._transport.request
+
+    def capturing_request(method, path, query=None, body=None):
+        captured.append((method, path))
+        return original_request(method, path, query=query, body=body)
+
+    client._transport.request = capturing_request  # type: ignore[method-assign]
+
+    pending = sb.snapshot({"name": "handle-snap"})
+    assert pending.status == SnapshotStatus.Pending
+
+    listed = sb.snapshots()
+    assert len(listed) == 1
+
+    sb.restore(str(pending.id))
+    fork = sb.fork("handle-fork")
+    assert fork.name == "handle-fork"
+
+    paths = [path for _, path in captured]
+    assert any(path.endswith(f"/sandboxes/{sb.id}/snapshots") for path in paths)
+    assert any(path.endswith(f"/sandboxes/{sb.id}/restore") for path in paths)
+    assert any(path.endswith(f"/sandboxes/{sb.id}/fork") for path in paths)
+    client.close()
+
+
+def test_sandboxes_create_from_snapshot(mock_transport):
+    client = _make_client(mock_transport)
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
+    snap = client.sandboxes.create_snapshot(sb.id, {"name": "seed"})
+
+    restored = client.sandboxes.create(
+        {
+            "name": "from-snap",
+            "sandbox_template_id": "sb-ubuntu-24-04-minimal",
+            "from_snapshot": str(snap.id),
+        }
+    )
+    assert restored.name == "from-snap"
     client.close()

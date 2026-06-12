@@ -131,7 +131,7 @@ flowchart TB
         Templates["templates resource"]
         Raw["raw.request"]
         Wait["wait_until_ready / refresh"]
-        LifecycleOps["pause / resume / delete / metrics"]
+        LifecycleOps["pause / resume / delete / metrics / snapshot / fork / restore"]
         LifecycleTransport["ControlTransport (retries)<br>transport/lifecycle.py"]
   end
  subgraph dataPlane["Data plane — runtime"]
@@ -153,7 +153,9 @@ flowchart TB
 **Control plane (lifecycle transport)** — `NeevAI` / `AsyncNeevAI` expose
 resource objects (`sandboxes`, `templates`) and a low-level `raw.request`
 escape hatch. Handle lifecycle methods (`wait_until_ready`, `refresh`,
-`pause`, `resume`, `delete`, `metrics`) also live here. All of these calls
+`pause`, `resume`, `delete`, `metrics`, `snapshot`, `fork`, `restore`) also live
+here. Snapshot rollback can also provision a new sandbox via `from_snapshot` on
+create. All of these calls
 route through `ControlTransport` in `transport/lifecycle.py` (retries enabled)
 to the NeevAI agent API.
 

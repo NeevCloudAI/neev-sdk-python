@@ -17,6 +17,7 @@ import pytest
 # Simple in‑memory store to simulate backend state for sandbox resources
 _FAKE_DB: dict[str, Any] = {
     "sandboxes": {},
+    "snapshots": {},
     "templates": {
         "sb-ubuntu-26-04-minimal": {
             "id": "sb-ubuntu-26-04-minimal",
@@ -28,8 +29,40 @@ _FAKE_DB: dict[str, Any] = {
             "updated_at": "2026-01-01T00:00:00Z",
         }
     },
+    "next_snapshot_id": 1,
     "next_id": 1,
 }
+
+
+def _snapshot_id(n: int) -> str:
+    return str(uuid.UUID(int=n + 0x1000))
+
+
+def _make_snapshot_record(
+    *,
+    snap_id: str,
+    sandbox_id: str,
+    org_id: str,
+    project_id: str,
+    body: dict[str, Any] | None,
+    now: str,
+) -> dict[str, Any]:
+    req = body or {}
+    return {
+        "id": snap_id,
+        "sandbox_id": sandbox_id,
+        "org_id": org_id,
+        "project_id": project_id,
+        "name": req.get("name"),
+        "status": "Pending",
+        "include_memory": req.get("include_memory", False),
+        "source_region": "us-east-1",
+        "size_bytes": None,
+        "error_message": None,
+        "expires_at": None,
+        "created_at": now,
+        "updated_at": now,
+    }
 
 
 def _sandbox_id(n: int) -> str:
@@ -156,6 +189,76 @@ def _control_response(
                 },
             )
 
+        if action == "snapshots":
+            if method == "GET":
+                items = [
+                    snap
+                    for snap in _FAKE_DB["snapshots"].values()
+                    if snap["sandbox_id"] == sandbox_id
+                ]
+                return json_resp(
+                    200,
+                    {
+                        "items": items,
+                        "total": len(items),
+                        "page": int((query or {}).get("page", 1)),
+                        "limit": int((query or {}).get("limit", 100)),
+                    },
+                )
+            if method == "POST":
+                now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+                snap_id = _snapshot_id(_FAKE_DB["next_snapshot_id"])
+                _FAKE_DB["next_snapshot_id"] += 1
+                snapshot = _make_snapshot_record(
+                    snap_id=snap_id,
+                    sandbox_id=sandbox_id,
+                    org_id=org_id,
+                    project_id=project_id,
+                    body=body,
+                    now=now,
+                )
+                _FAKE_DB["snapshots"][snap_id] = snapshot
+                return json_resp(202, snapshot)
+
+        if action == "restore" and method == "POST":
+            sandbox["phase"] = "Pending"
+            sandbox["replicas"] = 1
+            return json_resp(200, sandbox)
+
+        if action == "fork" and method == "POST":
+            now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            fork_id = _sandbox_id(_FAKE_DB["next_id"])
+            _FAKE_DB["next_id"] += 1
+            fork_body = body if isinstance(body, dict) else {}
+            forked = _make_sandbox_record(
+                sid=fork_id,
+                org_id=org_id,
+                project_id=project_id,
+                body=fork_body,
+                now=now,
+            )
+            forked["phase"] = "Pending"
+            forked["replicas"] = 1
+            _FAKE_DB["sandboxes"][fork_id] = forked
+            return json_resp(201, forked)
+
+        return json_resp(400, {"message": "bad request"})
+
+    # ---- Project-scoped snapshots ---------------------------------------------
+    m_snapshot = re.match(
+        r"^/api/v1beta1/orgs/([^/]+)/projects/([^/]+)/snapshots/([^/]+)$",
+        path,
+    )
+    if m_snapshot:
+        snapshot_id = m_snapshot.group(3)
+        snapshot = _FAKE_DB["snapshots"].get(snapshot_id)
+        if not snapshot:
+            return json_resp(404, {"message": "not found"})
+        if method == "GET":
+            return json_resp(200, snapshot)
+        if method == "DELETE":
+            del _FAKE_DB["snapshots"][snapshot_id]
+            return json_resp(204)
         return json_resp(400, {"message": "bad request"})
 
     # ---- Sandbox templates ----------------------------------------------------
@@ -316,7 +419,9 @@ class MockDataPlaneTransport(httpx.MockTransport):
 def control_transport() -> httpx.Client:
     """Provides a fresh mock control‑plane httpx Client for each test."""
     _FAKE_DB["sandboxes"].clear()
+    _FAKE_DB["snapshots"].clear()
     _FAKE_DB["next_id"] = 1
+    _FAKE_DB["next_snapshot_id"] = 1
     return httpx.Client(transport=MockControlTransport())
 
 
@@ -330,5 +435,7 @@ def dataplane_transport() -> httpx.Client:
 def mock_transport() -> httpx.Client:
     """Alias for `control_transport` – a fresh mock control‑plane httpx Client per test."""
     _FAKE_DB["sandboxes"].clear()
+    _FAKE_DB["snapshots"].clear()
     _FAKE_DB["next_id"] = 1
+    _FAKE_DB["next_snapshot_id"] = 1
     return httpx.Client(transport=MockControlTransport())
