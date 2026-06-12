@@ -1,8 +1,50 @@
 """
 Command-line controller for sandbox resource operations.
 
-Requires ``NEEVCLOUD_SANDBOX_TEMPLATE_ID`` for ``create``. Set ``NEEVCLOUD_REGION``
-for the deployment region (or pass ``region`` on the client / in create params).
+Thin CLI over ``client.sandboxes`` — create, list, get, pause, resume, delete,
+and query metrics without writing a custom script. Useful for manual testing
+and automation that prefers subprocess invocations over embedded SDK calls.
+
+Prerequisites
+-------------
+
+Required environment variables:
+
+- ``NEEVCLOUD_API_KEY`` — API key for your organization
+- ``NEEVCLOUD_ORG_ID`` — organization ID
+- ``NEEVCLOUD_PROJECT_ID`` — project ID
+
+Optional overrides:
+
+- ``NEEVCLOUD_SANDBOX_TEMPLATE_ID`` — default template for ``create`` (or pass
+  ``--template-id``)
+- ``NEEVCLOUD_REGION`` — deployment region for ``create``
+- ``NEEVAI_WAIT_TIMEOUT_MS`` — max wait for ``create --wait`` (default:
+  ``300000``)
+
+Subcommands
+-----------
+
+| Command | Description | Notable flags |
+|---------|-------------|---------------|
+| ``create`` | Provision a new sandbox | ``--name``, ``--template-id``, ``--image``, ``--wait`` |
+| ``list`` | Paginated sandbox list | ``--page``, ``--limit`` |
+| ``get`` | Fetch one sandbox by ID | — |
+| ``pause`` | Scale to 0 replicas | — |
+| ``resume`` | Scale back to 1 replica | — |
+| ``delete`` | Permanently remove | — |
+| ``metrics`` | Query health metrics | ``--from``, ``--to``, ``--step`` |
+
+Global flag ``--json`` emits structured JSON on stdout instead of human-readable
+lines.
+
+Stdout / stderr
+---------------
+
+- **stdout** — command results (sandbox lines, list rows, metrics summary, or
+  JSON when ``--json`` is set)
+- **stderr** — ``create --wait`` poll lines and ``NeevAIError`` messages on
+  failure
 
 Usage::
 
@@ -31,15 +73,21 @@ from neevai import NeevAI
 from neevai.errors import NeevAIError
 from neevai.handles.sandbox import Sandbox
 
+# Tunable defaults — override via environment variables listed in the docstring.
 DEFAULT_IMAGE = "ghcr.io/neevcloud/sandbox-python:3.12"
 WAIT_TIMEOUT_MS = int(os.environ.get("NEEVAI_WAIT_TIMEOUT_MS", "300000"))
 
 
+# --- Output helpers ---
+
+
 def _print_json(data: Any) -> None:
+    """Pretty-print JSON to stdout."""
     print(json.dumps(data, indent=2))
 
 
 def _print_sandbox(sandbox: Sandbox, *, as_json: bool) -> None:
+    """Print a sandbox handle as JSON or a single human-readable line."""
     if as_json:
         _print_json(sandbox.to_json())
         return
@@ -49,7 +97,11 @@ def _print_sandbox(sandbox: Sandbox, *, as_json: bool) -> None:
     print(line)
 
 
+# --- Subcommand handlers ---
+
+
 def _cmd_create(client: NeevAI, args: argparse.Namespace) -> None:
+    """Create a sandbox; optionally wait until ready."""
     template_id = args.template_id or os.environ.get("NEEVCLOUD_SANDBOX_TEMPLATE_ID")
     if not template_id:
         print(
@@ -74,6 +126,7 @@ def _cmd_create(client: NeevAI, args: argparse.Namespace) -> None:
 
 
 def _cmd_list(client: NeevAI, args: argparse.Namespace) -> None:
+    """List sandboxes with pagination."""
     page = client.sandboxes.list(page=args.page, limit=args.limit)
     if args.json:
         _print_json(
@@ -91,21 +144,25 @@ def _cmd_list(client: NeevAI, args: argparse.Namespace) -> None:
 
 
 def _cmd_get(client: NeevAI, args: argparse.Namespace) -> None:
+    """Fetch a single sandbox by ID."""
     sandbox = client.sandboxes.get(args.sandbox_id)
     _print_sandbox(sandbox, as_json=args.json)
 
 
 def _cmd_pause(client: NeevAI, args: argparse.Namespace) -> None:
+    """Pause a sandbox (scale to 0 replicas)."""
     sandbox = client.sandboxes.pause(args.sandbox_id)
     _print_sandbox(sandbox, as_json=args.json)
 
 
 def _cmd_resume(client: NeevAI, args: argparse.Namespace) -> None:
+    """Resume a paused sandbox."""
     sandbox = client.sandboxes.resume(args.sandbox_id)
     _print_sandbox(sandbox, as_json=args.json)
 
 
 def _cmd_delete(client: NeevAI, args: argparse.Namespace) -> None:
+    """Permanently delete a sandbox."""
     client.sandboxes.delete(args.sandbox_id)
     if args.json:
         _print_json({"deleted": args.sandbox_id})
@@ -114,6 +171,7 @@ def _cmd_delete(client: NeevAI, args: argparse.Namespace) -> None:
 
 
 def _cmd_metrics(client: NeevAI, args: argparse.Namespace) -> None:
+    """Query sandbox health metrics for a time window."""
     metrics = client.sandboxes.metrics(
         args.sandbox_id,
         from_=args.from_,
@@ -182,6 +240,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
+    # --- Parse CLI ---
     parser = _build_parser()
     args = parser.parse_args()
 
@@ -195,6 +254,7 @@ def main() -> None:
         "metrics": _cmd_metrics,
     }
 
+    # --- Dispatch ---
     with NeevAI(
         api_key=os.environ.get("NEEVCLOUD_API_KEY"),
         org_id=os.environ.get("NEEVCLOUD_ORG_ID"),

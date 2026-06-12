@@ -41,6 +41,7 @@ testpaths = ["tests"]
 
 [tool.pyright]
 include = ["src/neevai"]
+extraPaths = ["examples/agent_patterns"]
 exclude = ["src/neevai/generated"]
 pythonVersion = "3.10"
 typeCheckingMode = "strict"
