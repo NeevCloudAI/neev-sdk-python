@@ -64,13 +64,13 @@ Types exported from `neevai.types.__all__`:
 | ------ | ---- | ------ |
 | `CreateSandboxParams` | model alias | `generated/aiagent.py` → `CreateSandboxRequest` |
 | `EnvVar` | model | generated |
-| `SandboxData` | model alias | generated → `Sandbox` |
-| `SandboxListResponse` | model | generated |
+| `SandboxData` | model | `types.py` subclass of generated `Sandbox` with `phase: str` |
+| `SandboxListResponse` | model | `types.py` (`items: list[SandboxData]`) |
 | `SandboxTemplate` | model | generated |
 | `SandboxTemplateListResponse` | model | generated |
 | `SandboxMetricsResponse` | model | generated |
 | `MetricSeries` | model | generated |
-| `SandboxPhase` | type alias | `Literal["Pending", "Ready", "NotReady", "Unknown", "Paused"]` |
+| `SandboxPhase` | type alias | `Literal["Pending", "Ready", "NotReady", "Unknown", "Paused", "Pausing", "Resuming"]` (SDK; spec enum omits transitional values) |
 | `SandboxPhaseEnum` | enum | generated → `SandboxPhase` |
 | `Scope` | dataclass | `types.py` |
 | `FileEntry` | model | `types.py` |
@@ -301,7 +301,7 @@ mirroring the last control-plane response. Call `refresh()` to sync from the ser
 | -------- | ---- | ----------- |
 | `id` | `UUID` | Sandbox identifier |
 | `name` | `str` | Human-readable name |
-| `phase` | `SandboxPhase` | `"Pending"`, `"Ready"`, `"NotReady"`, `"Unknown"`, or `"Paused"` |
+| `phase` | `str` | OpenAPI steady states: `"Pending"`, `"Ready"`, `"NotReady"`, `"Unknown"`, `"Paused"`. API may also return transitional values (e.g. `"Pausing"`, `"Resuming"`) not in the spec enum; SDK accepts any phase string. |
 | `replicas` | `int` | `0` or `1` |
 | `connect_url` | `str \| None` | Regional data-plane URL (available when ready) |
 | `data` | `dict[str, Any]` | Full record snapshot |
@@ -597,7 +597,7 @@ Full control-plane sandbox record (alias for generated `Sandbox`).
 | `created_at` | `datetime` | yes |
 | `updated_at` | `datetime` | yes |
 
-On handles, `sandbox.phase` returns the string literal (`SandboxPhase`), not the enum.
+On handles, `sandbox.phase` returns a `str` (not the generated enum). The OpenAPI spec lists five steady-state phases; the API may return additional transitional strings during pause/resume.
 
 ### `SandboxTemplate`
 
@@ -647,7 +647,9 @@ On handles, `sandbox.phase` returns the string literal (`SandboxPhase`), not the
 
 ### `SandboxPhase`
 
-Type alias: `Literal["Pending", "Ready", "NotReady", "Unknown", "Paused"]`.
+Type alias for documented phase strings: `Literal["Pending", "Ready", "NotReady", "Unknown", "Paused", "Pausing", "Resuming"]`.
+
+The OpenAPI `SandboxPhase` enum lists only the five steady states (`Pending`, `Ready`, `NotReady`, `Unknown`, `Paused`). The control plane may return transitional values such as `Pausing` and `Resuming` while pause/resume reconciliation is in progress; `SandboxData` and handle `phase` accept any string so future API values do not break the SDK.
 
 ### `FileEntry`
 
@@ -808,7 +810,7 @@ Compact reviewer index. Each symbol should also appear in
 
 | Symbol | Kind | Notes |
 | ------ | ---- | ----- |
-| `Sandbox.id`, `.name`, `.phase`, `.replicas`, `.connect_url` | properties | `phase` is `SandboxPhase` string literal |
+| `Sandbox.id`, `.name`, `.phase`, `.replicas`, `.connect_url` | properties | `phase` is `str` (any API phase string) |
 | `Sandbox.data` | property | `dict[str, Any]` snapshot |
 | `Sandbox.to_json` | method | JSON-serializable dict |
 | `Sandbox.refresh` | method | Re-fetch from control plane → `Sandbox` |

@@ -104,6 +104,46 @@ def test_control_transport_connection_error():
         transport.request("GET", "/conn")
 
 
+def test_control_transport_sends_empty_json_object_body():
+    captured: dict[str, bytes | str | None] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["content"] = request.content
+        captured["content_type"] = request.headers.get("content-type")
+        return httpx.Response(status_code=200, json={"ok": True})
+
+    transport = ControlTransport(
+        base_url="https://example.com",
+        api_key="test",
+        timeout_ms=5000,
+        max_retries=0,
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    transport.request("POST", "/pause", body={})
+    assert captured["content"] == b"{}"
+    assert captured["content_type"] == "application/json"
+
+
+def test_control_transport_omits_body_when_none():
+    captured: dict[str, bytes | str | None] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["content"] = request.content
+        captured["content_type"] = request.headers.get("content-type")
+        return httpx.Response(status_code=200, json={"ok": True})
+
+    transport = ControlTransport(
+        base_url="https://example.com",
+        api_key="test",
+        timeout_ms=5000,
+        max_retries=0,
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    transport.request("POST", "/resume")
+    assert captured["content"] == b""
+    assert captured.get("content_type") is None
+
+
 def test_control_transport_sanity(control_transport):
     transport = ControlTransport(
         base_url="https://example.com",

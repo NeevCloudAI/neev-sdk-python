@@ -126,6 +126,67 @@ def test_sandboxes_pause_resume(mock_transport):
     client.close()
 
 
+def test_sandboxes_pause_accepts_pausing_transitional_phase(mock_transport, monkeypatch):
+    """Pause API may return phase=Pausing while reconciliation is in progress."""
+    client = _make_client(mock_transport)
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
+
+    original_request = client._transport.request
+
+    def pausing_pause(method, path, **kwargs):
+        if method == "POST" and path.endswith(f"/sandboxes/{sb.id}/pause"):
+            sandbox = dict(
+                original_request("GET", f"/api/v1beta1/orgs/org1/projects/proj1/sandboxes/{sb.id}")
+            )
+            sandbox["phase"] = "Pausing"
+            sandbox["replicas"] = 0
+            return sandbox
+        return original_request(method, path, **kwargs)
+
+    monkeypatch.setattr(client._transport, "request", pausing_pause)
+
+    paused = client.sandboxes.pause(sb.id)
+    assert paused.phase == "Pausing"
+    assert paused.replicas == 0
+    client.close()
+
+
+def test_sandboxes_pause_sends_empty_json_body_when_preserve_memory_omitted(mock_transport):
+    client = _make_client(mock_transport)
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
+
+    captured_bodies: list[dict | None] = []
+    original_request = client._transport.request
+
+    def capturing_request(method, path, query=None, body=None):
+        captured_bodies.append(body)
+        return original_request(method, path, query=query, body=body)
+
+    client._transport.request = capturing_request  # type: ignore[method-assign]
+
+    client.sandboxes.pause(sb.id)
+    assert captured_bodies == [{}]
+    client.close()
+
+
+def test_sandboxes_pause_sends_preserve_memory_when_set(mock_transport):
+    client = _make_client(mock_transport)
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
+
+    captured_bodies: list[dict | None] = []
+    original_request = client._transport.request
+
+    def capturing_request(method, path, query=None, body=None):
+        captured_bodies.append(body)
+        return original_request(method, path, query=query, body=body)
+
+    client._transport.request = capturing_request  # type: ignore[method-assign]
+
+    client.sandboxes.pause(sb.id, preserve_memory=True)
+    assert captured_bodies == [{"preserve_memory": True}]
+    client.close()
+
+
 def test_sandboxes_metrics(mock_transport):
     client = _make_client(mock_transport)
     sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
