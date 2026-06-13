@@ -13,42 +13,21 @@ See [`docs/getting-started.md`](docs/getting-started.md) for per-OS `uv` install
 
 ## Installation
 
-### Option A — PyPI (coming soon; try first)
-
-When the package is published, this is the primary install path:
-
 ```bash
 pip install neevai
 ```
 
-When this succeeds, you are done — skip Option B.
+### Install from source (contributors)
 
-If `pip install neevai` fails with **package not found**, use Option B today.
-
-### Option B — Install from GitHub (recommended today)
-
-Clone the repository:
+Clone the repository and install in editable mode with [uv](https://docs.astral.sh/uv/):
 
 ```bash
 git clone https://github.com/NeevCloudAI/neev-sdk-python.git
 cd neev-sdk-python
-```
-
-**Recommended (uv):**
-
-```bash
 uv sync
 ```
 
 `uv sync` creates a local environment and installs the package in editable mode. Run examples from the repo root with `uv run python ...`.
-
-**Fallback (pip + virtual environment):**
-
-| Platform | Commands |
-| -------- | -------- |
-| **Linux / macOS** | `python3 -m venv .venv && source .venv/bin/activate && pip install -e .` |
-| **Windows PowerShell** | `python -m venv .venv; .\.venv\Scripts\Activate.ps1; pip install -e .` |
-| **Windows CMD** | `python -m venv .venv && .venv\Scripts\activate.bat && pip install -e .` |
 
 ## Configure credentials
 
@@ -103,8 +82,8 @@ with NeevAI(api_key="...", org_id="...", project_id="...", region="...") as clie
 
 If you just cloned the repo, follow these steps to reach your first successful run:
 
-1. Clone and enter the repo (see [Option B](#option-b-install-from-github-recommended-today) above if you have not already).
-2. Install dependencies: `uv sync` (or use the pip editable fallback for your platform).
+1. Clone and enter the repo (see [Install from source (contributors)](#install-from-source-contributors) above if you have not already).
+2. Install dependencies: `uv sync`.
 3. Set the four required environment variables (`NEEVCLOUD_API_KEY`, `NEEVCLOUD_ORG_ID`, `NEEVCLOUD_PROJECT_ID`, `NEEVCLOUD_REGION`) using the [platform-specific blocks](#configure-credentials) above.
 4. Verify the install:
 
