@@ -4,16 +4,52 @@ build-backend = "hatchling.build"
 
 [project]
 name = "neevai"
-version = "0.1.0"
-description = "Official NeevCloud SDK for the NeevAI platform"
+version = "0.5.0b0"
+description = "Official NeevCloud SDK for the Neev platform — Python. First up: agent sandboxes."
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "Apache-2.0" }
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+
+authors = [
+    { name = "NeevCloud" }
+]
+
+keywords = [
+    "neev",
+    "neevcloud",
+    "sdk",
+    "agent",
+    "sandbox",
+    "ai",
+    "gpu",
+    "gvisor",
+]
+
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries",
+    "Typing :: Typed",
+]
+
 dependencies = [
     "httpx>=0.24.0",
     "typing-extensions>=4.13.2",
     "pydantic>=2.10",
 ]
+
+[project.urls]
+Homepage = "https://github.com/NeevCloudAI/neev-sdk-python"
+Repository = "https://github.com/NeevCloudAI/neev-sdk-python"
+Issues = "https://github.com/NeevCloudAI/neev-sdk-python/issues"
+Documentation = "https://github.com/NeevCloudAI/neev-sdk-python#readme"
 
 [project.optional-dependencies]
 agents = [
@@ -21,6 +57,7 @@ agents = [
     "langchain-openai>=0.3",
     "langgraph>=0.2",
 ]
+
 dev = [
     "pytest>=7.0.0",
     "pytest-asyncio>=0.20.0",
@@ -29,6 +66,14 @@ dev = [
     "datamodel-code-generator>=0.25.0",
     "pyright>=1.1",
     "mypy>=1.10",
+]
+
+[tool.hatch.build.targets.sdist]
+only-include = [
+    "src/neevai",
+    "pyproject.toml",
+    "README.md",
+    "LICENSE",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -59,5 +104,3 @@ warn_unused_ignores = true
 [[tool.mypy.overrides]]
 module = "neevai.generated.*"
 ignore_errors = true
-
-
