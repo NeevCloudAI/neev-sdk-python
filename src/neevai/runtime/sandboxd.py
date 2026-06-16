@@ -1,61 +1,20 @@
-import base64
-import codecs
-import json
 from collections.abc import AsyncIterator, Iterator
-from dataclasses import dataclass, field
 
 import httpx
-from pydantic import TypeAdapter
 
-from neevai.errors import NeevAIError, error_from_status
-from neevai.runtime.schemas import (
-    ErrorFrame,
-    ExecFrame,
-    ExitFrame,
-    FileListResponse,
-    FileWriteResponse,
-    StderrFrame,
-    StdoutFrame,
+from neevai.runtime._stream import (
+    _aiter_exec_stream_events,
+    _iter_exec_stream_events,
+    _prepare_argv,
 )
+from neevai.runtime.schemas import FileListResponse, FileWriteResponse
 from neevai.transport.runtime import AsyncDataplaneTransport, DataplaneTransport
 from neevai.types import ExecResult, ExecStreamEvent, FileEntry
-
-REASON_STATUS: dict[str, int] = {
-    "permission_denied": 403,
-    "invalid_argument": 400,
-    "not_found": 404,
-    "failed_precondition": 412,
-    "resource_exhausted": 429,
-    "deadline_exceeded": 504,
-    "unavailable": 503,
-    "internal": 500,
-}
-
-_EXEC_FRAME_ADAPTER: TypeAdapter[ExecFrame] = TypeAdapter(ExecFrame)
-
-
-def _parse_exec_frame(raw: object) -> ExecFrame:
-    return _EXEC_FRAME_ADAPTER.validate_python(raw)
 
 
 def _entries_from_response(data: object) -> list[FileEntry]:
     parsed = FileListResponse.model_validate(data)
     return [FileEntry.model_validate(entry.model_dump()) for entry in parsed.entries]
-
-
-def _prepare_exec_argv(
-    command: str | list[str],
-    args: list[str] | None,
-) -> tuple[str, list[str]]:
-    if isinstance(command, list):
-        if args:
-            raise NeevAIError(
-                "exec: pass arguments either in the command array or via args, not both."
-            )
-        argv = command
-    else:
-        argv = [command] + (args or [])
-    return argv[0], argv[1:]
 
 
 def _prepare_exec_body(
@@ -77,81 +36,6 @@ def _prepare_exec_body(
         "timeout_ms": timeout_ms,
         "stdin": stdin,
     }
-
-
-@dataclass
-class _ExecStreamState:
-    out_decoder: codecs.IncrementalDecoder = field(
-        default_factory=lambda: codecs.getincrementaldecoder("utf-8")()
-    )
-    err_decoder: codecs.IncrementalDecoder = field(
-        default_factory=lambda: codecs.getincrementaldecoder("utf-8")()
-    )
-    saw_exit: bool = False
-
-
-def _yield_frame_events(
-    frame: ExecFrame,
-    state: _ExecStreamState,
-) -> Iterator[ExecStreamEvent]:
-    if isinstance(frame, StdoutFrame):
-        if frame.data:
-            text = state.out_decoder.decode(base64.b64decode(frame.data))
-            if text:
-                yield {"type": "stdout", "data": text}
-    elif isinstance(frame, StderrFrame):
-        if frame.data:
-            text = state.err_decoder.decode(base64.b64decode(frame.data))
-            if text:
-                yield {"type": "stderr", "data": text}
-    elif isinstance(frame, ExitFrame):
-        rest_out = state.out_decoder.decode(b"", final=True)
-        if rest_out:
-            yield {"type": "stdout", "data": rest_out}
-        rest_err = state.err_decoder.decode(b"", final=True)
-        if rest_err:
-            yield {"type": "stderr", "data": rest_err}
-        state.saw_exit = True
-        yield {"type": "exit", "exit_code": frame.exit_code}
-    else:
-        assert isinstance(frame, ErrorFrame)
-        status = REASON_STATUS.get(frame.reason_code, 500)
-        raise error_from_status(
-            status,
-            {"error": frame.reason_code, "details": frame.message},
-            None,
-        )
-
-
-def _iter_exec_stream_events(lines: Iterator[str]) -> Iterator[ExecStreamEvent]:
-    state = _ExecStreamState()
-    for line in lines:
-        trimmed = line.strip()
-        if not trimmed:
-            continue
-        frame = _parse_exec_frame(json.loads(trimmed))
-        yield from _yield_frame_events(frame, state)
-
-    if not state.saw_exit:
-        raise NeevAIError(
-            "exec stream ended without an exit status (the command may have timed out)."
-        )
-
-
-async def _aiter_exec_stream_events(lines: AsyncIterator[str]) -> AsyncIterator[ExecStreamEvent]:
-    state = _ExecStreamState()
-    async for line in lines:
-        trimmed = line.strip()
-        if not trimmed:
-            continue
-        frame = _parse_exec_frame(json.loads(trimmed))
-        for event in _yield_frame_events(frame, state):
-            yield event
-
-    if not state.saw_exit:
-        raise NeevAIError(
-            "exec stream ended without an exit status (the command may have timed out)."
-        )
 
 
 class SandboxFiles:
@@ -224,9 +108,15 @@ class SandboxConnection:
         api_key: str,
         timeout_ms: int = 60000,
         client: httpx.Client | None = None,
+        sandbox_id: str | None = None,
     ):
-        self._transport = DataplaneTransport(connect_url, api_key, timeout_ms, client=client)
+        self._transport = DataplaneTransport(
+            connect_url, api_key, timeout_ms, client=client, sandbox_id=sandbox_id
+        )
         self.files = SandboxFiles(self)
+        from neevai.runtime.processes import SandboxProcesses
+
+        self.processes = SandboxProcesses(self)
 
     def close(self) -> None:
         """Closes the underlying transport connection."""
@@ -242,7 +132,7 @@ class SandboxConnection:
         stdin: str | None = None,
     ) -> Iterator[ExecStreamEvent]:
         """Runs a command and yields stdout/stderr chunks as they arrive."""
-        program, cmd_args = _prepare_exec_argv(command, args)
+        program, cmd_args = _prepare_argv(command, args, prefix="exec")
         body = _prepare_exec_body(program, cmd_args, cwd, env, timeout_ms, stdin)
         headers = {
             "Content-Type": "application/json",
@@ -358,9 +248,15 @@ class AsyncSandboxConnection:
         api_key: str,
         timeout_ms: int = 60000,
         client: httpx.AsyncClient | None = None,
+        sandbox_id: str | None = None,
     ):
-        self._transport = AsyncDataplaneTransport(connect_url, api_key, timeout_ms, client=client)
+        self._transport = AsyncDataplaneTransport(
+            connect_url, api_key, timeout_ms, client=client, sandbox_id=sandbox_id
+        )
         self.files = AsyncSandboxFiles(self)
+        from neevai.runtime.processes import AsyncSandboxProcesses
+
+        self.processes = AsyncSandboxProcesses(self)
 
     async def aclose(self) -> None:
         """Closes the underlying async transport connection."""
@@ -376,7 +272,7 @@ class AsyncSandboxConnection:
         stdin: str | None = None,
     ) -> AsyncIterator[ExecStreamEvent]:
         """Runs a command asynchronously and yields stdout/stderr chunks as they arrive."""
-        program, cmd_args = _prepare_exec_argv(command, args)
+        program, cmd_args = _prepare_argv(command, args, prefix="exec")
         body = _prepare_exec_body(program, cmd_args, cwd, env, timeout_ms, stdin)
         headers = {
             "Content-Type": "application/json",

@@ -95,7 +95,7 @@ Returned by `create()`, `get()`, `list().items`, etc.
 | --- | ---- |
 | `id`, `name`, `phase`, `replicas`, `connect_url`, `data` | properties |
 | `refresh()` | method |
-| `wait_until_ready(timeout_ms=120000, ...)` | method — polls control plane, then probes data plane |
+| `wait_until_ready(timeout_ms=120000, ...)` | method — polls control plane until `Ready` |
 | `pause(preserve_memory=None)` / `resume()` | methods |
 | `snapshot(params=None)` / `snapshots()` | methods |
 | `restore(snapshot_id)` / `fork(name)` | methods |
@@ -107,9 +107,10 @@ Returned by `create()`, `get()`, `list().items`, etc.
 
 ## Data-plane / runtime
 
-Data-plane APIs run commands and access files inside a **ready** sandbox (after
-`wait_until_ready()`). Most callers use `sandbox.exec` / `sandbox.files` on the
-handle rather than constructing `SandboxConnection` directly.
+Data-plane APIs run commands, access files, and manage supervised processes
+inside a **ready** sandbox (after `wait_until_ready()`). Most callers use
+`sandbox.exec` / `sandbox.files` / `sandbox.processes` on the handle rather than
+constructing `SandboxConnection` directly.
 
 ### Exec
 
@@ -119,6 +120,35 @@ handle rather than constructing `SandboxConnection` directly.
 | `sandbox.exec_stream(command, ...)` | `for event in ...` | `async for event in ...` |
 
 Details: [`api-inventory.md` → Exec and streaming](./api-inventory.md#exec-and-streaming)
+
+### `sandbox.processes`
+
+Supervised detached processes (lifetime outlives the start request). Complements
+request-scoped `sandbox.exec`.
+
+**Prerequisites:** Wait for `connect_url`, `phase == "Ready"`, and a successful
+data-plane probe before calling these methods. See
+[`api-inventory.md` → End-to-end flow](./api-inventory.md#end-to-end-flow).
+
+| Method | Returns | Summary |
+| ------ | ------- | ------- |
+| `start(program, args=None, cwd=None, env=None, stdin=None)` | `Process` | Starts a detached process; `program` is a string or argv list. |
+| `get(process_id, wait=False)` | `ProcessStatus` | Fetches status; `wait=True` blocks until exit. |
+| `list()` | `list[ProcessInfo]` | Lists running and recently-exited processes. |
+| `kill(process_id, signal=None)` | `bool` | Signals one process (default SIGTERM). |
+| `kill_all(signal=None)` | `int` | Signals all processes; returns `signalled_count`. |
+| `logs(process_id, cursor=None)` | `ProcessLogsPage` | Poll-mode UTF-8 log lines with cursor. |
+| `follow(process_id, cursor=None)` | `Iterator[ProcessLogEvent]` | NDJSON stream with base64 chunks + optional exit event. |
+
+`Process` handle: `id`, `state`, `exit_code`, `started_at`, plus `status()`, `wait()`,
+`kill()`, `logs()`, `follow()`.
+
+| API | Sync | Async |
+| --- | ---- | ----- |
+| `sandbox.processes.*` | direct calls | `await sandbox.processes.*` |
+| `proc.follow()` | `for event in proc.follow():` | `async for event in proc.follow():` |
+
+Details: [`api-inventory.md` → Processes API](./api-inventory.md#processes-api)
 
 ### `sandbox.files`
 
@@ -137,6 +167,7 @@ Listed for completeness; prefer handle methods above.
 | ---- | ---- | ----- |
 | Connection | `SandboxConnection(connect_url, api_key, ...)` | `AsyncSandboxConnection` |
 | Files helper | `SandboxFiles` | `AsyncSandboxFiles` |
+| Processes helper | `SandboxProcesses` | `AsyncSandboxProcesses` |
 | Close | `connection.close()` | `await connection.aclose()` |
 
 Details: [`api-inventory.md` → Data-plane connection](./api-inventory.md#data-plane-connection)
@@ -190,12 +221,22 @@ Minimal one-liners for each public API. Runnable examples link to repo paths.
 | --- | ------------ | ------------- | ---------------- |
 | `sandbox.exec(...)` | `result = sandbox.exec(["echo", "hi"])` | `result = await sandbox.exec(["echo", "hi"])` | [parallel_fanout.py](../examples/parallel_fanout.py), [async_sandbox.py](../examples/async_sandbox.py) |
 | `sandbox.exec_stream(...)` | `for event in sandbox.exec_stream(cmd):` | `async for event in sandbox.exec_stream(cmd):` | [streaming_exec.py](../examples/streaming_exec.py) |
+| `sandbox.processes.list(...)` | `sandbox.processes.list()` | `await sandbox.processes.list()` | [processes.py](../examples/processes.py), [process_pool.py](../examples/process_pool.py) |
+| `sandbox.processes.start(...)` | `proc = sandbox.processes.start(["sleep", "30"])` | `proc = await sandbox.processes.start(["sleep", "30"])` | [processes.py](../examples/processes.py), [process_pool.py](../examples/process_pool.py) |
+| `sandbox.processes.get(...)` | `status = sandbox.processes.get(proc.id)` | `status = await sandbox.processes.get(proc.id)` | — (`proc.wait()` / `proc.status()` call `get` internally; see [processes.py](../examples/processes.py)) |
+| `Process.status()` | `status = proc.status()` | `status = await proc.status()` | — (no dedicated example) |
+| `Process.wait()` | `final = proc.wait()` | `final = await proc.wait()` | [processes.py](../examples/processes.py), [process_pool.py](../examples/process_pool.py) |
+| `sandbox.processes.follow(...)` | `for event in proc.follow():` | `async for event in proc.follow():` | [processes.py](../examples/processes.py) |
+| `sandbox.processes.logs(...)` | `page = proc.logs()` | `page = await proc.logs()` | [processes.py](../examples/processes.py) |
+| `sandbox.processes.kill(...)` | `proc.kill(signal=Signal.TERM)` | `await proc.kill(signal=Signal.TERM)` | [processes.py](../examples/processes.py) |
+| `sandbox.processes.kill_all(...)` | `count = sandbox.processes.kill_all()` | `count = await sandbox.processes.kill_all()` | [process_pool.py](../examples/process_pool.py) |
 | `sandbox.files.write(...)` | `sandbox.files.write("path.txt", "content")` | `await sandbox.files.write("path.txt", "content")` | [files_api.py](../examples/files_api.py), [snapshot_fork_restore.py](../examples/snapshot_fork_restore.py) |
 | `sandbox.files.read(...)` | `data = sandbox.files.read("path.txt")` | `data = await sandbox.files.read("path.txt")` | [agent_loop.py](../examples/agent_patterns/utils/agent_loop.py) |
 | `sandbox.files.read_text(...)` | `text = sandbox.files.read_text("path.txt")` | `text = await sandbox.files.read_text("path.txt")` | [files_api.py](../examples/files_api.py), [snapshot_fork_restore.py](../examples/snapshot_fork_restore.py) |
 | `sandbox.files.list(...)` | `entries = sandbox.files.list("dir", recursive=True)` | `entries = await sandbox.files.list("dir", recursive=True)` | [files_api.py](../examples/files_api.py) |
 | `SandboxConnection` (low-level) | via `sandbox.exec` on handle | via `await sandbox.exec` on handle | — |
 | `SandboxFiles` (low-level) | via `sandbox.files` property | via `sandbox.files` property | [files_api.py](../examples/files_api.py) |
+| `SandboxProcesses` (low-level) | via `sandbox.processes` property | via `sandbox.processes` property | [processes.py](../examples/processes.py) |
 
 ---
 
