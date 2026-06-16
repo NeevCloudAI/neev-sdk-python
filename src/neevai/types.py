@@ -15,6 +15,12 @@ __all__ = [
     "ForkSandboxRequest",
     "MetricSeries",
     "PauseSandboxParams",
+    "ProcessInfo",
+    "ProcessLogEntry",
+    "ProcessLogEvent",
+    "ProcessLogsPage",
+    "ProcessState",
+    "ProcessStatus",
     "RestoreSandboxRequest",
     "SandboxData",
     "SandboxEgressConfig",
@@ -26,6 +32,7 @@ __all__ = [
     "SandboxTemplate",
     "SandboxTemplateListResponse",
     "Scope",
+    "Signal",
     "Snapshot",
     "SnapshotListResponse",
     "SnapshotStatus",
@@ -162,3 +169,50 @@ class ExitStreamEvent(TypedDict):
 
 
 ExecStreamEvent = StdoutStreamEvent | StderrStreamEvent | ExitStreamEvent
+
+ProcessState = Literal["running", "exited"]
+
+
+class ProcessStatus(BaseModel):
+    """Status snapshot for a supervised sandbox process."""
+
+    process_id: str
+    state: ProcessState
+    exit_code: int | None = None
+    started_at: int
+
+
+class ProcessInfo(ProcessStatus):
+    """Process status plus the command that was started."""
+
+    name: str
+    args: list[str]
+    cwd: str | None = None
+
+
+class ProcessLogEntry(BaseModel):
+    """Single log line from poll-mode log retrieval."""
+
+    data: str
+
+
+class ProcessLogsPage(BaseModel):
+    """Page of process log entries with cursor metadata."""
+
+    entries: list[ProcessLogEntry]
+    cursor: int
+    dropped: bool
+    state: ProcessState
+
+
+ProcessLogEvent = ExecStreamEvent
+
+
+class Signal:
+    """POSIX signal numbers for ``kill`` and ``kill_all``."""
+
+    HUP = 1
+    INT = 2
+    QUIT = 3
+    KILL = 9
+    TERM = 15

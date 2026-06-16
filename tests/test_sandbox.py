@@ -46,6 +46,33 @@ def test_wait_until_ready_ready_phase():
     assert result is sb
 
 
+def test_wait_until_ready_ready_phase_does_not_probe_runtime(mock_transport, monkeypatch):
+    """wait_until_ready returns when control plane is Ready without probing the data plane."""
+    client = NeevAI(
+        api_key="test",
+        org_id="org1",
+        project_id="proj1",
+        region="us-east-1",
+        client=mock_transport,
+    )
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
+    _mark_ready(sb)
+
+    probe_calls = {"count": 0}
+
+    def counting_probe(self, timeout_ms=5_000):
+        probe_calls["count"] += 1
+        return True
+
+    monkeypatch.setattr(Sandbox, "_probe_runtime", counting_probe)
+
+    sb.wait_until_ready(timeout_ms=100)
+    assert probe_calls["count"] == 0
+    assert sb._conn is None
+
+    client.close()
+
+
 def test_wait_until_ready_paused_raises():
     data = _sandbox_data(phase="Paused", replicas=0, connect_url=None)
     sb = Sandbox(None, data)
@@ -133,33 +160,8 @@ def test_sandbox_pause_and_resume_invalidate_cached_connection(mock_transport):
     client.close()
 
 
-def test_wait_until_ready_waits_for_runtime_when_unreachable(mock_transport, monkeypatch):
-    client = NeevAI(
-        api_key="test",
-        org_id="org1",
-        project_id="proj1",
-        region="us-east-1",
-        client=mock_transport,
-    )
-    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
-    _mark_ready(sb)
-
-    attempts = {"count": 0}
-
-    def flaky_probe(self, timeout_ms=5_000):
-        attempts["count"] += 1
-        return attempts["count"] >= 2
-
-    monkeypatch.setattr(Sandbox, "_probe_runtime", flaky_probe)
-
-    sb.wait_until_ready(timeout_ms=5_000, poll_interval_ms=10)
-    assert attempts["count"] == 2
-    assert sb._conn is None
-
-    client.close()
-
-
-def test_sandbox_restore_waits_for_runtime_after_invalidate(mock_transport, monkeypatch):
+def test_sandbox_restore_does_not_wait_for_runtime(mock_transport, monkeypatch):
+    """restore invalidates the connection but does not probe the data plane."""
     client = NeevAI(
         api_key="test",
         org_id="org1",
@@ -175,16 +177,16 @@ def test_sandbox_restore_waits_for_runtime_after_invalidate(mock_transport, monk
     sb.restore(str(snap.id))
     _mark_ready(sb, connect_url="https://same.example.com")
 
-    attempts = {"count": 0}
+    probe_calls = {"count": 0}
 
-    def flaky_probe(self, timeout_ms=5_000):
-        attempts["count"] += 1
-        return attempts["count"] >= 2
+    def counting_probe(self, timeout_ms=5_000):
+        probe_calls["count"] += 1
+        return True
 
-    monkeypatch.setattr(Sandbox, "_probe_runtime", flaky_probe)
+    monkeypatch.setattr(Sandbox, "_probe_runtime", counting_probe)
 
-    sb.wait_until_ready(timeout_ms=5_000, poll_interval_ms=10)
-    assert attempts["count"] == 2
+    sb.wait_until_ready(timeout_ms=100)
+    assert probe_calls["count"] == 0
     assert sb._conn is None
 
     client.close()
@@ -209,6 +211,23 @@ def test_wait_for_runtime_ready_clears_cached_connection(mock_transport, monkeyp
 
     sb._wait_for_runtime_ready(timeout_ms=1_000)
     assert sb._conn is None
+
+    client.close()
+
+
+def test_sandbox_connection_passes_sandbox_id_to_transport(mock_transport):
+    client = NeevAI(
+        api_key="test",
+        org_id="org1",
+        project_id="proj1",
+        region="us-east-1",
+        client=mock_transport,
+    )
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
+    _mark_ready(sb)
+
+    conn = sb._connection()
+    assert conn._transport.sandbox_id == sb.id
 
     client.close()
 
