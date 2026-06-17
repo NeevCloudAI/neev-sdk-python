@@ -18,6 +18,7 @@ import pytest
 _FAKE_DB: dict[str, Any] = {
     "sandboxes": {},
     "snapshots": {},
+    "agents": {},
     "templates": {
         "sb-ubuntu-26-04-minimal": {
             "id": "sb-ubuntu-26-04-minimal",
@@ -29,8 +30,21 @@ _FAKE_DB: dict[str, Any] = {
             "updated_at": "2026-01-01T00:00:00Z",
         }
     },
+    "agent_templates": {
+        "ag-claude-code": {
+            "id": "ag-claude-code",
+            "name": "claude-code",
+            "description": "Claude Code agent",
+            "category": "coding",
+            "status": "active",
+            "ui": {"mode": "tui"},
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z",
+        }
+    },
     "next_snapshot_id": 1,
     "next_id": 1,
+    "next_agent_id": 1,
 }
 
 
@@ -67,6 +81,53 @@ def _make_snapshot_record(
 
 def _sandbox_id(n: int) -> str:
     return str(uuid.UUID(int=n))
+
+
+def _agent_id(n: int) -> str:
+    return str(uuid.UUID(int=n + 0x2000))
+
+
+def _resolve_agent_template_id(template_name: str) -> str | None:
+    for template in _FAKE_DB["agent_templates"].values():
+        if template["name"] == template_name:
+            return template["id"]
+    return None
+
+
+def _promote_agent_to_ready(agent: dict[str, Any]) -> None:
+    if agent.get("status") != "Provisioning":
+        return
+    agent["status"] = "Ready"
+    sandbox = _FAKE_DB["sandboxes"].get(str(agent["sandbox_id"]))
+    if sandbox is not None:
+        sandbox["phase"] = "Ready"
+        sandbox["replicas"] = 1
+        sandbox["connect_url"] = f"https://sandbox.example/{agent['sandbox_id']}"
+
+
+def _make_agent_record(
+    *,
+    aid: str,
+    org_id: str,
+    project_id: str,
+    sandbox_id: str,
+    body: dict[str, Any] | None,
+    now: str,
+    agent_template_id: str,
+) -> dict[str, Any]:
+    req = body or {}
+    return {
+        "id": aid,
+        "org_id": org_id,
+        "project_id": project_id,
+        "name": req.get("name", "test-agent"),
+        "agent_template_id": agent_template_id,
+        "sandbox_id": sandbox_id,
+        "config": req.get("config"),
+        "status": "Provisioning",
+        "created_at": now,
+        "updated_at": now,
+    }
 
 
 def _make_sandbox_record(
@@ -119,6 +180,108 @@ def _control_response(
     ) -> httpx.Response:
         content = b"" if data is None else json.dumps(data).encode()
         return httpx.Response(status_code=status, content=content, headers=headers or {})
+
+    # ---- Real API paths: /api/v1beta1/orgs/{org}/projects/{proj}/agents[...] ----
+    m_agent = re.match(
+        r"^/api/v1beta1/orgs/([^/]+)/projects/([^/]+)/agents"
+        r"(?:/([^/]+))?(?:/([^/]+))?$",
+        path,
+    )
+    if m_agent:
+        org_id = m_agent.group(1)
+        project_id = m_agent.group(2)
+        agent_id = m_agent.group(3)
+        action = m_agent.group(4)
+
+        if agent_id is None:
+            if method == "GET":
+                items = list(_FAKE_DB["agents"].values())
+                page_val = int((query or {}).get("page", 1))
+                limit_val = int((query or {}).get("limit", 100))
+                return json_resp(
+                    200,
+                    {
+                        "items": items,
+                        "total": len(items),
+                        "page": page_val,
+                        "limit": limit_val,
+                    },
+                )
+            if method == "POST":
+                req = body if isinstance(body, dict) else {}
+                template_name = req.get("agent_template", "")
+                template_id = _resolve_agent_template_id(template_name)
+                if not template_id:
+                    return json_resp(400, {"message": "unknown agent template"})
+
+                now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+                sid = _sandbox_id(_FAKE_DB["next_id"])
+                _FAKE_DB["next_id"] += 1
+                sandbox_body: dict[str, Any] = {"name": req.get("name")}
+                if req.get("region"):
+                    sandbox_body["region"] = req["region"]
+                sandbox = _make_sandbox_record(
+                    sid=sid,
+                    org_id=org_id,
+                    project_id=project_id,
+                    body=sandbox_body,
+                    now=now,
+                )
+                _FAKE_DB["sandboxes"][sid] = sandbox
+
+                aid = _agent_id(_FAKE_DB["next_agent_id"])
+                _FAKE_DB["next_agent_id"] += 1
+                agent = _make_agent_record(
+                    aid=aid,
+                    org_id=org_id,
+                    project_id=project_id,
+                    sandbox_id=sid,
+                    body=req,
+                    now=now,
+                    agent_template_id=template_id,
+                )
+                _FAKE_DB["agents"][aid] = agent
+                return json_resp(201, agent)
+            return json_resp(400, {"message": "bad request"})
+
+        agent = _FAKE_DB["agents"].get(agent_id)
+        if not agent:
+            return json_resp(404, {"message": "not found"})
+
+        if action is None:
+            if method == "GET":
+                _promote_agent_to_ready(agent)
+                return json_resp(200, agent)
+            if method == "DELETE":
+                sandbox = _FAKE_DB["sandboxes"].pop(agent["sandbox_id"], None)
+                del _FAKE_DB["agents"][agent_id]
+                if sandbox is not None:
+                    pass
+                return json_resp(204)
+            if method == "PATCH":
+                if isinstance(body, dict):
+                    if "resources" in body:
+                        agent.setdefault("config", {})
+                    agent.update(body)
+                    return json_resp(200, agent)
+            return json_resp(400, {"message": "bad request"})
+
+        if action == "pause":
+            agent["status"] = "Paused"
+            sandbox = _FAKE_DB["sandboxes"].get(agent["sandbox_id"])
+            if sandbox is not None:
+                sandbox["phase"] = "Paused"
+                sandbox["replicas"] = 0
+            return json_resp(200, agent)
+        if action == "resume":
+            agent["status"] = "Provisioning"
+            sandbox = _FAKE_DB["sandboxes"].get(agent["sandbox_id"])
+            if sandbox is not None:
+                sandbox["phase"] = "Pending"
+                sandbox["replicas"] = 1
+            return json_resp(200, agent)
+
+        return json_resp(400, {"message": "bad request"})
 
     # ---- Real API paths: /api/v1beta1/orgs/{org}/projects/{proj}/sandboxes[...] --
     m = re.match(
@@ -268,6 +431,30 @@ def _control_response(
             del _FAKE_DB["snapshots"][snapshot_id]
             return json_resp(204)
         return json_resp(400, {"message": "bad request"})
+
+    # ---- Agent templates (global catalogue) -----------------------------------
+    if path == "/api/v1beta1/agent-templates" and method == "GET":
+        items = list(_FAKE_DB["agent_templates"].values())
+        query = query or {}
+        page_val = int(query["page"]) if "page" in query else 1
+        limit_val = int(query["limit"]) if "limit" in query else 20
+        return json_resp(
+            200,
+            {
+                "items": items,
+                "total": len(items),
+                "page": page_val,
+                "limit": limit_val,
+            },
+        )
+
+    m_agent_template = re.match(r"^/api/v1beta1/agent-templates/([^/]+)$", path)
+    if m_agent_template and method == "GET":
+        template_id = m_agent_template.group(1)
+        template = _FAKE_DB["agent_templates"].get(template_id)
+        if not template:
+            return json_resp(404, {"message": "not found"})
+        return json_resp(200, template)
 
     # ---- Sandbox templates ----------------------------------------------------
     if path == "/api/v1beta1/sandbox-templates" and method == "GET":
@@ -428,8 +615,10 @@ def control_transport() -> httpx.Client:
     """Provides a fresh mock control‑plane httpx Client for each test."""
     _FAKE_DB["sandboxes"].clear()
     _FAKE_DB["snapshots"].clear()
+    _FAKE_DB["agents"].clear()
     _FAKE_DB["next_id"] = 1
     _FAKE_DB["next_snapshot_id"] = 1
+    _FAKE_DB["next_agent_id"] = 1
     return httpx.Client(transport=MockControlTransport())
 
 
@@ -444,6 +633,8 @@ def mock_transport() -> httpx.Client:
     """Alias for `control_transport` – a fresh mock control‑plane httpx Client per test."""
     _FAKE_DB["sandboxes"].clear()
     _FAKE_DB["snapshots"].clear()
+    _FAKE_DB["agents"].clear()
     _FAKE_DB["next_id"] = 1
     _FAKE_DB["next_snapshot_id"] = 1
+    _FAKE_DB["next_agent_id"] = 1
     return httpx.Client(transport=MockControlTransport())

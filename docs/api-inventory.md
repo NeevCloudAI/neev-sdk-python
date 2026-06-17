@@ -29,7 +29,10 @@ which examples demonstrate which APIs, see
   - [delete_snapshot](#clientsandboxesdelete_snapshotsnapshot_id-org_idnone-project_idnone)
   - [restore](#clientsandboxesrestoreid-snapshot_id-org_idnone-project_idnone)
   - [fork](#clientsandboxesforkid-name-org_idnone-project_idnone)
+- [Agents resource](#agents-resource)
+- [Agent templates resource](#agent-templates-resource)
 - [Templates resource](#templates-resource)
+- [Agent handle](#agent-handle)
 - [Sandbox handle](#sandbox-handle)
 - [Exec and streaming](#exec-and-streaming)
 - [Files API](#files-api)
@@ -58,6 +61,19 @@ Everything in `neevai.__all__`:
 | `AsyncRawClient` | class | `transport/lifecycle.py` |
 | `Sandbox` | class | `handles/sandbox.py` |
 | `AsyncSandbox` | class | `handles/sandbox.py` |
+| `Agent` | class | `handles/agent.py` |
+| `AsyncAgent` | class | `handles/agent.py` |
+| `AgentPage` / `AsyncAgentPage` | dataclass | `resources/agents.py` |
+| `ListAgentsParams` | dataclass | `resources/agents.py` |
+| `AgentTemplatePage` / `AsyncAgentTemplatePage` | dataclass | `resources/agent_templates.py` |
+| `ListAgentTemplatesParams` | dataclass | `resources/agent_templates.py` |
+| `AgentData` | model | `types.py` |
+| `AgentStatus` | enum | generated |
+| `CreateAgentParams` | model alias | generated → `CreateAgentRequest` |
+| `UpdateAgentParams` | model alias | generated → `UpdateAgentRequest` |
+| `AgentListResponse` | model | `types.py` |
+| `AgentTemplate` | model | generated |
+| `AgentTemplateListResponse` | model | generated |
 | `SandboxConnection` | class | `runtime/sandboxd.py` |
 | `AsyncSandboxConnection` | class | `runtime/sandboxd.py` |
 | `SandboxFiles` | class | `runtime/sandboxd.py` |
@@ -115,7 +131,9 @@ Types exported from `neevai.types.__all__`:
 Synchronous platform client. Exposes three resource namespaces:
 
 - `client.sandboxes` — CRUD and metrics for sandboxes in a project
-- `client.templates` — read-only template catalogue
+- `client.agents` — CRUD and lifecycle for agents in a project
+- `client.agent_templates` — read-only agent template catalogue (global)
+- `client.templates` — read-only sandbox template catalogue
 - `client.raw` — untyped control-plane HTTP escape hatch
 
 **Parameters:**
@@ -420,6 +438,68 @@ restored.wait_until_ready()
 
 ---
 
+## Agents resource
+
+Access via `client.agents` (`Agents`). Requires org/project scope. Injects
+`client.default_region` on create only when the client has a default region set
+(region is optional per spec — unlike sandbox create).
+
+### `client.agents.create(params, org_id=None, project_id=None)`
+
+**Params:** `CreateAgentParams` or dict. Required: `name`, `agent_template` (template
+**name**, e.g. `"claude-code"`). Optional: `region`, `config`, `env`, `resources`, `egress`.
+
+**Returns:** `Agent` handle with `status` typically `Provisioning`.
+
+```python
+agent = client.agents.create({
+    "name": "my-agent",
+    "agent_template": "claude-code",
+})
+```
+
+**Example:** [`create_agent.py`](../examples/create_agent.py)
+
+### `client.agents.list(page=None, limit=None, org_id=None, project_id=None)`
+
+**Returns:** `AgentPage` with `items: list[Agent]`. Omits `page`/`limit` from query when unset.
+
+### `client.agents.get(id, org_id=None, project_id=None)`
+
+**Returns:** `Agent`. **Raises:** `NotFoundError` if unknown.
+
+### `client.agents.update(id, params, org_id=None, project_id=None)`
+
+In-place update of `egress` and/or `resources` (cpu/memory). **Empty update guard:**
+passing `{}` raises `NeevAIError` locally — no HTTP call.
+
+```python
+agent = client.agents.update(agent.id, {"resources": {"cpu": 2, "memory_gb": 4}})
+```
+
+### `client.agents.pause(id, ...)` / `client.agents.resume(id, ...)` / `client.agents.delete(id, ...)`
+
+Pause and resume return updated `Agent` handles. Delete returns `None` (HTTP 204).
+
+---
+
+## Agent templates resource
+
+Access via `client.agent_templates`. Read-only catalogue with **no** org/project scope.
+Paths: `/api/v1beta1/agent-templates`.
+
+### `client.agent_templates.list(page=None, limit=None)`
+
+**Returns:** `AgentTemplatePage`. Omits `page`/`limit` from query when unset.
+
+### `client.agent_templates.get(template_id)`
+
+**Returns:** `AgentTemplate`. **Raises:** `NotFoundError` if unknown.
+
+**Example:** [`create_agent.py`](../examples/create_agent.py)
+
+---
+
 ## Templates resource
 
 Access via `client.templates`. Read-only catalogue with no org/project scope.
@@ -446,6 +526,48 @@ for tmpl in page.items:
 tmpl = client.templates.get("tmpl-abc123")
 print(tmpl.description)
 ```
+
+---
+
+## Agent handle
+
+Returned by `client.agents.create()`, `get()`, and `list().items`. Holds mutable
+in-memory state mirroring the last control-plane response.
+
+### Properties
+
+| Property | Type | Description |
+| -------- | ---- | ----------- |
+| `id` | `str` | Agent UUID |
+| `name` | `str` | DNS-1123 label |
+| `status` | `str` | `Provisioning`, `Ready`, `Paused`, `Failed`, `Deleting`, or future values |
+| `sandbox_id` | `str` | Backing sandbox UUID |
+| `agent_template_id` | `str` | Catalogue template id (e.g. `ag-claude-code`) |
+| `config` | `dict \| None` | Effective merged configuration |
+| `data` | `dict[str, Any]` | Full record snapshot |
+
+### `agent.wait_until_ready(timeout_ms=120000, poll_interval_ms=2000, on_poll=None)`
+
+Polls `refresh()` until `status == "Ready"`.
+
+**Raises:**
+
+- `NeevAIError` if `timeout_ms` or `poll_interval_ms` is not a positive finite number
+- `NeevAIError` on timeout (includes agent id and last status)
+- `NeevAIError` if status is `Failed`
+- `NeevAIError` if status is `Paused` (call `resume()` first)
+
+Does **not** fail fast on `Deleting` (matches TypeScript SDK).
+
+### `agent.sandbox()`
+
+Resolves the backing sandbox as a `Sandbox` handle via `Agents.get_sandbox()`.
+
+### `agent.update(params)` / `agent.pause()` / `agent.resume()` / `agent.delete()`
+
+Delegate to `client.agents` with scope threading. Empty `update({})` raises locally.
+
+**Example:** [`create_agent.py`](../examples/create_agent.py)
 
 ---
 
@@ -1029,6 +1151,62 @@ Generated snapshot metadata record.
 | `created_at` | `datetime` | yes |
 | `updated_at` | `datetime` | yes |
 
+### `CreateAgentParams`
+
+Alias for generated `CreateAgentRequest`.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `name` | `str` (DNS-1123 label, max 63) | yes |
+| `agent_template` | `str` | yes (template **name**, e.g. `claude-code`) |
+| `region` | `str \| None` | no (injected from client default only when set) |
+| `config` | `dict \| None` | no |
+| `env` | `list[EnvVar] \| None` | no |
+| `resources` | `SandboxResources \| None` | no |
+| `egress` | `SandboxEgressConfig \| None` | no |
+
+### `UpdateAgentParams`
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `egress` | `SandboxEgressConfig \| None` | no (at least one field required on update) |
+| `resources` | `SandboxResources \| None` | no |
+
+### `AgentData`
+
+Subclass of generated `Agent` with relaxed `status: str`.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `id` | `UUID` | yes |
+| `org_id` | `str` | yes |
+| `project_id` | `str` | yes |
+| `name` | `str` | yes |
+| `agent_template_id` | `str` | yes |
+| `sandbox_id` | `UUID` | yes |
+| `config` | `dict \| None` | no |
+| `status` | `str` | yes |
+| `created_at` | `datetime` | yes |
+| `updated_at` | `datetime` | yes |
+
+### `AgentTemplate`
+
+Catalogue entry for packaged agents (`id` pattern `ag-…`).
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `id` | `str` | yes |
+| `name` | `str` | yes |
+| `description` | `str` | yes |
+| `category` | `str` | yes |
+| `status` | `active` \| `deprecated` \| `disabled` | yes |
+| `ui` | `dict` | yes |
+| `config_schema` | `dict \| None` | no |
+| `default_resources` | `SandboxResources \| None` | no |
+| `default_egress` | `SandboxEgressConfig \| None` | no |
+| `created_at` | `datetime` | yes |
+| `updated_at` | `datetime` | yes |
+
 ### `CreateSandboxParams`
 
 Alias for generated `CreateSandboxRequest`.
@@ -1274,6 +1452,27 @@ Returned from `list()` methods; not exported at package root.
 | `page` | `int` |
 | `limit` | `int` |
 
+### `AgentPage` / `AsyncAgentPage`
+
+| Field | Type |
+| ----- | ---- |
+| `items` | `list[Agent]` or `list[AsyncAgent]` |
+| `total` | `int` |
+| `page` | `int` |
+| `limit` | `int` |
+
+### `AgentTemplatePage` / `AsyncAgentTemplatePage`
+
+| Field | Type |
+| ----- | ---- |
+| `items` | `list[AgentTemplate]` |
+| `total` | `int` |
+| `page` | `int` |
+| `limit` | `int` |
+
+List methods for agents and agent templates omit `page`/`limit` from the query
+when unset (server defaults apply).
+
 ---
 
 ## Sync/async parity
@@ -1285,8 +1484,11 @@ Every sync public API has an async equivalent with matching semantics.
 | `NeevAI` | `AsyncNeevAI` | |
 | `NeevAI.close()` | `AsyncNeevAI.aclose()` | Naming differs by convention |
 | `Sandboxes.*` | `AsyncSandboxes.*` | Add `await` |
+| `Agents.*` | `AsyncAgents.*` | Add `await` |
+| `AgentTemplates.*` | `AsyncAgentTemplates.*` | Add `await` |
 | `Templates.*` | `AsyncTemplates.*` | Add `await` |
 | `Sandbox.*` | `AsyncSandbox.*` | Add `await` on methods |
+| `Agent.*` | `AsyncAgent.*` | Add `await` on methods |
 | `Sandbox.exec_stream` | `AsyncSandbox.exec_stream` | `async for` instead of `for` |
 | `SandboxConnection.close()` | `AsyncSandboxConnection.aclose()` | Naming differs |
 | `SandboxFiles.*` | `AsyncSandboxFiles.*` | Add `await` |
@@ -1296,7 +1498,8 @@ Every sync public API has an async equivalent with matching semantics.
 | `RawClient.request` | `AsyncRawClient.request` | Add `await` |
 
 No sync-only or async-only public methods. Pagination types mirror each other
-(`SandboxPage` / `AsyncSandboxPage`, `TemplatePage` / `AsyncTemplatePage`).
+(`SandboxPage` / `AsyncSandboxPage`, `TemplatePage` / `AsyncTemplatePage`,
+`AgentPage` / `AsyncAgentPage`, `AgentTemplatePage` / `AsyncAgentTemplatePage`).
 
 ---
 
@@ -1309,7 +1512,7 @@ Compact reviewer index. Each symbol should also appear in
 
 | Symbol | Kind | Description |
 | ------ | ---- | ----------- |
-| `NeevAI` | class | Sync platform client; exposes `.sandboxes`, `.templates`, `.raw` |
+| `NeevAI` | class | Sync platform client; exposes `.sandboxes`, `.agents`, `.agent_templates`, `.templates`, `.raw` |
 | `NeevAI.__init__` | method | `api_key`, `org_id`, `project_id`, `region`, `base_url`, `timeout_ms`, `max_retries`, `client` |
 | `NeevAI.close` | method | Release HTTP transport |
 | `AsyncNeevAI` | class | Async platform client |
@@ -1341,6 +1544,39 @@ Compact reviewer index. Each symbol should also appear in
 | `Templates.list` | method | `TemplatePage` |
 | `Templates.get` | method | `SandboxTemplate` |
 | `AsyncTemplates.*` | methods | Same as sync with `await` |
+
+### Agents resource (`resources/agents.py`)
+
+| Symbol | Kind | Returns |
+| ------ | ---- | ------- |
+| `Agents.create` | method | `Agent` |
+| `Agents.list` | method | `AgentPage` |
+| `Agents.get` | method | `Agent` |
+| `Agents.update` | method | `Agent` (empty body guard) |
+| `Agents.pause` / `.resume` | methods | `Agent` |
+| `Agents.delete` | method | `None` |
+| `Agents.get_sandbox` | method | `Sandbox` |
+| `AsyncAgents.*` | methods | Same as sync with `await` |
+
+### Agent templates resource (`resources/agent_templates.py`)
+
+| Symbol | Kind | Returns |
+| ------ | ---- | ------- |
+| `AgentTemplates.list` | method | `AgentTemplatePage` |
+| `AgentTemplates.get` | method | `AgentTemplate` |
+| `AsyncAgentTemplates.*` | methods | Same as sync with `await` |
+
+### Agent handle (`handles/agent.py`)
+
+| Symbol | Kind | Notes |
+| ------ | ---- | ----- |
+| `Agent.id`, `.name`, `.status`, `.sandbox_id`, `.agent_template_id` | properties | `status` is `str` |
+| `Agent.data` / `.to_json` | property / method | JSON-serializable dict |
+| `Agent.refresh` | method | Re-fetch from control plane |
+| `Agent.wait_until_ready` | method | Poll until `Ready`; timing validation |
+| `Agent.sandbox` | method | Backing `Sandbox` handle |
+| `Agent.update` / `.pause` / `.resume` / `.delete` | methods | Scope-threaded |
+| `AsyncAgent.*` | mirror | Same surface with `await` |
 
 ### Sandbox handle (`handles/sandbox.py`)
 
