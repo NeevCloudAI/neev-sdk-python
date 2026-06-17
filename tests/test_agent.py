@@ -123,9 +123,7 @@ def test_agent_wait_until_ready_failed_fails_fast(mock_transport):
         (float("nan"), 100),
     ],
 )
-def test_agent_wait_until_ready_invalid_timings(
-    mock_transport, timeout_ms, poll_interval_ms
-):
+def test_agent_wait_until_ready_invalid_timings(mock_transport, timeout_ms, poll_interval_ms):
     client = _make_client(mock_transport)
     agent = client.agents.create({"name": "my-agent", "agent_template": "claude-code"})
     with pytest.raises(NeevAIError, match="positive finite"):
