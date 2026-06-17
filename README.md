@@ -40,7 +40,8 @@ Set these environment variables before running scripts, or pass equivalent kwarg
 | `NEEVCLOUD_PROJECT_ID` | Default project ID |
 | `NEEVCLOUD_REGION` | Default deployment region for sandbox create |
 | `NEEVCLOUD_BASE_URL` | Control-plane base URL (default: `https://api.ai.neevcloud.com/agent`) |
-| `NEEVCLOUD_SANDBOX_TEMPLATE_ID` | Optional template id (defaults to `sb-ubuntu-26-04-minimal` in examples) |
+| `NEEVCLOUD_SANDBOX_TEMPLATE_ID` | Optional sandbox template id (defaults to `sb-ubuntu-26-04-minimal` in examples) |
+| `NEEV_AGENT_TEMPLATE` | Optional agent template **name** for `create_agent.py` (default: `claude-code`) |
 
 **Linux / macOS (bash/zsh)** — current session:
 
@@ -141,6 +142,32 @@ final = proc.wait()
 See [`examples/processes.py`](examples/processes.py) and
 [`examples/process_pool.py`](examples/process_pool.py).
 
+## Agents
+
+Provision a packaged agent from the catalogue template (`agent_template` is the
+template **name**, e.g. `"claude-code"`), wait for it to become `Ready`, then
+reach its environment through the backing sandbox:
+
+```python
+from neevai import NeevAI
+
+with NeevAI(api_key="...", org_id="...", project_id="...") as client:
+    agent = client.agents.create({
+        "name": "my-agent",
+        "agent_template": "claude-code",
+    })
+    agent.wait_until_ready()
+    sandbox = agent.sandbox()
+    sandbox.files.write("notes.md", "# scratch\n")
+    agent.update({"resources": {"cpu": 2, "memory_gb": 4}})
+    agent.pause()
+    agent.delete()
+```
+
+Browse templates with `client.agent_templates.list()` / `.get(id)`. Region is
+optional on create — the client injects `default_region` only when set (unlike
+sandbox create, which requires a region). See [`examples/create_agent.py`](examples/create_agent.py).
+
 ## Examples
 
 Runnable examples live under [`examples/`](examples/). From the repo root, run any example with:
@@ -154,6 +181,7 @@ See [`examples/README.md`](examples/README.md) for the full catalogue and learni
 | Example | What it shows |
 | ------- | ------------- |
 | [`templates_list.py`](examples/templates_list.py) | List templates → get by id → create sandbox |
+| [`create_agent.py`](examples/create_agent.py) | Agent templates → create agent → sandbox → update/pause/delete |
 | [`sandbox_lifecycle.py`](examples/sandbox_lifecycle.py) | Create → wait → metrics → pause → delete |
 | [`snapshot_fork_restore.py`](examples/snapshot_fork_restore.py) | Snapshot → `from_snapshot` rollback → fork |
 | [`async_sandbox.py`](examples/async_sandbox.py) | End-to-end `AsyncNeevAI` workflow |

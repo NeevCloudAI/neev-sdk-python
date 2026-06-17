@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from enum import Enum
+from typing import Any
 from uuid import UUID
 
 from pydantic import (
@@ -180,12 +181,60 @@ class MetricSeries(BaseModel):
     )
 
 
+class ConnectTokenResponse(BaseModel):
+    token: str = Field(
+        ...,
+        description="Signed JWT connect-token, presented as a bearer credential to the sandbox data plane.",
+    )
+    expires_in: int = Field(..., description="Token lifetime in seconds.")
+
+
 class SandboxMetricsResponse(BaseModel):
     sandbox_id: UUID
     from_: AwareDatetime = Field(..., alias="from")
     to: AwareDatetime
     step: str = Field(..., description="Resolution actually used after server-side clamping.")
     series: list[MetricSeries]
+
+
+class AgentStatus(Enum):
+    Provisioning = "Provisioning"
+    Ready = "Ready"
+    Paused = "Paused"
+    Failed = "Failed"
+    Deleting = "Deleting"
+
+
+class Agent(BaseModel):
+    id: UUID
+    org_id: str
+    project_id: str
+    name: str
+    agent_template_id: str = Field(
+        ...,
+        description="Catalogue template id the agent was created from (e.g. ag-claude-code).",
+    )
+    sandbox_id: UUID = Field(..., description="UUID of the backing sandbox that runs this agent.")
+    config: dict[str, Any] | None = Field(
+        None,
+        description="Effective agent configuration (template defaults merged with create-time overrides).",
+    )
+    status: AgentStatus
+    created_at: AwareDatetime
+    updated_at: AwareDatetime
+
+
+class AgentListResponse(BaseModel):
+    items: list[Agent]
+    total: int
+    page: int
+    limit: int
+
+
+class Status(Enum):
+    active = "active"
+    deprecated = "deprecated"
+    disabled = "disabled"
 
 
 class SandboxEgressConfig(BaseModel):
@@ -203,6 +252,81 @@ class SandboxEgressConfig(BaseModel):
     allow: list[SandboxEgressRule] | None = Field(
         None, description="List of egress rules for host/IP destinations to allow."
     )
+
+
+class CreateAgentRequest(BaseModel):
+    name: constr(pattern=r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", min_length=1, max_length=63) = Field(
+        ...,
+        description="Agent name. Used verbatim as the backing Sandbox CR name, so it must\nbe a valid DNS-1123 label: lowercase alphanumeric characters or '-',\nstarting and ending with an alphanumeric, max 63 characters.\n",
+        examples=["my-agent"],
+    )
+    agent_template: constr(min_length=1) = Field(
+        ...,
+        description="Catalogue template name (e.g. claude-code). The server validates the\ntemplate exists and is active, then provisions the agent from it.\n",
+        examples=["claude-code"],
+    )
+    region: str | None = Field(
+        None,
+        description="Region to provision the backing sandbox in; omit to use the platform default.",
+        examples=["dev"],
+    )
+    config: dict[str, Any] | None = Field(
+        None,
+        description="Agent configuration overrides, shallow-merged over the template's\ndefault_config. Shape is template-specific (see template config_schema).\n",
+    )
+    env: list[EnvVar] | None = Field(
+        None, description="Environment variables injected into the agent container."
+    )
+    resources: SandboxResources | None = None
+    egress: SandboxEgressConfig | None = Field(
+        None,
+        description="Network egress policy for the agent's backing sandbox. Omit for the\nsecure default (deny-all). Use allow_list with allow rules to permit\nspecific destinations (e.g. the model provider, git, registries).\n",
+    )
+
+
+class UpdateAgentRequest(BaseModel):
+    egress: SandboxEgressConfig | None = Field(
+        None,
+        description="Replace the agent's egress policy (re-applied live, no pod restart).",
+    )
+    resources: SandboxResources | None = Field(
+        None,
+        description="New cpu/memory sizing, resized in place on the running pod. Only the\nfields provided change. disk_gb is not resizable in place and is\nrejected if supplied with a different value.\n",
+    )
+
+
+class AgentTemplate(BaseModel):
+    id: constr(pattern=r"^ag-[a-zA-Z0-9-]+$")
+    name: str
+    description: str
+    category: str = Field(..., description="Template category (e.g. coding).")
+    status: Status
+    agent_version: str | None = Field(None, description="Version of the packaged agent binary.")
+    ui: dict[str, Any] = Field(
+        ...,
+        description='UI/drive declaration (e.g. {"mode":"tui"} or {"mode":"web","port":8080}).',
+    )
+    config_schema: dict[str, Any] | None = Field(
+        None,
+        description="JSON-schema-like description of the config this template accepts.",
+    )
+    default_resources: SandboxResources | None = Field(
+        None,
+        description="Recommended default sizing for agents of this template. An agent\ninherits these when the create request omits the corresponding field;\ncaller-supplied resources take precedence. Null/omitted fields fall\nback to the platform default.\n",
+    )
+    default_egress: SandboxEgressConfig | None = Field(
+        None,
+        description="Minimal least-privilege egress allow-list the agent needs (its model\nprovider + toolchain). An agent inherits this when the create request\nomits egress; caller-supplied egress takes precedence. Null falls\nback to deny-all.\n",
+    )
+    created_at: AwareDatetime
+    updated_at: AwareDatetime
+
+
+class AgentTemplateListResponse(BaseModel):
+    items: list[AgentTemplate]
+    total: int
+    page: int
+    limit: int
 
 
 class Sandbox(BaseModel):
