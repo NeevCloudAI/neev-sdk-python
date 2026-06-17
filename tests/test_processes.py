@@ -93,12 +93,12 @@ class ProcessMockTransport(httpx.MockTransport):
         if path.endswith("/v1/processes/kill"):
             assert body["process_id"] == PROCESS_ID
             if "signal" in body:
-                assert body["signal"] == Signal.KILL
+                assert body["signal"] in (Signal.KILL, Signal.TERM)
             return httpx.Response(200, json={"signalled": True})
 
         if path.endswith("/v1/processes/kill-all"):
             if "signal" in body:
-                assert body["signal"] == Signal.INT
+                assert body["signal"] in (Signal.INT, Signal.TERM)
             return httpx.Response(200, json={"signalled_count": 2})
 
         if path.endswith("/v1/processes/logs"):
@@ -112,7 +112,10 @@ class ProcessMockTransport(httpx.MockTransport):
             return httpx.Response(
                 200,
                 json={
-                    "entries": [{"data": "line one\n"}, {"data": "line two\n"}],
+                    "entries": [
+                        {"stream": "stdout", "data": "line one\n"},
+                        {"stream": "stderr", "data": "line two\n"},
+                    ],
                     "cursor": 42,
                     "dropped": True,
                     "state": "running",
@@ -221,12 +224,32 @@ def test_kill_default_signal_omitted(sync_conn: SandboxConnection):
 def test_kill_explicit_signal(sync_conn: SandboxConnection):
     signalled = sync_conn.processes.kill(PROCESS_ID, signal=Signal.KILL)
     assert signalled is True
+    kill_body = json.loads(sync_conn._mock.requests[-1].content)  # type: ignore[attr-defined]
+    assert kill_body["signal"] == Signal.KILL
+    sync_conn.close()
+
+
+def test_kill_explicit_term_sends_signal(sync_conn: SandboxConnection):
+    signalled = sync_conn.processes.kill(PROCESS_ID, signal=Signal.TERM)
+    assert signalled is True
+    kill_body = json.loads(sync_conn._mock.requests[-1].content)  # type: ignore[attr-defined]
+    assert kill_body["signal"] == Signal.TERM
     sync_conn.close()
 
 
 def test_kill_all_signalled_count(sync_conn: SandboxConnection):
     count = sync_conn.processes.kill_all(signal=Signal.INT)
     assert count == 2
+    kill_all_body = json.loads(sync_conn._mock.requests[-1].content)  # type: ignore[attr-defined]
+    assert kill_all_body["signal"] == Signal.INT
+    sync_conn.close()
+
+
+def test_kill_all_explicit_term_sends_signal(sync_conn: SandboxConnection):
+    count = sync_conn.processes.kill_all(signal=Signal.TERM)
+    assert count == 2
+    kill_all_body = json.loads(sync_conn._mock.requests[-1].content)  # type: ignore[attr-defined]
+    assert kill_all_body["signal"] == Signal.TERM
     sync_conn.close()
 
 
@@ -238,7 +261,9 @@ def test_process_kill_delegates(sync_conn: SandboxConnection):
 
 def test_logs_poll(sync_conn: SandboxConnection):
     page = sync_conn.processes.logs(PROCESS_ID, cursor=10)
+    assert page.entries[0].stream == "stdout"
     assert page.entries[0].data == "line one\n"
+    assert page.entries[1].stream == "stderr"
     assert page.cursor == 42
     assert page.dropped is True
     assert page.state == "running"
