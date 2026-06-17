@@ -577,10 +577,17 @@ class MockControlTransport(httpx.MockTransport):
         super().__init__(self.handler)
 
     def handler(self, request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        # The SDK may have a DEFAULT_BASE_URL that includes "/agent".
+        # Normalize so tests match real API paths ("/api/...") regardless of base URL.
+        if path == "/agent":
+            path = "/"
+        elif path.startswith("/agent/"):
+            path = path[len("/agent") :]
         body = json.loads(request.content) if request.content else None
         return _control_response(
             method=request.method,
-            path=request.url.path,
+            path=path,
             query=dict(request.url.params),
             body=body,
         )
