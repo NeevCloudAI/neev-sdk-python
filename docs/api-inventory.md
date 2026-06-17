@@ -1007,7 +1007,8 @@ final = proc.wait()  # blocks until exit
 
 ### `sandbox.processes.kill(process_id, signal=None)` / `kill_all(signal=None)`
 
-Default signal is SIGTERM (`Signal.TERM`); omitted on the wire when default.
+Default signal is SIGTERM (`Signal.TERM`). The SDK omits `signal` on the wire only
+when `signal is None`; passing `signal=Signal.TERM` sends `{"signal": 15}`.
 `kill` returns `bool` (`signalled`); `kill_all` returns `int` (`signalled_count`).
 
 ```python
@@ -1017,7 +1018,7 @@ count = sandbox.processes.kill_all(signal=Signal.TERM)
 
 ### `sandbox.processes.logs(process_id, cursor=None)`
 
-Poll-mode UTF-8 log lines.
+Poll-mode UTF-8 log entries with a `stream` discriminator (`stdout` / `stderr`).
 
 **Returns:** `ProcessLogsPage` with `entries`, `cursor`, `dropped`, `state`.
 
@@ -1361,6 +1362,7 @@ Extends `ProcessStatus` with the command that was started.
 
 | Field | Type | Required |
 | ----- | ---- | -------- |
+| `stream` | `"stdout" \| "stderr"` | yes |
 | `data` | `str` | yes |
 
 ### `ProcessLogsPage`
@@ -1377,7 +1379,8 @@ Extends `ProcessStatus` with the command that was started.
 ### `Signal`
 
 POSIX signal numbers for `kill` and `kill_all`. Default on the wire is SIGTERM
-(`Signal.TERM`); omitted when `signal` is `None` or `Signal.TERM`.
+(`Signal.TERM`); omitted only when `signal` is `None` (explicit `Signal.TERM`
+sends `15`).
 
 | Constant | Value |
 | -------- | ----- |
