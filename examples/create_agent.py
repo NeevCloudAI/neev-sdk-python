@@ -45,9 +45,7 @@ def main() -> None:
                 create_params["region"] = REGION
 
             agent = client.agents.create(create_params)
-            print(
-                f"created {agent.id} (status: {agent.status}, sandbox: {agent.sandbox_id})"
-            )
+            print(f"created {agent.id} (status: {agent.status}, sandbox: {agent.sandbox_id})")
 
             agent.wait_until_ready()
             print("ready")

@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 import time
 from collections.abc import Callable, Mapping
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from neevai.errors import NeevAIError
 from neevai.types import AgentData, Scope, UpdateAgentParams
@@ -17,10 +17,7 @@ DEFAULT_POLL_INTERVAL_MS = 2_000
 
 
 def _wait_timeout_message(agent: Agent | AsyncAgent, timeout_ms: int) -> str:
-    return (
-        f"Agent {agent.id} did not become Ready within {timeout_ms}ms "
-        f"(status: {agent.status})."
-    )
+    return f"Agent {agent.id} did not become Ready within {timeout_ms}ms (status: {agent.status})."
 
 
 def _validate_wait_timings(timeout_ms: int, poll_interval_ms: int) -> None:
@@ -89,12 +86,12 @@ class Agent:
     @property
     def created_at(self) -> str:
         """Creation timestamp (ISO 8601)."""
-        return _state_as_json(self._state)["created_at"]
+        return cast(str, _state_as_json(self._state)["created_at"])
 
     @property
     def updated_at(self) -> str:
         """Last update timestamp (ISO 8601)."""
-        return _state_as_json(self._state)["updated_at"]
+        return cast(str, _state_as_json(self._state)["updated_at"])
 
     @property
     def data(self) -> dict[str, Any]:
@@ -241,11 +238,11 @@ class AsyncAgent:
 
     @property
     def created_at(self) -> str:
-        return _state_as_json(self._state)["created_at"]
+        return cast(str, _state_as_json(self._state)["created_at"])
 
     @property
     def updated_at(self) -> str:
-        return _state_as_json(self._state)["updated_at"]
+        return cast(str, _state_as_json(self._state)["updated_at"])
 
     @property
     def data(self) -> dict[str, Any]:
