@@ -51,3 +51,44 @@ ExecFrame = Annotated[
     StdoutFrame | StderrFrame | ExitFrame | ErrorFrame,
     Field(discriminator="type"),
 ]
+
+ProcessLogFrame = Annotated[
+    StdoutFrame | StderrFrame | ExitFrame,
+    Field(discriminator="type"),
+]
+
+
+class RawProcessStatus(BaseModel):
+    process_id: str
+    state: Literal["running", "exited"]
+    exit_code: int | None = None
+    started_at: int
+
+
+class RawProcessInfo(RawProcessStatus):
+    name: str
+    args: list[str]
+    cwd: str | None = None
+
+
+class RawProcessLogEntry(BaseModel):
+    data: str
+
+
+class RawProcessLogsPage(BaseModel):
+    entries: list[RawProcessLogEntry]
+    cursor: int
+    dropped: bool
+    state: Literal["running", "exited"]
+
+
+class RawProcessListResponse(BaseModel):
+    processes: list[RawProcessInfo]
+
+
+class RawKillResponse(BaseModel):
+    signalled: bool
+
+
+class RawKillAllResponse(BaseModel):
+    signalled_count: int
