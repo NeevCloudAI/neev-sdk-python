@@ -15,6 +15,10 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `client.agents` resource — `create`, `list`, `get`, `update`, `pause`, `resume`, `delete` for platform agents in a project scope.
+- `client.agent_templates` resource — read-only `list()` and `get()` for the global agent template catalogue.
+- `Agent` / `AsyncAgent` handle — `refresh`, `wait_until_ready`, `update`, `pause`, `resume`, `delete`, `sandbox()`, and `to_json()`.
+- Runnable example [`examples/create_agent.py`](examples/create_agent.py) — agent template catalogue, create, sandbox exec, update, pause, delete.
 - `sandbox.exec_stream()` on sync and async handles — yields incremental stdout/stderr/exit NDJSON events; buffered `exec()` now drains `exec_stream()` internally.
 - `client.templates` resource — `list()` and `get()` for platform sandbox-template catalogue.
 - Runnable examples: `parallel_fanout.py`, `sandbox_metrics.py`, `streaming_exec.py`, and agent demos under `examples/agent_patterns/`.
