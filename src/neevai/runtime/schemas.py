@@ -72,6 +72,7 @@ class RawProcessInfo(RawProcessStatus):
 
 
 class RawProcessLogEntry(BaseModel):
+    stream: Literal["stdout", "stderr"]
     data: str
 
 
