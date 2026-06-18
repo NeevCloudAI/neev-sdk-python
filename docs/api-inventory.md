@@ -33,7 +33,6 @@ which examples demonstrate which APIs, see
 - [Sandbox handle](#sandbox-handle)
 - [Exec and streaming](#exec-and-streaming)
 - [Files API](#files-api)
-- [Processes API](#processes-api)
 - [Data-plane connection](#data-plane-connection)
 - [Raw client](#raw-client)
 - [Types reference](#types-reference)
@@ -62,20 +61,16 @@ Everything in `neevai.__all__`:
 | `AsyncSandboxConnection` | class | `runtime/sandboxd.py` |
 | `SandboxFiles` | class | `runtime/sandboxd.py` |
 | `AsyncSandboxFiles` | class | `runtime/sandboxd.py` |
-| `SandboxProcesses` | class | `runtime/processes.py` |
-| `AsyncSandboxProcesses` | class | `runtime/processes.py` |
-| `Process` | class | `runtime/processes.py` |
-| `AsyncProcess` | class | `runtime/processes.py` |
-| `Signal` | class | `types.py` |
-| `ProcessStatus` | model | `types.py` |
-| `ProcessInfo` | model | `types.py` |
-| `ProcessLogsPage` | model | `types.py` |
 | `Scope` | dataclass | `types.py` |
 | `Snapshot` | model | generated |
 | `SnapshotStatus` | enum | generated |
 | `CreateSnapshotParams` | model | `types.py` |
 | `SnapshotListResponse` | model | generated |
 | `NeevAIError` … `InternalServerError` | exceptions | `errors.py` |
+| `Snapshot` | model | `generated/aiagent.py` |
+| `SnapshotStatus` | enum | generated |
+| `CreateSnapshotParams` | model | `types.py` |
+| `SnapshotListResponse` | model | generated |
 
 Types exported from `neevai.types.__all__`:
 
@@ -98,13 +93,6 @@ Types exported from `neevai.types.__all__`:
 | `StdoutStreamEvent` | TypedDict | `types.py` |
 | `StderrStreamEvent` | TypedDict | `types.py` |
 | `ExitStreamEvent` | TypedDict | `types.py` |
-| `ProcessState` | type alias | `Literal["running", "exited"]` |
-| `ProcessStatus` | model | `types.py` |
-| `ProcessInfo` | model | `types.py` |
-| `ProcessLogEntry` | model | `types.py` |
-| `ProcessLogsPage` | model | `types.py` |
-| `ProcessLogEvent` | type alias | same union as `ExecStreamEvent` |
-| `Signal` | class | `types.py` |
 
 ---
 
@@ -126,7 +114,7 @@ Synchronous platform client. Exposes three resource namespaces:
 | `org_id` | `str \| None` | `NEEVCLOUD_ORG_ID` | Default org scope |
 | `project_id` | `str \| None` | `NEEVCLOUD_PROJECT_ID` | Default project scope |
 | `region` | `str \| None` | `NEEVCLOUD_REGION` | Default region for create |
-| `base_url` | `str \| None` | `https://api.ai.neevcloud.com/agent` | Control-plane URL |
+| `base_url` | `str \| None` | production gateway | Control-plane URL |
 | `timeout_ms` | `int` | `60000` | Per-request timeout |
 | `max_retries` | `int` | `2` | Retries on network / 429 / 5xx |
 | `client` | `httpx.Client \| None` | new client | Inject custom HTTP client |
@@ -458,7 +446,7 @@ mirroring the last control-plane response. Call `refresh()` to sync from the ser
 
 | Property | Type | Description |
 | -------- | ---- | ----------- |
-| `id` | `str` | Sandbox identifier (UUID string) |
+| `id` | `UUID` | Sandbox identifier |
 | `name` | `str` | Human-readable name |
 | `phase` | `str` | OpenAPI steady states: `"Pending"`, `"Ready"`, `"NotReady"`, `"Unknown"`, `"Paused"`. API may also return transitional values (e.g. `"Pausing"`, `"Resuming"`) not in the spec enum; SDK accepts any phase string. |
 | `replicas` | `int` | `0` or `1` |
@@ -480,12 +468,13 @@ print(sandbox.phase, sandbox.replicas)
 
 ### `sandbox.wait_until_ready(timeout_ms=120000, poll_interval_ms=2000, on_poll=None)`
 
-Polls `refresh()` until `phase == "Ready"`. Data-plane operations (`exec`,
-`files`, `processes`) establish a lazy connection on first use via `_connection()`.
+Polls `refresh()` until `phase == "Ready"`, then probes the data-plane daemon
+at `connect_url` (via a short-lived connection) until file/exec operations are
+reachable. This two-phase wait covers control-plane Ready and runtime readiness.
 
 **Raises:**
 
-- `NeevAIError` on timeout
+- `NeevAIError` on timeout (control plane or data plane)
 - `NeevAIError` if sandbox is `Paused` (call `resume()` first)
 
 Optional `on_poll` callback receives the handle on each poll iteration — useful for
@@ -498,17 +487,15 @@ def log_progress(sb: Sandbox) -> None:
 sandbox.wait_until_ready(on_poll=log_progress)
 ```
 
-### `sandbox.pause(preserve_memory=None)` / `sandbox.resume()` / `sandbox.delete()`
+### `sandbox.pause()` / `sandbox.resume()` / `sandbox.delete()`
 
 Convenience wrappers that delegate to `client.sandboxes` and update handle state in
 place (except `delete`, which removes the remote resource).
 
-Both `pause()` and `resume()` return the updated `Sandbox` handle. `pause()` accepts
-optional `preserve_memory` (forwarded to `PauseSandboxRequest`; omit to use the
-server default `true`):
+Both `pause()` and `resume()` return the updated `Sandbox` handle:
 
 ```python
-sandbox = sandbox.pause(preserve_memory=True)   # phase → Paused, replicas → 0
+sandbox = sandbox.pause()   # phase → Paused, replicas → 0
 sandbox = sandbox.resume()  # scales back, then wait for Ready
 sandbox.wait_until_ready()
 ```
@@ -683,256 +670,17 @@ for entry in entries:
 
 ---
 
-## Processes API
-
-Access via `sandbox.processes` (`SandboxProcesses` / `AsyncSandboxProcesses`) or
-`connection.processes` on a raw data-plane connection. Detached processes outlive
-the HTTP request that started them; use `sandbox.exec` for request-scoped commands.
-
-All endpoints are **POST** to `{connect_url}/v1/processes/*` with no retries.
-
-### End-to-end flow
-
-Supervised processes require both the **control plane** (create/get sandbox) and the
-**data plane** (`connect_url`). A typical sequence:
-
-```mermaid
-sequenceDiagram
-    participant Client
-    participant ControlPlane
-    participant DataPlane
-
-    Client->>ControlPlane: POST sandboxes/create
-    ControlPlane-->>Client: sandbox_id, connect_url, phase
-    loop Until deadline
-        Client->>ControlPlane: GET sandboxes/{id}
-        ControlPlane-->>Client: connect_url, phase
-    end
-    Client->>DataPlane: POST /v1/processes/list (probe)
-    Client->>DataPlane: POST /v1/processes/start
-    DataPlane-->>Client: process_id, state
-    Client->>DataPlane: POST /v1/processes/logs or follow
-    Client->>DataPlane: POST /v1/processes/kill
-```
-
-#### Prerequisites before `processes.start`
-
-1. **Create** — `client.sandboxes.create(...)` returns a handle with `sandbox_id`,
-   `phase` (often `Pending`), and sometimes `connect_url`.
-2. **Wait for `connect_url`** — poll `sandbox.refresh()` until `connect_url` is set.
-   The URL may appear while `phase` is still `Pending` or `NotReady`; do not call
-   data-plane APIs until you also complete the steps below.
-3. **Wait for Ready** — `sandbox.wait_until_ready()` until `phase == "Ready"`.
-4. **Probe data plane** — call `sandbox.processes.list()` and retry transient
-   `502` / `503` / `504` (or connection errors) until the daemon accepts requests.
-
-This matches [`examples/processes.py`](../examples/processes.py) and
-[`examples/process_pool.py`](../examples/process_pool.py). Tunables:
-
-| Variable | Default | Purpose |
-| -------- | ------- | ------- |
-| `NEEVAI_WAIT_TIMEOUT_MS` | `300000` | Shared deadline for connect URL, Ready, and data-plane probe |
-| `NEEVAI_POLL_INTERVAL_MS` | `2000` | Sleep between `refresh()` / probe retries |
-
-#### Authentication (data-plane)
-
-Every `{connect_url}/v1/processes/*` request requires:
-
-| Header | Value |
-| ------ | ----- |
-| `Authorization` | `Bearer <NEEVCLOUD_API_KEY>` (same key as the control plane) |
-| `X-Sandbox-Id` | `<sandbox_id>` UUID from create/get |
-
-The SDK sends both headers automatically when using `sandbox.processes` or
-`SandboxConnection(..., sandbox_id=str(sandbox.id))`.
-
-#### Raw HTTP endpoints
-
-| Method | Path | Body highlights |
-| ------ | ---- | --------------- |
-| POST | `/v1/processes/start` | `program`, `args`, `cwd`, `env`, `stdin` |
-| POST | `/v1/processes/get` | `process_id`, optional `wait` |
-| POST | `/v1/processes/list` | `{}` |
-| POST | `/v1/processes/kill` | `process_id`, optional `signal` |
-| POST | `/v1/processes/kill-all` | optional `signal` |
-| POST | `/v1/processes/logs` | `process_id`, optional `cursor`; add `follow: true` and `Accept: application/x-ndjson` for streaming |
-
-`env` on the wire is a list of `"KEY=value"` strings (the SDK accepts a `dict`).
-
-#### Raw HTTP examples (start)
-
-After create/get returns `connect_url` and the sandbox is Ready:
-
-```bash
-export NEEVCLOUD_API_KEY="..."
-export CONNECT_URL="https://..."
-export SANDBOX_ID="550e8400-e29b-41d4-a716-446655440000"
-
-curl -sS -X POST "${CONNECT_URL}/v1/processes/start" \
-  -H "Authorization: Bearer ${NEEVCLOUD_API_KEY}" \
-  -H "X-Sandbox-Id: ${SANDBOX_ID}" \
-  -H "Content-Type: application/json" \
-  -d '{"program":"sh","args":["-c","echo hello"]}'
-```
-
-PowerShell:
-
-```powershell
-$headers = @{
-    Authorization  = "Bearer $env:NEEVCLOUD_API_KEY"
-    "X-Sandbox-Id" = $sandboxId
-    "Content-Type" = "application/json"
-}
-$body = @{ program = "sh"; args = @("-c", "echo hello") } | ConvertTo-Json -Compress
-
-Invoke-RestMethod -Method Post `
-  -Uri "$connectUrl/v1/processes/start" `
-  -Headers $headers `
-  -Body $body
-```
-
-#### SDK end-to-end example
-
-Short flow mirroring the examples (inline wait — production code may extract helpers):
-
-```python
-import os
-import time
-
-from neevai import NeevAI, Signal
-
-WAIT_MS = int(os.environ.get("NEEVAI_WAIT_TIMEOUT_MS", "300000"))
-POLL_MS = int(os.environ.get("NEEVAI_POLL_INTERVAL_MS", "2000"))
-
-with NeevAI() as client:
-    sandbox = client.sandboxes.create({
-        "name": "processes-demo",
-        "sandbox_template_id": "sb-ubuntu-26-04-minimal",
-        "region": "as-south-1",
-    })
-    deadline = time.time() + WAIT_MS / 1000.0
-
-    while not sandbox.connect_url and time.time() < deadline:
-        time.sleep(POLL_MS / 1000.0)
-        sandbox.refresh()
-    sandbox.wait_until_ready(timeout_ms=WAIT_MS, poll_interval_ms=POLL_MS)
-    while time.time() < deadline:
-        try:
-            sandbox.processes.list()
-            break
-        except Exception:
-            time.sleep(POLL_MS / 1000.0)
-
-    proc = sandbox.processes.start(["sh", "-c", "for i in 1 2 3; do echo line-$i; sleep 1; done"])
-    for event in proc.follow():
-        if event["type"] == "stdout":
-            print(event["data"], end="")
-        elif event["type"] == "exit":
-            break
-
-    page = proc.logs()
-    print(f"polled {len(page.entries)} entries")
-
-    for info in sandbox.processes.list():
-        print(info.process_id, info.state)
-
-    proc.kill(signal=Signal.TERM)
-    print(proc.wait().exit_code)
-    sandbox.delete()
-```
-
-#### Troubleshooting
-
-| Symptom | Likely cause | What to do |
-| ------- | ------------ | ---------- |
-| `401` / invalid credentials | Wrong or expired `NEEVCLOUD_API_KEY` | Use the same Bearer token as control-plane calls |
-| `connect_url` is `None` | Sandbox still provisioning | Keep calling `sandbox.refresh()` until the URL appears |
-| Data-plane `502` / `503` / `504` right after Ready | Daemon not accepting traffic yet | Retry `sandbox.processes.list()` (see prerequisites) |
-| `follow` read timeout on a quiet process | No stdout/stderr for longer than HTTP read timeout | Prefer `proc.follow()` (SDK manages streaming) or increase client read timeout |
-
-### `sandbox.processes.start(program, args=None, cwd=None, env=None, stdin=None)`
-
-**Returns:** `Process` handle with cached initial `ProcessStatus`.
-
-`program` is a shell string or argv list. `args` is only valid when `program` is
-a string (mutually exclusive with list `program`).
-
-```python
-from neevai import Signal
-
-proc = sandbox.processes.start(
-    ["python3", "-m", "http.server", "8080"],
-    cwd="workspace",
-    env={"PORT": "8080"},
-)
-print(proc.id, proc.state)
-```
-
-**Async:** `proc = await sandbox.processes.start(...)`
-
-### `sandbox.processes.get(process_id, wait=False)` / `Process.status()` / `Process.wait()`
-
-**Returns:** `ProcessStatus` with `process_id`, `state`, `exit_code`, `started_at`.
-
-```python
-status = sandbox.processes.get(proc.id)
-final = proc.wait()  # blocks until exit
-```
-
-### `sandbox.processes.list()`
-
-**Returns:** `list[ProcessInfo]` (`ProcessStatus` + `name`, `args`, `cwd`).
-
-### `sandbox.processes.kill(process_id, signal=None)` / `kill_all(signal=None)`
-
-Default signal is SIGTERM (`Signal.TERM`); omitted on the wire when default.
-`kill` returns `bool` (`signalled`); `kill_all` returns `int` (`signalled_count`).
-
-```python
-proc.kill(signal=Signal.TERM)
-count = sandbox.processes.kill_all(signal=Signal.TERM)
-```
-
-### `sandbox.processes.logs(process_id, cursor=None)`
-
-Poll-mode UTF-8 log lines.
-
-**Returns:** `ProcessLogsPage` with `entries`, `cursor`, `dropped`, `state`.
-
-### `sandbox.processes.follow(process_id, cursor=None)`
-
-Stream-mode NDJSON with base64-encoded stdout/stderr chunks. Yields
-`ProcessLogEvent` dicts (`stdout` / `stderr` / `exit`). Unlike `exec_stream`, a
-clean end without an `exit` frame does not raise.
-
-```python
-for event in proc.follow():
-    if event["type"] == "stdout":
-        print(event["data"], end="")
-    elif event["type"] == "exit":
-        print(f"exit {event['exit_code']}")
-```
-
-**Examples:** [`processes.py`](../examples/processes.py),
-[`process_pool.py`](../examples/process_pool.py)
-
----
-
 ## Data-plane connection
 
 Low-level connection to the regional sandbox daemon. Constructed internally by
-`sandbox.exec`, `sandbox.files`, and `sandbox.processes`; exposed for advanced use
-cases. Pass `sandbox_id` so the transport sends `X-Sandbox-Id` on every request
-(the sandbox handle does this automatically via `_connection()`).
+`sandbox.exec` and `sandbox.files`; exposed for advanced use cases.
 
-### `SandboxConnection(connect_url, api_key, timeout_ms=60000, client=None, sandbox_id=None)`
+### `SandboxConnection(connect_url, api_key, timeout_ms=60000, client=None)`
 
-| Method / property | Returns | Description |
-| ----------------- | ------- | ----------- |
+| Method | Returns | Description |
+| ------ | ------- | ----------- |
 | `exec(...)` | `ExecResult` | Same signature as `sandbox.exec` |
 | `exec_stream(...)` | `Iterator[ExecStreamEvent]` | Streaming variant |
-| `files` | `SandboxFiles` | Workspace file APIs |
-| `processes` | `SandboxProcesses` | Supervised process APIs |
 | `close()` | `None` | Release HTTP transport |
 
 Async mirror: `AsyncSandboxConnection` with `aclose()` instead of `close()`.
@@ -940,15 +688,10 @@ Async mirror: `AsyncSandboxConnection` with `aclose()` instead of `close()`.
 ```python
 from neevai import SandboxConnection
 
-conn = SandboxConnection(
-    sandbox.connect_url,
-    api_key="...",
-    sandbox_id=str(sandbox.id),
-)
+conn = SandboxConnection(sandbox.connect_url, api_key="...")
 try:
     result = conn.exec(["uname", "-a"])
     print(result.stdout)
-    procs = conn.processes.list()
 finally:
     conn.close()
 ```
@@ -1043,6 +786,43 @@ Alias for generated `CreateSandboxRequest`.
 | `egress` | `SandboxEgressConfig \| None` | no |
 | `from_snapshot` | `UUID \| None` | no |
 
+### `CreateSnapshotParams`
+
+Hand-written caller-facing params for snapshot creation. The SDK always sets
+`include_memory: false` on the wire.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `name` | `str \| None` | no |
+| `retain_for` | `str \| None` | no (TTL duration, e.g. `"720h"`) |
+
+### `Snapshot`
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `id` | `UUID` | yes |
+| `sandbox_id` | `UUID` | yes |
+| `org_id` | `str` | yes |
+| `project_id` | `str` | yes |
+| `name` | `str \| None` | no |
+| `status` | `SnapshotStatus` | yes |
+| `include_memory` | `bool` | yes |
+| `source_region` | `str` | yes |
+| `size_bytes` | `int \| None` | no |
+| `error_message` | `str \| None` | no |
+| `expires_at` | `datetime \| None` | no |
+| `created_at` | `datetime` | yes |
+| `updated_at` | `datetime` | yes |
+
+### `SnapshotListResponse`
+
+| Field | Type |
+| ----- | ---- |
+| `items` | `list[Snapshot]` |
+| `total` | `int` |
+| `page` | `int` |
+| `limit` | `int` |
+
 ### `EnvVar`
 
 | Field | Type | Required |
@@ -1052,8 +832,7 @@ Alias for generated `CreateSandboxRequest`.
 
 ### `SandboxData`
 
-Full control-plane sandbox record. Subclasses generated `Sandbox` with `phase: str`
-so transitional or future phase strings from the API are accepted.
+Full control-plane sandbox record (alias for generated `Sandbox`).
 
 | Field | Type | Required |
 | ----- | ---- | -------- |
@@ -1066,7 +845,7 @@ so transitional or future phase strings from the API are accepted.
 | `command` | `list[str] \| None` | no |
 | `env` | `list[EnvVar] \| None` | no |
 | `resources` | `SandboxResources \| None` | no |
-| `phase` | `str` | yes |
+| `phase` | `SandboxPhaseEnum` | yes |
 | `connect_url` | `str \| None` | no |
 | `replicas` | `int` (0–1) | yes |
 | `egress` | `SandboxEgressConfig \| None` | no |
@@ -1160,55 +939,6 @@ The OpenAPI `SandboxPhase` enum lists only the five steady states (`Pending`, `R
 
 `ExecStreamEvent = StdoutStreamEvent | StderrStreamEvent | ExitStreamEvent`
 
-### `ProcessStatus`
-
-| Field | Type | Required |
-| ----- | ---- | -------- |
-| `process_id` | `str` | yes |
-| `state` | `ProcessState` (`"running"` \| `"exited"`) | yes |
-| `exit_code` | `int \| None` | no |
-| `started_at` | `int` | yes (Unix timestamp) |
-
-### `ProcessInfo`
-
-Extends `ProcessStatus` with the command that was started.
-
-| Field | Type | Required |
-| ----- | ---- | -------- |
-| `name` | `str` | yes |
-| `args` | `list[str]` | yes |
-| `cwd` | `str \| None` | no |
-
-### `ProcessLogEntry`
-
-| Field | Type | Required |
-| ----- | ---- | -------- |
-| `data` | `str` | yes |
-
-### `ProcessLogsPage`
-
-| Field | Type | Required |
-| ----- | ---- | -------- |
-| `entries` | `list[ProcessLogEntry]` | yes |
-| `cursor` | `int` | yes |
-| `dropped` | `bool` | yes |
-| `state` | `ProcessState` | yes |
-
-`ProcessLogEvent` is the same union as `ExecStreamEvent` (`stdout` / `stderr` / `exit`).
-
-### `Signal`
-
-POSIX signal numbers for `kill` and `kill_all`. Default on the wire is SIGTERM
-(`Signal.TERM`); omitted when `signal` is `None` or `Signal.TERM`.
-
-| Constant | Value |
-| -------- | ----- |
-| `Signal.HUP` | `1` |
-| `Signal.INT` | `2` |
-| `Signal.QUIT` | `3` |
-| `Signal.KILL` | `9` |
-| `Signal.TERM` | `15` |
-
 ---
 
 ## Errors
@@ -1290,9 +1020,6 @@ Every sync public API has an async equivalent with matching semantics.
 | `Sandbox.exec_stream` | `AsyncSandbox.exec_stream` | `async for` instead of `for` |
 | `SandboxConnection.close()` | `AsyncSandboxConnection.aclose()` | Naming differs |
 | `SandboxFiles.*` | `AsyncSandboxFiles.*` | Add `await` |
-| `SandboxProcesses.*` | `AsyncSandboxProcesses.*` | Add `await` |
-| `Process.*` | `AsyncProcess.*` | Add `await`; `follow` uses `async for` |
-| `Process.follow()` | `AsyncProcess.follow()` | `async for` instead of `for` |
 | `RawClient.request` | `AsyncRawClient.request` | Add `await` |
 
 No sync-only or async-only public methods. Pagination types mirror each other
@@ -1359,28 +1086,7 @@ Compact reviewer index. Each symbol should also appear in
 | `Sandbox.exec` | method | `ExecResult` |
 | `Sandbox.exec_stream` | method | `Iterator[ExecStreamEvent]` |
 | `Sandbox.files` | property | `SandboxFiles` |
-| `Sandbox.processes` | property | `SandboxProcesses` |
 | `AsyncSandbox.*` | mirror | Same surface with `await` / `async for` |
-
-### Processes (`runtime/processes.py`)
-
-| Symbol | Kind | Returns / notes |
-| ------ | ---- | --------------- |
-| `SandboxProcesses.start` | method | `Process` |
-| `SandboxProcesses.get` | method | `ProcessStatus` (`wait=True` blocks until exit) |
-| `SandboxProcesses.list` | method | `list[ProcessInfo]` |
-| `SandboxProcesses.kill` | method | `bool` (`signalled`) |
-| `SandboxProcesses.kill_all` | method | `int` (`signalled_count`) |
-| `SandboxProcesses.logs` | method | `ProcessLogsPage` |
-| `SandboxProcesses.follow` | method | `Iterator[ProcessLogEvent]` |
-| `Process.id`, `.state`, `.exit_code`, `.started_at` | properties | from cached `ProcessStatus` |
-| `Process.status` | method | `ProcessStatus` (refresh, `wait=False`) |
-| `Process.wait` | method | `ProcessStatus` (blocks until exit) |
-| `Process.kill` | method | `bool` |
-| `Process.logs` | method | `ProcessLogsPage` |
-| `Process.follow` | method | `Iterator[ProcessLogEvent]` |
-| `AsyncSandboxProcesses.*` | methods | Same as sync with `await` |
-| `AsyncProcess.*` | methods | Same as sync with `await`; `follow` is `async for` |
 
 ### Data-plane (`runtime/sandboxd.py`)
 
@@ -1388,7 +1094,6 @@ Compact reviewer index. Each symbol should also appear in
 | ------ | ---- | ----- |
 | `SandboxConnection.exec` | method | `ExecResult` |
 | `SandboxConnection.exec_stream` | method | `Iterator[ExecStreamEvent]` |
-| `SandboxConnection.processes` | property | `SandboxProcesses` |
 | `SandboxConnection.close` | method | `None` |
 | `SandboxFiles.write` | method | `dict[str, int]` (`bytes_written`) |
 | `SandboxFiles.read` | method | `bytes` |
@@ -1411,26 +1116,19 @@ Compact reviewer index. Each symbol should also appear in
 - `ResponseValidationError` in `neevai._parse` is **internal** — not public API.
 - `Scope` is exported from both `neevai` and `neevai.types` intentionally.
 - Pagination types are public but not in top-level `__all__`.
-- Client env vars: `NEEVCLOUD_*` (primary) with `NEEV_*` aliases — `NEEVCLOUD_API_KEY`
-  / `NEEV_API_KEY`, `NEEVCLOUD_ORG_ID` / `NEEV_ORG_ID`, `NEEVCLOUD_PROJECT_ID` /
-  `NEEV_PROJECT_ID`, `NEEVCLOUD_REGION` / `NEEV_REGION`, `NEEVCLOUD_BASE_URL` /
-  `NEEV_BASE_URL` (default: `https://api.ai.neevcloud.com/agent`).
+- Client env vars: `NEEVCLOUD_API_KEY`, `NEEVCLOUD_ORG_ID`, `NEEVCLOUD_PROJECT_ID`,
+  `NEEVCLOUD_REGION`, `NEEVCLOUD_BASE_URL` (not `NEEVAI_API_KEY`).
 - Sandbox create uses `sandbox_template_id` in params (not `template_id`).
 - `Sandbox.pause()` / `.resume()` return updated handles (not `None`).
 - `connect_url` is a property on `Sandbox`, not a method.
-- File, exec, and process paths are workspace-relative; absolute paths are rejected
-  on file APIs.
-- Supervised processes use `sandbox.processes` (or `SandboxConnection.processes`)
-  against `{connect_url}/v1/processes/*` with no transport retries. Wait for
-  `connect_url`, `phase == "Ready"`, and a successful `processes.list()` probe
-  before `start` — see [Processes API](#processes-api).
+- File and exec paths are workspace-relative; absolute paths are rejected.
 - Snapshot create returns `Pending` immediately; poll `get_snapshot` until `Ready`.
 - The SDK sets `include_memory: false` on snapshot create requests.
 - For rollback, prefer `sandboxes.create({..., "from_snapshot": snapshot_id})` over
   in-place `restore()` — some backends may return an empty workspace after in-place
   restore.
 - `restore()`, `pause()`, and `resume()` invalidate the cached data-plane connection
-  on the handle; call `wait_until_ready()` again before file/exec/process operations when
+  on the handle; call `wait_until_ready()` again before file/exec operations when
   needed.
 
 ---

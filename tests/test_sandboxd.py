@@ -13,7 +13,7 @@ from neevai.errors import (
     PermissionDeniedError,
 )
 from neevai.runtime.sandboxd import AsyncSandboxConnection, SandboxConnection
-from neevai.transport.runtime import SANDBOX_ID_HEADER, DataplaneTransport
+from neevai.transport.runtime import DataplaneTransport
 
 
 def _ndjson_lines(frames: list[dict]) -> bytes:
@@ -146,52 +146,6 @@ async def test_async_exec_stream_yields_events():
     await conn.aclose()
 
 
-def test_dataplane_transport_sends_x_sandbox_id_header():
-    captured: dict[str, str] = {}
-
-    class HeaderCaptureTransport(httpx.MockTransport):
-        def __init__(self):
-            super().__init__(self.handler)
-
-        def handler(self, request: httpx.Request) -> httpx.Response:
-            captured["sandbox_id"] = request.headers.get(SANDBOX_ID_HEADER, "")
-            return httpx.Response(200, json={"status": "ok"})
-
-    sandbox_id = "00000000-0000-0000-0000-000000000099"
-    transport = DataplaneTransport(
-        connect_url="https://sbx.example.com",
-        api_key="test",
-        timeout_ms=5000,
-        client=httpx.Client(transport=HeaderCaptureTransport()),
-        sandbox_id=sandbox_id,
-    )
-    transport.request("POST", "/v1/processes/start", body={"command": "true"})
-    assert captured["sandbox_id"] == sandbox_id
-    transport.close()
-
-
-def test_dataplane_transport_omits_x_sandbox_id_without_sandbox_id():
-    captured: dict[str, str | None] = {}
-
-    class HeaderCaptureTransport(httpx.MockTransport):
-        def __init__(self):
-            super().__init__(self.handler)
-
-        def handler(self, request: httpx.Request) -> httpx.Response:
-            captured["sandbox_id"] = request.headers.get(SANDBOX_ID_HEADER)
-            return httpx.Response(200, json={"status": "ok"})
-
-    transport = DataplaneTransport(
-        connect_url="https://sbx.example.com",
-        api_key="test",
-        timeout_ms=5000,
-        client=httpx.Client(transport=HeaderCaptureTransport()),
-    )
-    transport.request("POST", "/v1/files/list", body={"path": "."})
-    assert captured["sandbox_id"] is None
-    transport.close()
-
-
 def test_dataplane_transport_sanity(dataplane_transport):
     transport = DataplaneTransport(
         connect_url="https://sbx.example.com",
@@ -234,5 +188,4 @@ def test_sandbox_connection_init():
     )
     assert conn._transport is not None
     assert conn.files is not None
-    assert conn.processes is not None
     conn.close()

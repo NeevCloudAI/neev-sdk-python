@@ -6,8 +6,8 @@ For the canonical SDK layout and Python slot mapping, see
 ## Setup
 
 ```sh
-git clone https://github.com/NeevCloudAI/neev-sdk-python.git
-cd neev-sdk-python
+git clone https://github.com/NeevCloudAI/neevai-sdk-python.git
+cd neevai-sdk-python
 uv sync --extra dev
 ```
 

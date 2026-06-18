@@ -17,7 +17,6 @@ from neevai.types import (
 
 if TYPE_CHECKING:
     from neevai.resources.sandboxes import AsyncSandboxes, Sandboxes
-    from neevai.runtime.processes import AsyncSandboxProcesses, SandboxProcesses
     from neevai.runtime.sandboxd import (
         AsyncSandboxConnection,
         AsyncSandboxFiles,
@@ -30,7 +29,18 @@ DEFAULT_POLL_INTERVAL_MS = 2_000
 DEFAULT_DATAPLANE_PROBE_TIMEOUT_MS = 5_000
 
 
-def _wait_timeout_message(sandbox: Sandbox | AsyncSandbox, timeout_ms: int) -> str:
+def _wait_timeout_message(
+    sandbox: Sandbox | AsyncSandbox,
+    timeout_ms: int,
+    *,
+    waiting_for_dataplane: bool = False,
+) -> str:
+    if waiting_for_dataplane:
+        return (
+            f"Sandbox {sandbox.id} control plane is Ready but the data-plane "
+            f"daemon at {sandbox.connect_url} did not become reachable within "
+            f"{timeout_ms}ms."
+        )
     return (
         f"Sandbox {sandbox.id} did not become Ready within {timeout_ms}ms "
         f"(phase: {sandbox.phase}, replicas: {sandbox.replicas}, "
@@ -218,6 +228,8 @@ class Sandbox:
         )
         self._state = next_state._state
         self._invalidate_connection()
+        if self.phase == "Ready" and self.connect_url:
+            self._wait_for_runtime_ready()
         return self
 
     def fork(self, name: str) -> Sandbox:
@@ -246,6 +258,14 @@ class Sandbox:
             if on_poll is not None:
                 on_poll(self)
             if self.phase == "Ready":
+                if self.connect_url:
+                    remaining = deadline - (time.time() * 1000.0)
+                    if remaining <= 0:
+                        raise NeevAIError(_wait_timeout_message(self, timeout_ms))
+                    self._wait_for_runtime_ready(
+                        timeout_ms=int(remaining),
+                        poll_interval_ms=poll_interval_ms,
+                    )
                 return self
             if self.phase == "Paused":
                 raise NeevAIError(
@@ -263,11 +283,6 @@ class Sandbox:
     def files(self) -> SandboxFiles:
         """Exposes files operations on the sandbox daemon."""
         return self._connection().files
-
-    @property
-    def processes(self) -> SandboxProcesses:
-        """Exposes supervised process operations on the sandbox daemon."""
-        return self._connection().processes
 
     def exec(
         self,
@@ -327,7 +342,6 @@ class Sandbox:
             connect_url=connect_url,
             api_key=self.sandboxes._client._transport.api_key,
             timeout_ms=timeout_ms,
-            sandbox_id=self.id,
         )
         try:
             conn._transport.request(
@@ -371,8 +385,7 @@ class Sandbox:
         connect_url = self.connect_url
         if not connect_url:
             raise NeevAIError(
-                f"Sandbox {self.id} has no connect_url yet; it must be Ready before "
-                "file, exec, or process operations."
+                f"Sandbox {self.id} has no connect_url yet; it must be Ready before file or exec operations."
             )
         if self._conn is not None and self._conn._transport.connect_url != connect_url.rstrip("/"):
             self._invalidate_connection()
@@ -385,7 +398,6 @@ class Sandbox:
                 connect_url=connect_url,
                 api_key=self.sandboxes._client._transport.api_key,
                 timeout_ms=int(read_timeout * 1000.0),
-                sandbox_id=self.id,
             )
         return self._conn
 
@@ -533,6 +545,8 @@ class AsyncSandbox:
         )
         self._state = next_state._state
         await self._invalidate_connection()
+        if self.phase == "Ready" and self.connect_url:
+            await self._wait_for_runtime_ready()
         return self
 
     async def fork(self, name: str) -> AsyncSandbox:
@@ -558,6 +572,14 @@ class AsyncSandbox:
             if on_poll is not None:
                 on_poll(self)
             if self.phase == "Ready":
+                if self.connect_url:
+                    remaining = deadline - (time.time() * 1000.0)
+                    if remaining <= 0:
+                        raise NeevAIError(_wait_timeout_message(self, timeout_ms))
+                    await self._wait_for_runtime_ready(
+                        timeout_ms=int(remaining),
+                        poll_interval_ms=poll_interval_ms,
+                    )
                 return self
             if self.phase == "Paused":
                 raise NeevAIError(
@@ -574,11 +596,6 @@ class AsyncSandbox:
     @property
     def files(self) -> AsyncSandboxFiles:
         return self._connection().files
-
-    @property
-    def processes(self) -> AsyncSandboxProcesses:
-        """Exposes supervised process operations on the sandbox daemon."""
-        return self._connection().processes
 
     async def exec(
         self,
@@ -636,7 +653,6 @@ class AsyncSandbox:
             connect_url=connect_url,
             api_key=self.sandboxes._client._transport.api_key,
             timeout_ms=timeout_ms,
-            sandbox_id=self.id,
         )
         try:
             await conn._transport.request(
@@ -678,29 +694,12 @@ class AsyncSandbox:
             await asyncio.sleep(min(delay_s, remaining / 1000.0))
             delay_s = min(delay_s * 1.5, poll_interval_ms * 4 / 1000.0)
 
-    def _drop_stale_connection(self, connect_url: str) -> None:
-        if self._conn is None:
-            return
-        if self._conn._transport.connect_url == connect_url.rstrip("/"):
-            return
-        stale = self._conn
-        self._conn = None
-        import asyncio
-
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            return
-        loop.create_task(stale.aclose())
-
     def _connection(self) -> AsyncSandboxConnection:
         connect_url = self.connect_url
         if not connect_url:
             raise NeevAIError(
-                f"Sandbox {self.id} has no connect_url yet; it must be Ready before "
-                "file, exec, or process operations."
+                f"Sandbox {self.id} has no connect_url yet; it must be Ready before file or exec operations."
             )
-        self._drop_stale_connection(connect_url)
         if not self._conn:
             from neevai.runtime.sandboxd import AsyncSandboxConnection
 
@@ -710,6 +709,5 @@ class AsyncSandbox:
                 connect_url=connect_url,
                 api_key=self.sandboxes._client._transport.api_key,
                 timeout_ms=int(read_timeout * 1000.0),
-                sandbox_id=self.id,
             )
         return self._conn

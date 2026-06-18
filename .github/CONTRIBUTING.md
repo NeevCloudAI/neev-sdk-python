@@ -10,8 +10,8 @@ Thanks for your interest in improving the NeevAI SDK!
 ## Getting started
 
 ```sh
-git clone https://github.com/NeevCloudAI/neev-sdk-python.git
-cd neev-sdk-python
+git clone https://github.com/NeevCloudAI/neevai-sdk-python.git
+cd neevai-sdk-python
 uv sync --extra dev
 ```
 
