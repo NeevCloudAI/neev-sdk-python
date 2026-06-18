@@ -46,27 +46,7 @@ Template id defaults to `sb-ubuntu-26-04-minimal`; override with:
 export NEEVCLOUD_SANDBOX_TEMPLATE_ID=sb-ubuntu-26-04-minimal
 ```
 
-For platform agent create (`create_agent.py`), pick a catalogue template name:
-
-```sh
-export NEEV_AGENT_TEMPLATE=claude-code   # default when unset
-```
-
 Run every command below from the **repo root** unless noted otherwise.
-
-## Platform agents vs model integration
-
-Two different "agent" concepts appear in this repo:
-
-- **Platform agents** (`client.agents`, Tier 1 [`create_agent.py`](./create_agent.py))
-  — provision a packaged agent from the catalogue onto its own backing sandbox.
-  No inference key required.
-- **Model integration** (Tier 2 [`agent_patterns/`](./agent_patterns/)) — wire
-  `gpt-oss-120b` (or another model) into a sandbox as a code-execution tool.
-  See [`agent_patterns/README.md`](./agent_patterns/README.md).
-
-Tier 3 [`workflow_examples/`](./workflow_examples/) builds on the model
-integration helpers for end-to-end demos with local artifacts.
 
 ## Learning path
 
@@ -75,7 +55,6 @@ Examples are organized in three tiers — start at Tier 1 and work your way up:
 ```text
 examples/
 ├── templates_list.py             ← Tier 1: Core Sandbox
-├── create_agent.py               ← Tier 1: Agent lifecycle (platform agents API)
 ├── sandbox_lifecycle.py
 ├── snapshot_fork_restore.py
 ├── async_sandbox.py
@@ -99,21 +78,18 @@ examples/
 
 | Tier | Focus | Start here |
 |------|-------|------------|
-| **1 — Core Sandbox** | Pure SDK: templates, sandbox lifecycle, **platform agents**, async, files, streaming exec, metrics | [`templates_list.py`](./templates_list.py) |
-| **2 — Agent Integration** | Wire a model into a sandbox as a code-execution tool (not `client.agents`) | [`agent_patterns/minimal_agent.py`](./agent_patterns/minimal_agent.py) |
-| **3 — Real-World Workflows** | End-to-end model-driven agent workflows with artifacts | [`workflow_examples/repo_analyzer.py`](./workflow_examples/repo_analyzer.py) |
+| **1 — Core Sandbox** | Pure SDK: templates, lifecycle, async, files, streaming exec, metrics | [`templates_list.py`](./templates_list.py) |
+| **2 — Agent Integration** | Wire a model into a sandbox as a code-execution tool | [`agent_patterns/minimal_agent.py`](./agent_patterns/minimal_agent.py) |
+| **3 — Real-World Workflows** | End-to-end agent workflows with artifacts | [`workflow_examples/repo_analyzer.py`](./workflow_examples/repo_analyzer.py) |
 
 ## Tier 1 — Core Sandbox (no model needed)
 
 These scripts only need sandbox credentials (`NEEVCLOUD_API_KEY`, org, project,
-region). Each provisions a real sandbox or platform agent and deletes it in a
-`finally` block (or explicit cleanup). [`create_agent.py`](./create_agent.py)
-uses the **platform agents API** — not the model-driven patterns in Tier 2.
+region). Each provisions a real sandbox and deletes it in a `finally` block.
 
 | File | SDK features | Run |
 |------|--------------|-----|
 | [`templates_list.py`](./templates_list.py) | `templates.list`, `templates.get`, `sandboxes.create`, `wait_until_ready`, `delete` | `uv run python examples/templates_list.py` |
-| [`create_agent.py`](./create_agent.py) | `agent_templates.list`, `agents.create`, `wait_until_ready`, `sandbox()`, `update`, `pause`, `delete` | `uv run python examples/create_agent.py` |
 | [`sandbox_lifecycle.py`](./sandbox_lifecycle.py) | `sandboxes.create`, `wait_until_ready`, `metrics`, `pause`, `delete` | `uv run python examples/sandbox_lifecycle.py` |
 | [`snapshot_fork_restore.py`](./snapshot_fork_restore.py) | `snapshot`, `get_snapshot`, `create` with `from_snapshot`, `fork`, `delete_snapshot` | `uv run python examples/snapshot_fork_restore.py` |
 | [`async_sandbox.py`](./async_sandbox.py) | `AsyncNeevAI`, `sandboxes.create`, `wait_until_ready`, `exec`, `delete` | `uv run python examples/async_sandbox.py` |
@@ -204,12 +180,6 @@ example provisions a real sandbox, so the project needs available credits.
 
 ```sh
 uv run python examples/templates_list.py
-```
-
-**1b. Platform agent lifecycle**
-
-```sh
-uv run python examples/create_agent.py
 ```
 
 **2. Lifecycle**
@@ -318,7 +288,6 @@ uv run python examples/workflow_examples/browser_agent.py --query "AI"
 | `NEEVCLOUD_BASE_URL` | all | `https://api.ai.neevcloud.com/agent` |
 | `NEEVCLOUD_REGION` | sandbox create | `as-south-1` |
 | `NEEVCLOUD_SANDBOX_TEMPLATE_ID` | sandbox create | `sb-ubuntu-26-04-minimal` |
-| `NEEV_AGENT_TEMPLATE` | `create_agent.py` | `claude-code` |
 | `NEEV_INFERENCE_API_KEY` | model examples | falls back to `NEEVCLOUD_INFERENCE_API_KEY`, then `NEEVCLOUD_API_KEY` |
 | `NEEVCLOUD_INFERENCE_API_KEY` | model examples | alias for inference key |
 | `NEEV_INFERENCE_BASE_URL` | model examples | `https://inference.ai.neevcloud.com/v1` |

@@ -29,21 +29,6 @@ path and run commands, see [`examples/README.md`](../examples/README.md).
 | `sandbox.fork` | `snapshot_fork_restore.py` | `fork = restored.fork("snapshot-fork")` |
 | `client.templates.list` | `templates_list.py` | `page = client.templates.list(limit=10)` |
 | `client.templates.get` | `templates_list.py` | `tpl = client.templates.get(template_id)` |
-| `client.agents.create` | `create_agent.py` | `agent = client.agents.create({"name": "...", "agent_template": "claude-code"})` |
-| `client.agents.list` | — | `page = client.agents.list(page=1, limit=20)` |
-| `client.agents.get` | — | `agent = client.agents.get(agent_id)` |
-| `client.agents.update` | `create_agent.py` | `agent = client.agents.update(agent.id, {"resources": {...}})` |
-| `client.agents.pause` / `.resume` | — | `agent = client.agents.pause(agent_id)` / `client.agents.resume(agent_id)` |
-| `client.agents.delete` | `create_agent.py` | `client.agents.delete(agent_id)` |
-| `client.agent_templates.list` | `create_agent.py` | `page = client.agent_templates.list()` |
-| `client.agent_templates.get` | — | `tpl = client.agent_templates.get(template_id)` |
-| `agent.wait_until_ready` | `create_agent.py` | `agent.wait_until_ready(timeout_ms=120_000)` |
-| `agent.refresh` | — | `agent.refresh()` |
-| `agent.sandbox` | `create_agent.py` | `sandbox = agent.sandbox()` |
-| `agent.update` | `create_agent.py` | `agent.update({"resources": {"cpu": 2, "memory_gb": 4}})` |
-| `agent.pause` / `agent.delete` | `create_agent.py` | `agent.pause(); agent.delete()` |
-| `agent.resume` | — | `agent.resume()` — not shown in `create_agent.py`; see [getting-started.md](./getting-started.md#create-an-agent) |
-| `agent.to_json` | — | `agent.to_json()` |
 | `client.raw.request` | `raw_request.py` | `data = client.raw.request("GET", path, query={...})` |
 | `sandbox.wait_until_ready` | tier-1 (except `raw_request.py`), `processes.py`, `process_pool.py`, `agent_patterns/*`, `workflow_examples/*` | `sandbox.wait_until_ready(timeout_ms=120_000)` — after `connect_url` is set in process examples |
 | `sandbox.refresh` | `processes.py`, `process_pool.py` | `sandbox.refresh()` — poll until `connect_url` is set |
@@ -77,7 +62,6 @@ path and run commands, see [`examples/README.md`](../examples/README.md).
 | Example | Path | Summary |
 | ------- | ---- | ------- |
 | Templates list & create | `examples/templates_list.py` | List templates, get by id, create sandbox, wait, delete |
-| Agent lifecycle | `examples/create_agent.py` | List agent templates, create agent, wait, sandbox exec, update, pause, delete |
 | Sandbox lifecycle | `examples/sandbox_lifecycle.py` | Create → wait → metrics → pause → delete |
 | Snapshot fork & restore | `examples/snapshot_fork_restore.py` | Write state → snapshot → modify → `from_snapshot` create → fork → cleanup |
 | Async workflow | `examples/async_sandbox.py` | `AsyncNeevAI` create → wait → exec → delete |

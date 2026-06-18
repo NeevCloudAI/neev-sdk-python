@@ -1,8 +1,7 @@
 # NeevAI SDK — Architecture
 
 `neevai` is a Python client for the NeevAI platform. The **control plane**
-covers sandboxes, agents, agent templates, and sandbox templates (lifecycle,
-metrics, snapshots). The **data plane**
+covers sandboxes and templates (lifecycle, metrics, snapshots). The **data plane**
 covers exec, files, and supervised processes on the running sandbox daemon
 (`sandboxd`).
 
@@ -39,8 +38,8 @@ neev-sdk-<lang>/
 | Canonical slot | Responsibility | Python path | Key types |
 |---|---|---|---|
 | `<root client>` | Sync + async entry | `src/neevai/client.py` | `NeevAI`, `AsyncNeevAI` |
-| `resources/` | Control-plane resource classes | `src/neevai/resources/sandboxes.py`, `resources/templates.py`, `resources/agents.py`, `resources/agent_templates.py` | `Sandboxes`, `Agents`, `AgentTemplates`, `Templates`, async variants |
-| `<handle>` | Resource handle objects | `src/neevai/handles/sandbox.py`, `handles/agent.py` | `Sandbox`, `AsyncSandbox`, `Agent`, `AsyncAgent` |
+| `resources/` | Control-plane resource classes | `src/neevai/resources/sandboxes.py`, `resources/templates.py` | `Sandboxes`, `AsyncSandboxes`, `Templates`, `AsyncTemplates` |
+| `<handle>` | Resource handle objects | `src/neevai/handles/sandbox.py` | `Sandbox`, `AsyncSandbox` |
 | `<runtime>` | Data-plane connection + files + exec + processes | `src/neevai/runtime/sandboxd.py`, `runtime/processes.py`, `runtime/_stream.py` | `SandboxConnection`, `SandboxFiles`, `SandboxProcesses`, `Process`, async variants |
 | `transport/lifecycle` | Control-plane HTTP **with retries** | `src/neevai/transport/lifecycle.py` | `ControlTransport`, `RawClient` |
 | `transport/runtime` | Data-plane HTTP **no retries** | `src/neevai/transport/runtime.py` | `DataplaneTransport` |
@@ -66,10 +65,7 @@ flowchart TB
   subgraph sdk [Hand-written SDK layer]
     NeevAI["NeevAI / AsyncNeevAI client<br/>src/neevai/client.py"]
     Sandboxes["Sandboxes resource<br/>src/neevai/resources/sandboxes.py"]
-    Agents["Agents resource<br/>src/neevai/resources/agents.py"]
-    AgentTemplates["AgentTemplates resource<br/>src/neevai/resources/agent_templates.py"]
     SandboxHandle["Sandbox handle<br/>src/neevai/handles/sandbox.py"]
-    AgentHandle["Agent handle<br/>src/neevai/handles/agent.py"]
     Sandboxd["SandboxConnection + SandboxFiles<br/>+ SandboxProcesses<br/>src/neevai/runtime/sandboxd.py<br/>src/neevai/runtime/processes.py"]
     Types["Public type aliases<br/>src/neevai/types.py"]
     Errors["Error hierarchy<br/>src/neevai/errors.py"]
@@ -94,15 +90,9 @@ flowchart TB
 
   App --> NeevAI
   NeevAI --> Sandboxes
-  NeevAI --> Agents
-  NeevAI --> AgentTemplates
-  Agents --> AgentHandle
-  AgentHandle -->|"get_sandbox()"| Sandboxes
   Sandboxes --> SandboxHandle
   SandboxHandle --> Sandboxd
   Sandboxes --> ControlTransport
-  Agents --> ControlTransport
-  AgentTemplates --> ControlTransport
   NeevAI --> RawClient
   Sandboxd --> DataplaneTransport
   ControlTransport --> ControlPlane
@@ -137,13 +127,10 @@ flowchart TB
  subgraph controlPlane["Control plane — lifecycle transport"]
         NeevAI["NeevAI / AsyncNeevAI<br>client.py"]
         Sandboxes["sandboxes resource<br>resources/sandboxes.py"]
-        Agents["agents resource<br>resources/agents.py"]
-        AgentTemplates["agent_templates resource<br>resources/agent_templates.py"]
         Templates["templates resource"]
         Raw["raw.request"]
         Wait["wait_until_ready / refresh"]
         LifecycleOps["pause / resume / delete / metrics / snapshot / fork / restore"]
-        AgentLifecycle["agent pause / resume / update / delete"]
         LifecycleTransport["ControlTransport (retries)<br>transport/lifecycle.py"]
   end
  subgraph dataPlane["Data plane — runtime"]
@@ -153,16 +140,11 @@ flowchart TB
         Sandboxd["SandboxConnection + SandboxFiles<br>+ SandboxProcesses<br>runtime/sandboxd.py<br>runtime/processes.py"]
         RuntimeTransport["DataplaneTransport (no retry)<br>transport/runtime.py"]
   end
-    NeevAI --> Sandboxes & Agents & AgentTemplates & Templates & Raw & LifecycleTransport
-    Agents --> AgentH["Agent / AsyncAgent<br>handles/agent.py"]
-    AgentTemplates --> LifecycleTransport
-    AgentH -->|"sandbox()"| Sandboxes
-    AgentH --> Wait & AgentLifecycle
+    NeevAI --> Sandboxes & Templates & Raw & LifecycleTransport
     Sandboxes --> SB["Sandbox / AsyncSandbox<br>handles/sandbox.py"] & LifecycleTransport
     SB --> Wait & LifecycleOps & Exec & Files & Processes
     Wait --> LifecycleTransport
     LifecycleOps --> LifecycleTransport
-    AgentLifecycle --> LifecycleTransport
     Exec --> Sandboxd
     Files --> Sandboxd
     Processes --> Sandboxd
@@ -170,21 +152,13 @@ flowchart TB
 ```
 
 **Control plane (lifecycle transport)** — `NeevAI` / `AsyncNeevAI` expose
-resource objects (`sandboxes`, `agents`, `agent_templates`, `templates`) and a
-low-level `raw.request` escape hatch. Sandbox handle lifecycle methods
-(`wait_until_ready`, `refresh`, `pause`, `resume`, `delete`, `metrics`,
-`snapshot`, `fork`, `restore`) and agent handle lifecycle methods
-(`wait_until_ready`, `refresh`, `update`, `pause`, `resume`, `delete`) also
-live here. Snapshot rollback can also provision a new sandbox via
-`from_snapshot` on create. All of these calls route through `ControlTransport`
-in `transport/lifecycle.py` (retries enabled) to the NeevAI agent API.
-
-**Agent handle** — `Agents.create`, `get`, and `list` return an `Agent` (or
-async variant). `agent.sandbox()` resolves the backing `Sandbox` handle so
-callers can reach the data plane without tracking `sandbox_id` separately.
-Pass the catalogue template **name** (e.g. `"claude-code"`) as `agent_template`
-at create — not the template id (`agent_template_id` is a read-only property on
-the handle).
+resource objects (`sandboxes`, `templates`) and a low-level `raw.request`
+escape hatch. Handle lifecycle methods (`wait_until_ready`, `refresh`,
+`pause`, `resume`, `delete`, `metrics`, `snapshot`, `fork`, `restore`) also live
+here. Snapshot rollback can also provision a new sandbox via `from_snapshot` on
+create. All of these calls
+route through `ControlTransport` in `transport/lifecycle.py` (retries enabled)
+to the NeevAI agent API.
 
 **Sandbox handle** — `Sandboxes.create`, `get`, and `list` return a `Sandbox`
 (or async variant) rather than a bare ID. The handle is the pivot between
@@ -215,12 +189,9 @@ neev-sdk-python/
 |   |   +-- aiagent.py
 |   +-- resources/            # Hand-written API resource classes
 |   |   +-- sandboxes.py
-|   |   +-- agents.py
-|   |   +-- agent_templates.py
 |   |   +-- templates.py
 |   +-- handles/              # Canonical <handle> slot
 |   |   +-- sandbox.py
-|   |   +-- agent.py
 |   +-- runtime/              # Canonical <runtime> slot (data-plane client)
 |   |   +-- sandboxd.py
 |   |   +-- processes.py
@@ -250,10 +221,7 @@ splitting into separate `sync/` and `async/` trees:
 |---|---|---|
 | `client.py` | `NeevAI` | `AsyncNeevAI` |
 | `resources/sandboxes.py` | `Sandboxes` | `AsyncSandboxes` |
-| `resources/agents.py` | `Agents` | `AsyncAgents` |
-| `resources/agent_templates.py` | `AgentTemplates` | `AsyncAgentTemplates` |
 | `handles/sandbox.py` | `Sandbox` | `AsyncSandbox` |
-| `handles/agent.py` | `Agent` | `AsyncAgent` |
 | `runtime/sandboxd.py` | `SandboxConnection`, `SandboxFiles` | `AsyncSandboxConnection`, `AsyncSandboxFiles` |
 | `runtime/processes.py` | `SandboxProcesses`, `Process` | `AsyncSandboxProcesses`, `AsyncProcess` |
 | `transport/lifecycle.py` | `ControlTransport`, `RawClient` | `AsyncControlTransport`, `AsyncRawClient` |
@@ -271,10 +239,8 @@ This is a Python idiom; other language SDKs may use separate trees.
    handles, and `runtime/`.
 3. **Shared transport pattern** — retrying `ControlTransport` for control
    plane, non-retrying `DataplaneTransport` for the data plane.
-4. **Handles over raw IDs** — lifecycle returns `Sandbox` and `Agent` objects
-   so callers can chain `create -> wait_until_ready -> files.write -> exec ->
-   delete`, or `agents.create -> wait_until_ready -> sandbox() -> exec ->
-   delete`.
+4. **Handles over raw IDs** — lifecycle returns `Sandbox` objects so callers
+   can chain `create -> wait_until_ready -> files.write -> exec -> delete`.
 5. **Scope model** — `org_id`/`project_id` on client or per-call.
 6. **No retries on sandboxd** — exec, file writes, and process control are not
    idempotent.
