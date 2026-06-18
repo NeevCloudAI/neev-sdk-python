@@ -235,7 +235,6 @@ class ProcessInfo(ProcessStatus):
 class ProcessLogEntry(BaseModel):
     """Single log line from poll-mode log retrieval."""
 
-    stream: Literal["stdout", "stderr"]
     data: str
 
 

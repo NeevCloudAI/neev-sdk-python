@@ -25,6 +25,7 @@ from neevai.types import (
     ProcessLogEvent,
     ProcessLogsPage,
     ProcessStatus,
+    Signal,
 )
 
 if TYPE_CHECKING:
@@ -70,7 +71,7 @@ def _map_logs_page(raw: RawProcessLogsPage) -> ProcessLogsPage:
 
 
 def _signal_body_value(signal: int | None) -> int | None:
-    if signal is None:
+    if signal is None or signal == Signal.TERM:
         return None
     return signal
 
