@@ -32,7 +32,7 @@ $env:NEEVCLOUD_REGION = "as-south-1"
 ```
 
 By default examples target the **production** control plane
-(`https://agent.ai.neevcloud.com`) and region `as-south-1`. To target another
+(`https://api.ai.neevcloud.com/agent`) and region `as-south-1`. To target another
 environment:
 
 ```sh
@@ -60,6 +60,8 @@ examples/
 ├── async_sandbox.py
 ├── files_api.py
 ├── streaming_exec.py
+├── processes.py
+├── process_pool.py
 ├── sandbox_metrics.py
 ├── parallel_fanout.py
 ├── raw_request.py
@@ -93,6 +95,8 @@ region). Each provisions a real sandbox and deletes it in a `finally` block.
 | [`async_sandbox.py`](./async_sandbox.py) | `AsyncNeevAI`, `sandboxes.create`, `wait_until_ready`, `exec`, `delete` | `uv run python examples/async_sandbox.py` |
 | [`files_api.py`](./files_api.py) | `files.write`, `read_text`, `list(recursive=True)` | `uv run python examples/files_api.py` |
 | [`streaming_exec.py`](./streaming_exec.py) | `exec_stream` — stdout/stderr streamed line-by-line | `uv run python examples/streaming_exec.py` |
+| [`processes.py`](./processes.py) | `refresh` (connect_url poll), `wait_until_ready`, `processes.list` (dataplane probe), `start`, `follow`, `logs`, `kill`, `wait` | `uv run python examples/processes.py` |
+| [`process_pool.py`](./process_pool.py) | Same wait pattern as `processes.py`, parallel `start`, `list`, `kill_all`, `wait` | `uv run python examples/process_pool.py` |
 | [`parallel_fanout.py`](./parallel_fanout.py) | Multiple `sandboxes.create`, parallel `exec` via `ThreadPoolExecutor` | `uv run python examples/parallel_fanout.py` |
 | [`sandbox_metrics.py`](./sandbox_metrics.py) | `metrics()` polled under simulated CPU load | `uv run python examples/sandbox_metrics.py` |
 | [`raw_request.py`](./raw_request.py) | `client.raw.request` — untyped control-plane access | `uv run python examples/raw_request.py` |
@@ -208,20 +212,33 @@ uv run python examples/files_api.py
 uv run python examples/streaming_exec.py
 ```
 
-**7. Parallel fan-out** — three sandboxes analyze public repos in parallel and
+**7. Supervised processes** — connect_url wait, Ready, dataplane probe, then
+start / follow / logs / kill
+
+```sh
+uv run python examples/processes.py
+```
+
+**8. Process pool** — parallel starts and `kill_all`
+
+```sh
+uv run python examples/process_pool.py
+```
+
+**9. Parallel fan-out** — three sandboxes analyze public repos in parallel and
 print aggregated file counts
 
 ```sh
 uv run python examples/parallel_fanout.py
 ```
 
-**8. Metrics under load**
+**10. Metrics under load**
 
 ```sh
 uv run python examples/sandbox_metrics.py
 ```
 
-**9. Raw request** (optional)
+**11. Raw request** (optional)
 
 ```sh
 uv run python examples/raw_request.py
@@ -230,32 +247,32 @@ uv run python examples/raw_request.py
 The remaining examples need an AI model — set `NEEV_INFERENCE_API_KEY` or
 `NEEVCLOUD_INFERENCE_API_KEY` (see [Tier 2](#tier-2--agent-integration-with-an-ai-model)).
 
-**10. Minimal agent** (no extra deps)
+**12. Minimal agent** (no extra deps)
 
 ```sh
 uv run python examples/agent_patterns/minimal_agent.py
 ```
 
-**11. LangChain**
+**13. LangChain**
 
 ```sh
 uv sync --extra agents
 uv run --extra agents python examples/agent_patterns/langchain_agent.py
 ```
 
-**12. Repository analyzer**
+**14. Repository analyzer**
 
 ```sh
 uv run python examples/workflow_examples/repo_analyzer.py
 ```
 
-**13. Browser automation**
+**15. Browser automation**
 
 ```sh
 uv run python examples/workflow_examples/browser_agent.py
 ```
 
-**14. (Optional) Browser with query filter**
+**16. (Optional) Browser with query filter**
 
 ```sh
 uv run python examples/workflow_examples/browser_agent.py --query "AI"
@@ -268,7 +285,7 @@ uv run python examples/workflow_examples/browser_agent.py --query "AI"
 | `NEEVCLOUD_API_KEY` | all | — (required) |
 | `NEEVCLOUD_ORG_ID` | all | — (required) |
 | `NEEVCLOUD_PROJECT_ID` | all | — (required) |
-| `NEEVCLOUD_BASE_URL` | all | production gateway |
+| `NEEVCLOUD_BASE_URL` | all | `https://api.ai.neevcloud.com/agent` |
 | `NEEVCLOUD_REGION` | sandbox create | `as-south-1` |
 | `NEEVCLOUD_SANDBOX_TEMPLATE_ID` | sandbox create | `sb-ubuntu-26-04-minimal` |
 | `NEEV_INFERENCE_API_KEY` | model examples | falls back to `NEEVCLOUD_INFERENCE_API_KEY`, then `NEEVCLOUD_API_KEY` |
@@ -277,7 +294,8 @@ uv run python examples/workflow_examples/browser_agent.py --query "AI"
 | `NEEVCLOUD_INFERENCE_BASE_URL` | model examples | alias for inference base URL |
 | `NEEV_MODEL` | model + workflow_examples | `gpt-oss-120b` |
 | `NEEVAI_WORKFLOW_MAX_STEPS` | workflow_examples | `35` (`repo_analyzer`), `70` (`browser_agent`) |
-| `NEEVAI_WAIT_TIMEOUT_MS` | `sandbox_lifecycle.py`, `snapshot_fork_restore.py`, lifecycle controller | `300000` |
+| `NEEVAI_WAIT_TIMEOUT_MS` | `sandbox_lifecycle.py`, `snapshot_fork_restore.py`, `processes.py`, `process_pool.py`, lifecycle controller | `300000` |
+| `NEEVAI_POLL_INTERVAL_MS` | `processes.py`, `process_pool.py` | `2000` |
 | `NEEVAI_SNAPSHOT_POLL_MS` | `snapshot_fork_restore.py` | `3000` |
 | `NEEVAI_STEP_DELAY_SEC` | `sandbox_lifecycle.py` | `3` |
 | `NEEV_GIT_STATIC_URL` | `repo_analyzer.py` | — (optional static git binary URL) |
@@ -289,4 +307,8 @@ uv run python examples/workflow_examples/browser_agent.py --query "AI"
   works on every template. `run_python` needs a python-capable template.
 - Python examples call `wait_until_ready()` explicitly before `exec` / `exec_stream`
   (the TS SDK auto-waits on first use).
+- `processes.py` and `process_pool.py` poll until `connect_url` is set, call
+  `wait_until_ready()`, then probe the data-plane with `sandbox.processes.list()`
+  before `processes.start` (tunable via `NEEVAI_WAIT_TIMEOUT_MS` /
+  `NEEVAI_POLL_INTERVAL_MS`).
 - Progress/transcript output goes to **stderr**; an example's result goes to **stdout**.

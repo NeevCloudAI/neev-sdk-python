@@ -17,7 +17,7 @@ concurrency:
 jobs:
   build_and_test:
     name: Build and Test (py ${{ matrix.python-version }})
-    runs-on: neevai-runner-dev
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:

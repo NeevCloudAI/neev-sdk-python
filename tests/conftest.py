@@ -99,12 +99,20 @@ def _make_sandbox_record(
     }
 
 
+def _normalize_control_path(path: str) -> str:
+    """Strip /agent prefix when base_url is https://.../agent (DEFAULT_BASE_URL)."""
+    if path.startswith("/agent/"):
+        return path[len("/agent") :]
+    return path
+
+
 def _control_response(
     method: str, path: str, query: dict[str, Any] | None, body: Any
 ) -> httpx.Response:
     """Return a mocked control‑plane response.
     Only a subset of endpoints required for the test suite are handled.
     """
+    path = _normalize_control_path(path)
 
     def json_resp(
         status: int, data: Any = None, headers: dict[str, str] | None = None
