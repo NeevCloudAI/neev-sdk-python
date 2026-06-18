@@ -4,6 +4,12 @@ from typing import Literal, TypedDict
 from pydantic import BaseModel
 
 __all__ = [
+    "AgentData",
+    "AgentListResponse",
+    "AgentStatus",
+    "AgentTemplate",
+    "AgentTemplateListResponse",
+    "CreateAgentParams",
     "CreateSandboxParams",
     "CreateSnapshotParams",
     "CreateSnapshotRequest",
@@ -38,11 +44,27 @@ __all__ = [
     "SnapshotStatus",
     "StderrStreamEvent",
     "StdoutStreamEvent",
+    "UpdateAgentParams",
 ]
 
 # Public re-exports of generated types. These are aliased into
 # SDK-friendly names and consumed by `from neevai.types import ...` in
 # the rest of the package.
+from neevai.generated.aiagent import (  # noqa: F401
+    Agent as _GeneratedAgent,
+)
+from neevai.generated.aiagent import (  # noqa: F401
+    AgentStatus as AgentStatus,
+)
+from neevai.generated.aiagent import (  # noqa: F401
+    AgentTemplate as AgentTemplate,
+)
+from neevai.generated.aiagent import (  # noqa: F401
+    AgentTemplateListResponse as AgentTemplateListResponse,
+)
+from neevai.generated.aiagent import (  # noqa: F401
+    CreateAgentRequest as CreateAgentParams,
+)
 from neevai.generated.aiagent import (  # noqa: F401
     CreateSandboxRequest as CreateSandboxParams,
 )
@@ -94,10 +116,30 @@ from neevai.generated.aiagent import (  # noqa: F401
 from neevai.generated.aiagent import (  # noqa: F401
     SnapshotStatus as SnapshotStatus,
 )
+from neevai.generated.aiagent import (  # noqa: F401
+    UpdateAgentRequest as UpdateAgentParams,
+)
 
 # Steady-state phases from the OpenAPI spec, plus transitional values the API may
 # return during pause/resume reconciliation (not listed in the spec enum).
 SandboxPhase = Literal["Pending", "Ready", "NotReady", "Unknown", "Paused", "Pausing", "Resuming"]
+
+
+class AgentData(_GeneratedAgent):
+    """Agent record with relaxed ``status`` validation.
+
+    The control plane may return future status strings beyond the OpenAPI
+    ``AgentStatus`` enum; accept any string at the SDK boundary.
+    """
+
+    status: str  # type: ignore[assignment]  # pyright: ignore[reportIncompatibleVariableOverride]
+
+
+class AgentListResponse(BaseModel):
+    items: list[AgentData]
+    total: int
+    page: int
+    limit: int
 
 
 class SandboxData(_GeneratedSandbox):

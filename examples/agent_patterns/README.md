@@ -27,6 +27,10 @@ There is no 1:1 Python port of the TS Vercel AI SDK or Genkit examples; use
 For end-to-end workflows with local artifacts, continue to
 [`../workflow_examples/README.md`](../workflow_examples/README.md).
 
+Platform **agents** (`client.agents`) are documented separately — see Tier 1
+[`create_agent.py`](../create_agent.py) and
+[`docs/getting-started.md`](../../docs/getting-started.md#create-an-agent).
+
 ## Setup
 
 First do the one-time setup in [`../README.md`](../README.md). One NeevCloud API
