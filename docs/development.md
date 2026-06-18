@@ -1,15 +1,13 @@
 # Development Guide
 
 For the canonical SDK layout and Python slot mapping, see
-[architecture.md](./architecture.md). Control-plane agents live in
-`resources/agents.py` and `resources/agent_templates.py` with handles in
-`handles/agent.py`.
+[architecture.md](./architecture.md).
 
 ## Setup
 
 ```sh
-git clone https://github.com/NeevCloudAI/neev-sdk-python.git
-cd neev-sdk-python
+git clone https://github.com/NeevCloudAI/neevai-sdk-python.git
+cd neevai-sdk-python
 uv sync --extra dev
 ```
 
@@ -40,10 +38,7 @@ Generated files land in `src/neevai/generated/`. **Do not edit them by hand.**
 
 After regenerating types, manually verify type field tables in
 `docs/api-inventory.md` match `src/neevai/generated/`. Type tables live in the
-inventory only — not in `api-reference.md`. When adding a new control-plane
-resource, follow the agents implementation as the latest reference:
-`resources/agents.py`, `resources/agent_templates.py`, `handles/agent.py`, and
-`tests/test_agents.py`.
+inventory only — not in `api-reference.md`.
 
 ### Interim: vendored `specs/`
 

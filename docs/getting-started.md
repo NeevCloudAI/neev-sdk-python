@@ -113,11 +113,8 @@ or pass equivalent constructor kwargs to `NeevAI(...)` / `AsyncNeevAI(...)`.
 | `NEEVCLOUD_ORG_ID` | Default organization ID |
 | `NEEVCLOUD_PROJECT_ID` | Default project ID |
 | `NEEVCLOUD_REGION` | Default deployment region for sandbox create |
-| `NEEVCLOUD_BASE_URL` | Control-plane base URL (default: `https://api.ai.neevcloud.com/agent`) |
-| `NEEVCLOUD_SANDBOX_TEMPLATE_ID` | Optional sandbox template id (defaults to `sb-ubuntu-26-04-minimal` in examples) |
-| `NEEV_AGENT_TEMPLATE` | Optional agent template **name** for [`create_agent.py`](../examples/create_agent.py) (default: `claude-code`) |
-| `NEEVAI_WAIT_TIMEOUT_MS` | Shared deadline for connect URL, Ready phase, and data-plane probe (default: `300000`) |
-| `NEEVAI_POLL_INTERVAL_MS` | Poll interval while waiting for connect URL / data plane (default: `2000`) |
+| `NEEVCLOUD_BASE_URL` | Control-plane base URL (default: `https://agent.ai.neevcloud.com`) |
+| `NEEVCLOUD_SANDBOX_TEMPLATE_ID` | Optional template id (defaults to `sb-ubuntu-26-04-minimal` in examples) |
 
 **Linux / macOS (bash/zsh)** — current session:
 
@@ -248,7 +245,7 @@ with NeevAI() as client:
     print(f"Ready — connect_url={sandbox.connect_url}")
 
     # 4. Run a buffered command
-    result = sandbox.exec(["sh", "-c", "echo hello from sandbox"])
+    result = sandbox.exec(["python3", "-c", "print('hello from sandbox')"])
     print(f"stdout={result.stdout!r}, exit_code={result.exit_code}")
 
     # 5. Write and read a file (paths are workspace-relative)
@@ -266,14 +263,10 @@ Key points:
 - Use `sandbox_template_id` in create params (not `template_id`). See
   [`api-inventory.md`](./api-inventory.md#clientsandboxescreateparams-org_idnone-project_idnone)
   for the full parameter table.
-- `connect_url` is a property on the handle; it may appear while `phase` is still
-  `Pending` or `NotReady`. Wait until `phase == "Ready"` **and** the data plane
-  accepts requests before `exec`, `files`, or `processes`.
+- `connect_url` is a property on the handle; it is populated once the sandbox is ready.
 - `sandbox.pause()` and `sandbox.resume()` return updated `Sandbox` handles (they do
   not return `None`).
-- Always call `wait_until_ready()` before data-plane operations; for supervised
-  processes, also probe with `sandbox.processes.list()` (see
-  [Supervised processes](#supervised-processes)).
+- Always call `wait_until_ready()` before exec or file operations.
 
 **Examples:** [`sandbox_lifecycle.py`](../examples/sandbox_lifecycle.py),
 [`files_api.py`](../examples/files_api.py)
@@ -281,104 +274,6 @@ Key points:
 For snapshot capture, rollback via `from_snapshot`, and fork workflows, see
 [`snapshot_fork_restore.py`](../examples/snapshot_fork_restore.py) and the
 [Snapshots](./api-reference.md#snapshots) section in the API reference.
-
----
-
-## Create an agent
-
-Platform **agents** (`client.agents`) provision a packaged agent from the
-**agent template catalogue** (`client.agent_templates`). This is separate from
-the model-driven demos under [`examples/agent_patterns/`](../examples/agent_patterns/)
-— those wire an inference model into a sandbox as a code-execution tool.
-
-1. **Browse templates** — list or get catalogue entries (global, no org scope):
-
-   ```python
-   page = client.agent_templates.list()
-   for tmpl in page.items:
-       print(tmpl.name, tmpl.id)  # name is what you pass at create
-   ```
-
-2. **Create** — pass the template **name** (e.g. `"claude-code"`) as
-   `agent_template` at create — not the catalogue id (`agent_template_id` is a
-   read-only property on the handle). Region is optional; the client injects
-   `default_region` only when `NEEVCLOUD_REGION` (or the `region=` constructor
-   kwarg) is set.
-
-3. **Wait and use the backing sandbox** — `agent.sandbox()` returns a
-   `Sandbox` handle for exec, files, and processes.
-
-4. **Lifecycle** — `update`, `pause`, `resume`, and `delete` mirror sandbox
-   lifecycle patterns. Call `resume()` before `wait_until_ready()` if the agent
-   was paused.
-
-Set `NEEV_AGENT_TEMPLATE` to pick a catalogue name without editing code (see
-[`create_agent.py`](../examples/create_agent.py)).
-
-```python
-from neevai import NeevAI
-
-with NeevAI() as client:
-    templates = client.agent_templates.list()
-    print("available:", [t.name for t in templates.items])
-
-    agent = client.agents.create({
-        "name": "my-agent",
-        "agent_template": "claude-code",  # template name, not id
-    })
-    agent.wait_until_ready()
-    sandbox = agent.sandbox()
-    sandbox.files.write("notes.md", "# scratch\n")
-    result = sandbox.exec(["ls", "-la"])
-    print(result.stdout.rstrip())
-
-    agent.update({"resources": {"cpu": 2, "memory_gb": 4}})
-    agent.pause()
-    agent.resume()
-    agent.wait_until_ready()
-    agent.delete()
-```
-
-**Example:** [`create_agent.py`](../examples/create_agent.py)
-
----
-
-## Supervised processes
-
-Detached processes outlive the HTTP request that started them — useful for
-long-running workers, log streaming, and process pools. Before calling
-`sandbox.processes.start`, complete this sequence (shared deadline via
-`NEEVAI_WAIT_TIMEOUT_MS` / `NEEVAI_POLL_INTERVAL_MS`):
-
-1. Poll `sandbox.refresh()` until `connect_url` is set (may appear before
-   `phase == "Ready"`).
-2. Call `sandbox.wait_until_ready()` until `phase == "Ready"`.
-3. Probe the data plane with `sandbox.processes.list()` — retry transient
-   `502` / `503` / `504` until the daemon accepts requests.
-
-[`examples/processes.py`](../examples/processes.py) implements the full wait
-helpers (`_wait_for_connect_url`, `_wait_for_dataplane`, `_wait_before_processes`).
-Use it as the reference for production code.
-
-```python
-# Minimal inline version (see processes.py for retry helpers)
-while not sandbox.connect_url:
-    sandbox.refresh()
-sandbox.wait_until_ready(timeout_ms=120_000)
-sandbox.processes.list()  # probe data plane
-
-proc = sandbox.processes.start(["sh", "-c", "echo started; sleep 3"])
-for event in proc.follow():
-    if event["type"] == "stdout":
-        print(event["data"], end="")
-proc.kill()
-proc.wait()
-```
-
-Full end-to-end flow (auth headers, raw HTTP, troubleshooting):
-[`api-inventory.md` → End-to-end flow](./api-inventory.md#end-to-end-flow).
-Runnable examples: [`processes.py`](../examples/processes.py),
-[`process_pool.py`](../examples/process_pool.py).
 
 ---
 
@@ -430,10 +325,9 @@ asyncio.run(main())
 | Document | What you'll find |
 | -------- | ---------------- |
 | [README](../README.md) | Short install overview, clone-to-first-run checklist, examples table |
-| **Getting started** (this file) | Full install walkthrough, env vars, first sync/async script, [create an agent](#create-an-agent), [supervised processes](#supervised-processes) |
+| **Getting started** (this file) | Full install walkthrough, env vars, first sync/async script |
 | [`api-reference.md`](./api-reference.md) | Control-plane vs data-plane API lists and copy-paste snippets |
 | [`api-inventory.md`](./api-inventory.md) | Full method signatures, parameter tables, types, errors, symbol index |
-| [`api-inventory.md` → Processes E2E](./api-inventory.md#end-to-end-flow) | connect_url wait, auth, raw HTTP, curl/PowerShell, troubleshooting |
 | [`example-coverage.md`](./example-coverage.md) | Example catalog and API → examples lookup |
 | [`architecture.md`](./architecture.md) | SDK layout and module responsibilities |
 | [`development.md`](./development.md) | Contributor workflow and doc maintenance |

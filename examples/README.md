@@ -32,7 +32,7 @@ $env:NEEVCLOUD_REGION = "as-south-1"
 ```
 
 By default examples target the **production** control plane
-(`https://api.ai.neevcloud.com/agent`) and region `as-south-1`. To target another
+(`https://agent.ai.neevcloud.com`) and region `as-south-1`. To target another
 environment:
 
 ```sh
@@ -46,27 +46,7 @@ Template id defaults to `sb-ubuntu-26-04-minimal`; override with:
 export NEEVCLOUD_SANDBOX_TEMPLATE_ID=sb-ubuntu-26-04-minimal
 ```
 
-For platform agent create (`create_agent.py`), pick a catalogue template name:
-
-```sh
-export NEEV_AGENT_TEMPLATE=claude-code   # default when unset
-```
-
 Run every command below from the **repo root** unless noted otherwise.
-
-## Platform agents vs model integration
-
-Two different "agent" concepts appear in this repo:
-
-- **Platform agents** (`client.agents`, Tier 1 [`create_agent.py`](./create_agent.py))
-  — provision a packaged agent from the catalogue onto its own backing sandbox.
-  No inference key required.
-- **Model integration** (Tier 2 [`agent_patterns/`](./agent_patterns/)) — wire
-  `gpt-oss-120b` (or another model) into a sandbox as a code-execution tool.
-  See [`agent_patterns/README.md`](./agent_patterns/README.md).
-
-Tier 3 [`workflow_examples/`](./workflow_examples/) builds on the model
-integration helpers for end-to-end demos with local artifacts.
 
 ## Learning path
 
@@ -75,14 +55,11 @@ Examples are organized in three tiers — start at Tier 1 and work your way up:
 ```text
 examples/
 ├── templates_list.py             ← Tier 1: Core Sandbox
-├── create_agent.py               ← Tier 1: Agent lifecycle (platform agents API)
 ├── sandbox_lifecycle.py
 ├── snapshot_fork_restore.py
 ├── async_sandbox.py
 ├── files_api.py
 ├── streaming_exec.py
-├── processes.py
-├── process_pool.py
 ├── sandbox_metrics.py
 ├── parallel_fanout.py
 ├── raw_request.py
@@ -99,28 +76,23 @@ examples/
 
 | Tier | Focus | Start here |
 |------|-------|------------|
-| **1 — Core Sandbox** | Pure SDK: templates, sandbox lifecycle, **platform agents**, async, files, streaming exec, metrics | [`templates_list.py`](./templates_list.py) |
-| **2 — Agent Integration** | Wire a model into a sandbox as a code-execution tool (not `client.agents`) | [`agent_patterns/minimal_agent.py`](./agent_patterns/minimal_agent.py) |
-| **3 — Real-World Workflows** | End-to-end model-driven agent workflows with artifacts | [`workflow_examples/repo_analyzer.py`](./workflow_examples/repo_analyzer.py) |
+| **1 — Core Sandbox** | Pure SDK: templates, lifecycle, async, files, streaming exec, metrics | [`templates_list.py`](./templates_list.py) |
+| **2 — Agent Integration** | Wire a model into a sandbox as a code-execution tool | [`agent_patterns/minimal_agent.py`](./agent_patterns/minimal_agent.py) |
+| **3 — Real-World Workflows** | End-to-end agent workflows with artifacts | [`workflow_examples/repo_analyzer.py`](./workflow_examples/repo_analyzer.py) |
 
 ## Tier 1 — Core Sandbox (no model needed)
 
 These scripts only need sandbox credentials (`NEEVCLOUD_API_KEY`, org, project,
-region). Each provisions a real sandbox or platform agent and deletes it in a
-`finally` block (or explicit cleanup). [`create_agent.py`](./create_agent.py)
-uses the **platform agents API** — not the model-driven patterns in Tier 2.
+region). Each provisions a real sandbox and deletes it in a `finally` block.
 
 | File | SDK features | Run |
 |------|--------------|-----|
 | [`templates_list.py`](./templates_list.py) | `templates.list`, `templates.get`, `sandboxes.create`, `wait_until_ready`, `delete` | `uv run python examples/templates_list.py` |
-| [`create_agent.py`](./create_agent.py) | `agent_templates.list`, `agents.create`, `wait_until_ready`, `sandbox()`, `update`, `pause`, `delete` | `uv run python examples/create_agent.py` |
 | [`sandbox_lifecycle.py`](./sandbox_lifecycle.py) | `sandboxes.create`, `wait_until_ready`, `metrics`, `pause`, `delete` | `uv run python examples/sandbox_lifecycle.py` |
 | [`snapshot_fork_restore.py`](./snapshot_fork_restore.py) | `snapshot`, `get_snapshot`, `create` with `from_snapshot`, `fork`, `delete_snapshot` | `uv run python examples/snapshot_fork_restore.py` |
 | [`async_sandbox.py`](./async_sandbox.py) | `AsyncNeevAI`, `sandboxes.create`, `wait_until_ready`, `exec`, `delete` | `uv run python examples/async_sandbox.py` |
 | [`files_api.py`](./files_api.py) | `files.write`, `read_text`, `list(recursive=True)` | `uv run python examples/files_api.py` |
 | [`streaming_exec.py`](./streaming_exec.py) | `exec_stream` — stdout/stderr streamed line-by-line | `uv run python examples/streaming_exec.py` |
-| [`processes.py`](./processes.py) | `refresh` (connect_url poll), `wait_until_ready`, `processes.list` (dataplane probe), `start`, `follow`, `logs`, `kill`, `wait` | `uv run python examples/processes.py` |
-| [`process_pool.py`](./process_pool.py) | Same wait pattern as `processes.py`, parallel `start`, `list`, `kill_all`, `wait` | `uv run python examples/process_pool.py` |
 | [`parallel_fanout.py`](./parallel_fanout.py) | Multiple `sandboxes.create`, parallel `exec` via `ThreadPoolExecutor` | `uv run python examples/parallel_fanout.py` |
 | [`sandbox_metrics.py`](./sandbox_metrics.py) | `metrics()` polled under simulated CPU load | `uv run python examples/sandbox_metrics.py` |
 | [`raw_request.py`](./raw_request.py) | `client.raw.request` — untyped control-plane access | `uv run python examples/raw_request.py` |
@@ -206,12 +178,6 @@ example provisions a real sandbox, so the project needs available credits.
 uv run python examples/templates_list.py
 ```
 
-**1b. Platform agent lifecycle**
-
-```sh
-uv run python examples/create_agent.py
-```
-
 **2. Lifecycle**
 
 ```sh
@@ -242,33 +208,20 @@ uv run python examples/files_api.py
 uv run python examples/streaming_exec.py
 ```
 
-**7. Supervised processes** — connect_url wait, Ready, dataplane probe, then
-start / follow / logs / kill
-
-```sh
-uv run python examples/processes.py
-```
-
-**8. Process pool** — parallel starts and `kill_all`
-
-```sh
-uv run python examples/process_pool.py
-```
-
-**9. Parallel fan-out** — three sandboxes analyze public repos in parallel and
+**7. Parallel fan-out** — three sandboxes analyze public repos in parallel and
 print aggregated file counts
 
 ```sh
 uv run python examples/parallel_fanout.py
 ```
 
-**10. Metrics under load**
+**8. Metrics under load**
 
 ```sh
 uv run python examples/sandbox_metrics.py
 ```
 
-**11. Raw request** (optional)
+**9. Raw request** (optional)
 
 ```sh
 uv run python examples/raw_request.py
@@ -277,32 +230,32 @@ uv run python examples/raw_request.py
 The remaining examples need an AI model — set `NEEV_INFERENCE_API_KEY` or
 `NEEVCLOUD_INFERENCE_API_KEY` (see [Tier 2](#tier-2--agent-integration-with-an-ai-model)).
 
-**12. Minimal agent** (no extra deps)
+**10. Minimal agent** (no extra deps)
 
 ```sh
 uv run python examples/agent_patterns/minimal_agent.py
 ```
 
-**13. LangChain**
+**11. LangChain**
 
 ```sh
 uv sync --extra agents
 uv run --extra agents python examples/agent_patterns/langchain_agent.py
 ```
 
-**14. Repository analyzer**
+**12. Repository analyzer**
 
 ```sh
 uv run python examples/workflow_examples/repo_analyzer.py
 ```
 
-**15. Browser automation**
+**13. Browser automation**
 
 ```sh
 uv run python examples/workflow_examples/browser_agent.py
 ```
 
-**16. (Optional) Browser with query filter**
+**14. (Optional) Browser with query filter**
 
 ```sh
 uv run python examples/workflow_examples/browser_agent.py --query "AI"
@@ -315,18 +268,16 @@ uv run python examples/workflow_examples/browser_agent.py --query "AI"
 | `NEEVCLOUD_API_KEY` | all | — (required) |
 | `NEEVCLOUD_ORG_ID` | all | — (required) |
 | `NEEVCLOUD_PROJECT_ID` | all | — (required) |
-| `NEEVCLOUD_BASE_URL` | all | `https://api.ai.neevcloud.com/agent` |
+| `NEEVCLOUD_BASE_URL` | all | production gateway |
 | `NEEVCLOUD_REGION` | sandbox create | `as-south-1` |
 | `NEEVCLOUD_SANDBOX_TEMPLATE_ID` | sandbox create | `sb-ubuntu-26-04-minimal` |
-| `NEEV_AGENT_TEMPLATE` | `create_agent.py` | `claude-code` |
 | `NEEV_INFERENCE_API_KEY` | model examples | falls back to `NEEVCLOUD_INFERENCE_API_KEY`, then `NEEVCLOUD_API_KEY` |
 | `NEEVCLOUD_INFERENCE_API_KEY` | model examples | alias for inference key |
 | `NEEV_INFERENCE_BASE_URL` | model examples | `https://inference.ai.neevcloud.com/v1` |
 | `NEEVCLOUD_INFERENCE_BASE_URL` | model examples | alias for inference base URL |
 | `NEEV_MODEL` | model + workflow_examples | `gpt-oss-120b` |
 | `NEEVAI_WORKFLOW_MAX_STEPS` | workflow_examples | `35` (`repo_analyzer`), `70` (`browser_agent`) |
-| `NEEVAI_WAIT_TIMEOUT_MS` | `sandbox_lifecycle.py`, `snapshot_fork_restore.py`, `processes.py`, `process_pool.py`, lifecycle controller | `300000` |
-| `NEEVAI_POLL_INTERVAL_MS` | `processes.py`, `process_pool.py` | `2000` |
+| `NEEVAI_WAIT_TIMEOUT_MS` | `sandbox_lifecycle.py`, `snapshot_fork_restore.py`, lifecycle controller | `300000` |
 | `NEEVAI_SNAPSHOT_POLL_MS` | `snapshot_fork_restore.py` | `3000` |
 | `NEEVAI_STEP_DELAY_SEC` | `sandbox_lifecycle.py` | `3` |
 | `NEEV_GIT_STATIC_URL` | `repo_analyzer.py` | — (optional static git binary URL) |
@@ -338,8 +289,4 @@ uv run python examples/workflow_examples/browser_agent.py --query "AI"
   works on every template. `run_python` needs a python-capable template.
 - Python examples call `wait_until_ready()` explicitly before `exec` / `exec_stream`
   (the TS SDK auto-waits on first use).
-- `processes.py` and `process_pool.py` poll until `connect_url` is set, call
-  `wait_until_ready()`, then probe the data-plane with `sandbox.processes.list()`
-  before `processes.start` (tunable via `NEEVAI_WAIT_TIMEOUT_MS` /
-  `NEEVAI_POLL_INTERVAL_MS`).
 - Progress/transcript output goes to **stderr**; an example's result goes to **stdout**.

@@ -4,8 +4,6 @@ from typing import Any
 import httpx
 
 from neevai.errors import NeevAIError
-from neevai.resources.agent_templates import AgentTemplates, AsyncAgentTemplates
-from neevai.resources.agents import Agents, AsyncAgents
 from neevai.resources.sandboxes import AsyncSandboxes, Sandboxes
 from neevai.resources.templates import AsyncTemplates, Templates
 from neevai.transport.lifecycle import (
@@ -16,24 +14,17 @@ from neevai.transport.lifecycle import (
 )
 from neevai.types import Scope
 
-DEFAULT_BASE_URL = "https://api.ai.neevcloud.com/agent"
+DEFAULT_BASE_URL = "https://agent.ai.neevcloud.com"
 DEFAULT_TIMEOUT_MS = 60_000
 DEFAULT_MAX_RETRIES = 2
-
-
-def _read_env(*names: str) -> str | None:
-    for name in names:
-        value = os.environ.get(name)
-        if value:
-            return value
-    return None
 
 
 class NeevAI:
     """NeevAI platform synchronous client.
 
     Defaults for ``org_id``, ``project_id``, and ``region`` can be set via
-    constructor kwargs or the ``NEEVCLOUD_*`` / ``NEEV_*`` environment variables.
+    constructor kwargs or the ``NEEVCLOUD_ORG_ID``, ``NEEVCLOUD_PROJECT_ID``,
+    and ``NEEVCLOUD_REGION`` environment variables.
     """
 
     def __init__(
@@ -47,19 +38,16 @@ class NeevAI:
         max_retries: int = DEFAULT_MAX_RETRIES,
         client: httpx.Client | None = None,
     ):
-        resolved_api_key = api_key or _read_env("NEEVCLOUD_API_KEY", "NEEV_API_KEY")
+        resolved_api_key = api_key or os.environ.get("NEEVCLOUD_API_KEY")
         if not resolved_api_key:
             raise NeevAIError(
-                "Missing API key. Pass `api_key` or set the NEEVCLOUD_API_KEY "
-                "(or NEEV_API_KEY) environment variable."
+                "Missing API key. Pass `api_key` or set the NEEVCLOUD_API_KEY environment variable."
             )
 
-        self.default_org_id = org_id or _read_env("NEEVCLOUD_ORG_ID", "NEEV_ORG_ID")
-        self.default_project_id = project_id or _read_env("NEEVCLOUD_PROJECT_ID", "NEEV_PROJECT_ID")
-        self.default_region = region or _read_env("NEEVCLOUD_REGION", "NEEV_REGION")
-        self.base_url = (
-            base_url or _read_env("NEEVCLOUD_BASE_URL", "NEEV_BASE_URL") or DEFAULT_BASE_URL
-        )
+        self.default_org_id = org_id or os.environ.get("NEEVCLOUD_ORG_ID")
+        self.default_project_id = project_id or os.environ.get("NEEVCLOUD_PROJECT_ID")
+        self.default_region = region or os.environ.get("NEEVCLOUD_REGION")
+        self.base_url = base_url or os.environ.get("NEEVCLOUD_BASE_URL") or DEFAULT_BASE_URL
 
         self._transport = ControlTransport(
             base_url=self.base_url,
@@ -71,8 +59,6 @@ class NeevAI:
 
         self.raw = RawClient(self._transport)
         self.sandboxes = Sandboxes(self)
-        self.agents = Agents(self, self.sandboxes)
-        self.agent_templates = AgentTemplates(self)
         self.templates = Templates(self)
 
     def close(self) -> None:
@@ -92,12 +78,11 @@ class NeevAI:
 
         if not resolved_org:
             raise NeevAIError(
-                "Missing org_id. Set it on the client, via NEEVCLOUD_ORG_ID or NEEV_ORG_ID, or per call."
+                "Missing org_id. Set it on the client, via NEEVCLOUD_ORG_ID, or per call."
             )
         if not resolved_proj:
             raise NeevAIError(
-                "Missing project_id. Set it on the client, via NEEVCLOUD_PROJECT_ID or "
-                "NEEV_PROJECT_ID, or per call."
+                "Missing project_id. Set it on the client, via NEEVCLOUD_PROJECT_ID, or per call."
             )
 
         return Scope(org_id=resolved_org, project_id=resolved_proj)
@@ -108,7 +93,7 @@ class NeevAI:
         if not resolved:
             raise NeevAIError(
                 "Missing region. Pass `region` in create params, set it on the client, "
-                "or set the NEEVCLOUD_REGION or NEEV_REGION environment variable."
+                "or set the NEEVCLOUD_REGION environment variable."
             )
         return resolved
 
@@ -117,7 +102,8 @@ class AsyncNeevAI:
     """NeevAI platform asynchronous client.
 
     Defaults for ``org_id``, ``project_id``, and ``region`` can be set via
-    constructor kwargs or the ``NEEVCLOUD_*`` / ``NEEV_*`` environment variables.
+    constructor kwargs or the ``NEEVCLOUD_ORG_ID``, ``NEEVCLOUD_PROJECT_ID``,
+    and ``NEEVCLOUD_REGION`` environment variables.
     """
 
     def __init__(
@@ -131,19 +117,16 @@ class AsyncNeevAI:
         max_retries: int = DEFAULT_MAX_RETRIES,
         client: httpx.AsyncClient | None = None,
     ):
-        resolved_api_key = api_key or _read_env("NEEVCLOUD_API_KEY", "NEEV_API_KEY")
+        resolved_api_key = api_key or os.environ.get("NEEVCLOUD_API_KEY")
         if not resolved_api_key:
             raise NeevAIError(
-                "Missing API key. Pass `api_key` or set the NEEVCLOUD_API_KEY "
-                "(or NEEV_API_KEY) environment variable."
+                "Missing API key. Pass `api_key` or set the NEEVCLOUD_API_KEY environment variable."
             )
 
-        self.default_org_id = org_id or _read_env("NEEVCLOUD_ORG_ID", "NEEV_ORG_ID")
-        self.default_project_id = project_id or _read_env("NEEVCLOUD_PROJECT_ID", "NEEV_PROJECT_ID")
-        self.default_region = region or _read_env("NEEVCLOUD_REGION", "NEEV_REGION")
-        self.base_url = (
-            base_url or _read_env("NEEVCLOUD_BASE_URL", "NEEV_BASE_URL") or DEFAULT_BASE_URL
-        )
+        self.default_org_id = org_id or os.environ.get("NEEVCLOUD_ORG_ID")
+        self.default_project_id = project_id or os.environ.get("NEEVCLOUD_PROJECT_ID")
+        self.default_region = region or os.environ.get("NEEVCLOUD_REGION")
+        self.base_url = base_url or os.environ.get("NEEVCLOUD_BASE_URL") or DEFAULT_BASE_URL
 
         self._transport = AsyncControlTransport(
             base_url=self.base_url,
@@ -155,8 +138,6 @@ class AsyncNeevAI:
 
         self.raw = AsyncRawClient(self._transport)
         self.sandboxes = AsyncSandboxes(self)
-        self.agents = AsyncAgents(self, self.sandboxes)
-        self.agent_templates = AsyncAgentTemplates(self)
         self.templates = AsyncTemplates(self)
 
     async def aclose(self) -> None:
@@ -176,12 +157,11 @@ class AsyncNeevAI:
 
         if not resolved_org:
             raise NeevAIError(
-                "Missing org_id. Set it on the client, via NEEVCLOUD_ORG_ID or NEEV_ORG_ID, or per call."
+                "Missing org_id. Set it on the client, via NEEVCLOUD_ORG_ID, or per call."
             )
         if not resolved_proj:
             raise NeevAIError(
-                "Missing project_id. Set it on the client, via NEEVCLOUD_PROJECT_ID or "
-                "NEEV_PROJECT_ID, or per call."
+                "Missing project_id. Set it on the client, via NEEVCLOUD_PROJECT_ID, or per call."
             )
 
         return Scope(org_id=resolved_org, project_id=resolved_proj)
@@ -192,6 +172,6 @@ class AsyncNeevAI:
         if not resolved:
             raise NeevAIError(
                 "Missing region. Pass `region` in create params, set it on the client, "
-                "or set the NEEVCLOUD_REGION or NEEV_REGION environment variable."
+                "or set the NEEVCLOUD_REGION environment variable."
             )
         return resolved

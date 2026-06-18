@@ -18,10 +18,9 @@ For install and first scripts, see [`getting-started.md`](./getting-started.md).
 
 ## Control-plane / lifecycle
 
-Control-plane APIs manage sandboxes, agents, agent templates, and sandbox
-templates via the platform gateway. All sync symbols have async counterparts
-(`AsyncNeevAI`, `AsyncSandboxes`, `AsyncAgents`, etc.) — add `await` and use
-`async with` / `aclose()` where noted.
+Control-plane APIs manage sandboxes and templates via the platform gateway. All
+sync symbols have async counterparts (`AsyncNeevAI`, `AsyncSandboxes`, etc.) —
+add `await` and use `async with` / `aclose()` where noted.
 
 ### Client
 
@@ -82,25 +81,6 @@ workspace on some backends. See
 | `list(page=None, limit=None)` | `TemplatePage` | Lists available sandbox templates with pagination. |
 | `get(template_id)` | `SandboxTemplate` | Fetches a single sandbox template by ID. |
 
-### `client.agents`
-
-| Method | Returns | Summary |
-| ------ | ------- | ------- |
-| `create(params, org_id=None, project_id=None)` | `Agent` | Creates an agent from a catalogue template name (`agent_template`). |
-| `list(page=None, limit=None, org_id=None, project_id=None)` | `AgentPage` | Lists agents with pagination in the resolved org/project scope. |
-| `get(id, org_id=None, project_id=None)` | `Agent` | Fetches the current record for an agent by ID. |
-| `update(id, params, org_id=None, project_id=None)` | `Agent` | In-place update of egress and/or cpu/memory (`resources`). Rejects `{}` locally. |
-| `pause(id, org_id=None, project_id=None)` | `Agent` | Pauses the agent and its backing sandbox. |
-| `resume(id, org_id=None, project_id=None)` | `Agent` | Resumes a paused agent. |
-| `delete(id, org_id=None, project_id=None)` | `None` | Permanently deletes an agent (HTTP 204, no body). |
-
-### `client.agent_templates`
-
-| Method | Returns | Summary |
-| ------ | ------- | ------- |
-| `list(page=None, limit=None)` | `AgentTemplatePage` | Lists available agent templates (global catalogue, no org scope). |
-| `get(template_id)` | `AgentTemplate` | Fetches a single agent template by ID. |
-
 ### `client.raw`
 
 | Method | Returns | Summary |
@@ -115,7 +95,7 @@ Returned by `create()`, `get()`, `list().items`, etc.
 | --- | ---- |
 | `id`, `name`, `phase`, `replicas`, `connect_url`, `data` | properties |
 | `refresh()` | method |
-| `wait_until_ready(timeout_ms=120000, ...)` | method — polls control plane until `Ready` |
+| `wait_until_ready(timeout_ms=120000, ...)` | method — polls control plane, then probes data plane |
 | `pause(preserve_memory=None)` / `resume()` | methods |
 | `snapshot(params=None)` / `snapshots()` | methods |
 | `restore(snapshot_id)` / `fork(name)` | methods |
@@ -123,27 +103,13 @@ Returned by `create()`, `get()`, `list().items`, etc.
 | `metrics(from_=None, to=None, step=None)` | method |
 | `to_json()` | method |
 
-### Agent handle (lifecycle)
-
-Returned by `client.agents.create()`, `get()`, `list().items`, etc.
-
-| API | Kind |
-| --- | ---- |
-| `id`, `name`, `status`, `sandbox_id`, `agent_template_id`, `config`, `data` | properties |
-| `refresh()` / `update(params)` | methods |
-| `wait_until_ready(timeout_ms=120000, poll_interval_ms=2000, on_poll=None)` | method — polls until `Ready`; fails fast on `Failed` / `Paused` |
-| `pause()` / `resume()` / `delete()` | methods |
-| `sandbox()` | method — backing `Sandbox` handle for data-plane `exec`, `files`, and `processes` |
-| `to_json()` | method |
-
 ---
 
 ## Data-plane / runtime
 
-Data-plane APIs run commands, access files, and manage supervised processes
-inside a **ready** sandbox (after `wait_until_ready()`). Most callers use
-`sandbox.exec` / `sandbox.files` / `sandbox.processes` on the handle rather than
-constructing `SandboxConnection` directly.
+Data-plane APIs run commands and access files inside a **ready** sandbox (after
+`wait_until_ready()`). Most callers use `sandbox.exec` / `sandbox.files` on the
+handle rather than constructing `SandboxConnection` directly.
 
 ### Exec
 
@@ -153,35 +119,6 @@ constructing `SandboxConnection` directly.
 | `sandbox.exec_stream(command, ...)` | `for event in ...` | `async for event in ...` |
 
 Details: [`api-inventory.md` → Exec and streaming](./api-inventory.md#exec-and-streaming)
-
-### `sandbox.processes`
-
-Supervised detached processes (lifetime outlives the start request). Complements
-request-scoped `sandbox.exec`.
-
-**Prerequisites:** Wait for `connect_url`, `phase == "Ready"`, and a successful
-data-plane probe before calling these methods. See
-[`api-inventory.md` → End-to-end flow](./api-inventory.md#end-to-end-flow).
-
-| Method | Returns | Summary |
-| ------ | ------- | ------- |
-| `start(program, args=None, cwd=None, env=None, stdin=None)` | `Process` | Starts a detached process; `program` is a string or argv list. |
-| `get(process_id, wait=False)` | `ProcessStatus` | Fetches status; `wait=True` blocks until exit. |
-| `list()` | `list[ProcessInfo]` | Lists running and recently-exited processes. |
-| `kill(process_id, signal=None)` | `bool` | Signals one process (default SIGTERM). |
-| `kill_all(signal=None)` | `int` | Signals all processes; returns `signalled_count`. |
-| `logs(process_id, cursor=None)` | `ProcessLogsPage` | Poll-mode UTF-8 log lines with cursor. |
-| `follow(process_id, cursor=None)` | `Iterator[ProcessLogEvent]` | NDJSON stream with base64 chunks + optional exit event. |
-
-`Process` handle: `id`, `state`, `exit_code`, `started_at`, plus `status()`, `wait()`,
-`kill()`, `logs()`, `follow()`.
-
-| API | Sync | Async |
-| --- | ---- | ----- |
-| `sandbox.processes.*` | direct calls | `await sandbox.processes.*` |
-| `proc.follow()` | `for event in proc.follow():` | `async for event in proc.follow():` |
-
-Details: [`api-inventory.md` → Processes API](./api-inventory.md#processes-api)
 
 ### `sandbox.files`
 
@@ -200,7 +137,6 @@ Listed for completeness; prefer handle methods above.
 | ---- | ---- | ----- |
 | Connection | `SandboxConnection(connect_url, api_key, ...)` | `AsyncSandboxConnection` |
 | Files helper | `SandboxFiles` | `AsyncSandboxFiles` |
-| Processes helper | `SandboxProcesses` | `AsyncSandboxProcesses` |
 | Close | `connection.close()` | `await connection.aclose()` |
 
 Details: [`api-inventory.md` → Data-plane connection](./api-inventory.md#data-plane-connection)
@@ -232,14 +168,6 @@ Minimal one-liners for each public API. Runnable examples link to repo paths.
 | `client.sandboxes.fork(id, name)` | `fork = client.sandboxes.fork(sb.id, "fork-name")` | `fork = await client.sandboxes.fork(sb.id, "fork-name")` | [snapshot_fork_restore.py](../examples/snapshot_fork_restore.py) (via `sandbox.fork`) |
 | `client.templates.list(...)` | `page = client.templates.list(limit=10)` | `page = await client.templates.list(limit=10)` | [templates_list.py](../examples/templates_list.py) |
 | `client.templates.get(id)` | `tpl = client.templates.get(template_id)` | `tpl = await client.templates.get(template_id)` | [templates_list.py](../examples/templates_list.py) |
-| `client.agents.create(...)` | `agent = client.agents.create({...})` | `agent = await client.agents.create({...})` | [create_agent.py](../examples/create_agent.py) |
-| `client.agents.list(...)` | `page = client.agents.list(page=1, limit=20)` | `page = await client.agents.list(page=1, limit=20)` | — |
-| `client.agents.get(id)` | `agent = client.agents.get(agent_id)` | `agent = await client.agents.get(agent_id)` | — |
-| `client.agents.update(id, params)` | `agent = client.agents.update(id, {"resources": {...}})` | `agent = await client.agents.update(id, {...})` | [create_agent.py](../examples/create_agent.py) |
-| `client.agents.pause(id)` / `.resume(id)` | `agent = client.agents.pause(agent_id)` / `client.agents.resume(agent_id)` | `agent = await client.agents.pause(agent_id)` / `await client.agents.resume(agent_id)` | [create_agent.py](../examples/create_agent.py) (pause via handle) |
-| `client.agents.delete(id)` | `client.agents.delete(agent_id)` | `await client.agents.delete(agent_id)` | [create_agent.py](../examples/create_agent.py) |
-| `client.agent_templates.list(...)` | `page = client.agent_templates.list()` | `page = await client.agent_templates.list()` | [create_agent.py](../examples/create_agent.py) |
-| `client.agent_templates.get(id)` | `tpl = client.agent_templates.get(template_id)` | `tpl = await client.agent_templates.get(template_id)` | — |
 | `client.raw.request(...)` | `data = client.raw.request("GET", path, query={...})` | `data = await client.raw.request("GET", path, query={...})` | [raw_request.py](../examples/raw_request.py) |
 | `sandbox.id` / `.name` / `.phase` / `.replicas` | `print(sandbox.phase, sandbox.replicas)` | same after `await create` | [sandbox_lifecycle.py](../examples/sandbox_lifecycle.py) |
 | `sandbox.connect_url` | `print(sandbox.connect_url)` | `print(sandbox.connect_url)` | [templates_list.py](../examples/templates_list.py) |
@@ -255,13 +183,6 @@ Minimal one-liners for each public API. Runnable examples link to repo paths.
 | `sandbox.delete()` | `sandbox.delete()` | `await sandbox.delete()` | [sandbox_lifecycle.py](../examples/sandbox_lifecycle.py) |
 | `sandbox.metrics(...)` | `metrics = sandbox.metrics()` | `metrics = await sandbox.metrics()` | [sandbox_metrics.py](../examples/sandbox_metrics.py) |
 | `sandbox.to_json()` | `sandbox.to_json()` | `sandbox.to_json()` | [sandbox_lifecycle_controller.py](../examples/sandbox_lifecycle_controller.py) |
-| `agent.id` / `.status` / `.sandbox_id` | `print(agent.status, agent.sandbox_id)` | same after `await create` | [create_agent.py](../examples/create_agent.py) |
-| `agent.wait_until_ready(...)` | `agent.wait_until_ready(timeout_ms=120_000)` | `await agent.wait_until_ready()` | [create_agent.py](../examples/create_agent.py) |
-| `agent.refresh()` | `agent.refresh()` | `await agent.refresh()` | — |
-| `agent.sandbox()` | `sandbox = agent.sandbox()` — then `exec` / `files` / `processes` | `sandbox = await agent.sandbox()` | [create_agent.py](../examples/create_agent.py) |
-| `agent.update(params)` | `agent.update({"resources": {...}})` | `await agent.update({...})` | [create_agent.py](../examples/create_agent.py) |
-| `agent.pause()` / `.resume()` / `.delete()` | `agent.pause(); agent.resume(); agent.delete()` | `await agent.pause(); await agent.resume(); await agent.delete()` | [create_agent.py](../examples/create_agent.py) (pause/delete; resume via handle API) |
-| `agent.to_json()` | `agent.to_json()` | `agent.to_json()` | — |
 
 ### Data-plane / runtime
 
@@ -269,23 +190,12 @@ Minimal one-liners for each public API. Runnable examples link to repo paths.
 | --- | ------------ | ------------- | ---------------- |
 | `sandbox.exec(...)` | `result = sandbox.exec(["echo", "hi"])` | `result = await sandbox.exec(["echo", "hi"])` | [parallel_fanout.py](../examples/parallel_fanout.py), [async_sandbox.py](../examples/async_sandbox.py) |
 | `sandbox.exec_stream(...)` | `for event in sandbox.exec_stream(cmd):` | `async for event in sandbox.exec_stream(cmd):` | [streaming_exec.py](../examples/streaming_exec.py) |
-| `sandbox.processes.list(...)` | `sandbox.processes.list()` | `await sandbox.processes.list()` | [processes.py](../examples/processes.py), [process_pool.py](../examples/process_pool.py) |
-| `sandbox.processes.start(...)` | `proc = sandbox.processes.start(["sleep", "30"])` | `proc = await sandbox.processes.start(["sleep", "30"])` | [processes.py](../examples/processes.py), [process_pool.py](../examples/process_pool.py) |
-| `sandbox.processes.get(...)` | `status = sandbox.processes.get(proc.id)` | `status = await sandbox.processes.get(proc.id)` | — (`proc.wait()` / `proc.status()` call `get` internally; see [processes.py](../examples/processes.py)) |
-| `Process.status()` | `status = proc.status()` | `status = await proc.status()` | — (no dedicated example) |
-| `Process.wait()` | `final = proc.wait()` | `final = await proc.wait()` | [processes.py](../examples/processes.py), [process_pool.py](../examples/process_pool.py) |
-| `sandbox.processes.follow(...)` | `for event in proc.follow():` | `async for event in proc.follow():` | [processes.py](../examples/processes.py) |
-| `sandbox.processes.logs(...)` | `page = proc.logs()` | `page = await proc.logs()` | [processes.py](../examples/processes.py) |
-| `sandbox.processes.kill(...)` | `proc.kill(signal=Signal.TERM)` | `await proc.kill(signal=Signal.TERM)` | [processes.py](../examples/processes.py) |
-| `sandbox.processes.kill_all(...)` | `count = sandbox.processes.kill_all()` | `count = await sandbox.processes.kill_all()` | [process_pool.py](../examples/process_pool.py) |
 | `sandbox.files.write(...)` | `sandbox.files.write("path.txt", "content")` | `await sandbox.files.write("path.txt", "content")` | [files_api.py](../examples/files_api.py), [snapshot_fork_restore.py](../examples/snapshot_fork_restore.py) |
 | `sandbox.files.read(...)` | `data = sandbox.files.read("path.txt")` | `data = await sandbox.files.read("path.txt")` | [agent_loop.py](../examples/agent_patterns/utils/agent_loop.py) |
 | `sandbox.files.read_text(...)` | `text = sandbox.files.read_text("path.txt")` | `text = await sandbox.files.read_text("path.txt")` | [files_api.py](../examples/files_api.py), [snapshot_fork_restore.py](../examples/snapshot_fork_restore.py) |
 | `sandbox.files.list(...)` | `entries = sandbox.files.list("dir", recursive=True)` | `entries = await sandbox.files.list("dir", recursive=True)` | [files_api.py](../examples/files_api.py) |
-| `workflow_examples/*` | Model-driven sandboxes via `StreamingAgentLoop` — not `client.agents` | same | [repo_analyzer.py](../examples/workflow_examples/repo_analyzer.py) |
 | `SandboxConnection` (low-level) | via `sandbox.exec` on handle | via `await sandbox.exec` on handle | — |
 | `SandboxFiles` (low-level) | via `sandbox.files` property | via `sandbox.files` property | [files_api.py](../examples/files_api.py) |
-| `SandboxProcesses` (low-level) | via `sandbox.processes` property | via `sandbox.processes` property | [processes.py](../examples/processes.py) |
 
 ---
 

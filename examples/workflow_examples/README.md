@@ -9,9 +9,6 @@ Do the one-time credential setup in [`../README.md`](../README.md), then set an
 inference key (`NEEV_INFERENCE_API_KEY` or `NEEVCLOUD_INFERENCE_API_KEY`; falls
 back to `NEEVCLOUD_API_KEY`).
 
-These workflows use sandboxes directly — not platform agents (`client.agents`).
-For catalogue-managed agents, see [`create_agent.py`](../create_agent.py).
-
 ## Examples
 
 | Example | What it demonstrates | SDK features | Artifact |

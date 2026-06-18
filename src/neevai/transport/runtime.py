@@ -5,8 +5,6 @@ import httpx
 
 from neevai.errors import error_from_status
 
-SANDBOX_ID_HEADER = "X-Sandbox-Id"
-
 
 class DataplaneTransport:
     """Synchronous HTTP transport for regional Sandbox daemon."""
@@ -17,19 +15,11 @@ class DataplaneTransport:
         api_key: str,
         timeout_ms: int = 60000,
         client: httpx.Client | None = None,
-        sandbox_id: str | None = None,
     ):
         self.connect_url = connect_url.rstrip("/")
         self.api_key = api_key
-        self.sandbox_id = sandbox_id
         self.timeout = httpx.Timeout(timeout_ms / 1000.0)
         self.client = client or httpx.Client()
-
-    def _auth_headers(self) -> dict[str, str]:
-        headers = {"Authorization": f"Bearer {self.api_key}"}
-        if self.sandbox_id:
-            headers[SANDBOX_ID_HEADER] = self.sandbox_id
-        return headers
 
     def close(self) -> None:
         self.client.close()
@@ -46,7 +36,9 @@ class DataplaneTransport:
         """Sends a request to the sandbox daemon without retries."""
         url = f"{self.connect_url}/{path.lstrip('/')}"
 
-        req_headers = self._auth_headers()
+        req_headers = {
+            "Authorization": f"Bearer {self.api_key}",
+        }
         if headers:
             req_headers.update(headers)
 
@@ -87,7 +79,9 @@ class DataplaneTransport:
     ) -> Generator[str, None, None]:
         """Streams the response body line by line for NDJSON exec streams."""
         url = f"{self.connect_url}/{path.lstrip('/')}"
-        req_headers = self._auth_headers()
+        req_headers = {
+            "Authorization": f"Bearer {self.api_key}",
+        }
         if headers:
             req_headers.update(headers)
 
@@ -142,19 +136,11 @@ class AsyncDataplaneTransport:
         api_key: str,
         timeout_ms: int = 60000,
         client: httpx.AsyncClient | None = None,
-        sandbox_id: str | None = None,
     ):
         self.connect_url = connect_url.rstrip("/")
         self.api_key = api_key
-        self.sandbox_id = sandbox_id
         self.timeout = httpx.Timeout(timeout_ms / 1000.0)
         self.client = client or httpx.AsyncClient()
-
-    def _auth_headers(self) -> dict[str, str]:
-        headers = {"Authorization": f"Bearer {self.api_key}"}
-        if self.sandbox_id:
-            headers[SANDBOX_ID_HEADER] = self.sandbox_id
-        return headers
 
     async def aclose(self) -> None:
         await self.client.aclose()
@@ -171,7 +157,9 @@ class AsyncDataplaneTransport:
         """Sends an async request to the sandbox daemon without retries."""
         url = f"{self.connect_url}/{path.lstrip('/')}"
 
-        req_headers = self._auth_headers()
+        req_headers = {
+            "Authorization": f"Bearer {self.api_key}",
+        }
         if headers:
             req_headers.update(headers)
 
@@ -212,7 +200,9 @@ class AsyncDataplaneTransport:
     ) -> AsyncGenerator[str, None]:
         """Streams the response body line by line for NDJSON exec streams."""
         url = f"{self.connect_url}/{path.lstrip('/')}"
-        req_headers = self._auth_headers()
+        req_headers = {
+            "Authorization": f"Bearer {self.api_key}",
+        }
         if headers:
             req_headers.update(headers)
 

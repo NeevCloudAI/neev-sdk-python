@@ -39,9 +39,8 @@ Set these environment variables before running scripts, or pass equivalent kwarg
 | `NEEVCLOUD_ORG_ID` | Default organization ID |
 | `NEEVCLOUD_PROJECT_ID` | Default project ID |
 | `NEEVCLOUD_REGION` | Default deployment region for sandbox create |
-| `NEEVCLOUD_BASE_URL` | Control-plane base URL (default: `https://api.ai.neevcloud.com/agent`) |
-| `NEEVCLOUD_SANDBOX_TEMPLATE_ID` | Optional sandbox template id (defaults to `sb-ubuntu-26-04-minimal` in examples) |
-| `NEEV_AGENT_TEMPLATE` | Optional agent template **name** for `create_agent.py` (default: `claude-code`) |
+| `NEEVCLOUD_BASE_URL` | Control-plane base URL (default: `https://agent.ai.neevcloud.com`) |
+| `NEEVCLOUD_SANDBOX_TEMPLATE_ID` | Optional template id (defaults to `sb-ubuntu-26-04-minimal` in examples) |
 
 **Linux / macOS (bash/zsh)** — current session:
 
@@ -110,63 +109,13 @@ with NeevAI(api_key="...", org_id="...", project_id="...", region="...") as clie
     sandbox = client.sandboxes.create({
         "name": "my-sandbox",
         "sandbox_template_id": "<your-sandbox-template-id>",
+        "image": "ubuntu:22.04",
     })
     sandbox.wait_until_ready()
     result = sandbox.exec("echo Hello World")
     print(result.stdout)
     client.sandboxes.delete(sandbox.id)
 ```
-
-## Long-running processes
-
-For detached workloads that outlive a single HTTP request, use `sandbox.processes`
-(unlike request-scoped `sandbox.exec`). Before `processes.start`, wait for
-`connect_url` (it may appear before `phase == "Ready"`), then
-`sandbox.wait_until_ready()`, then probe the data plane with
-`sandbox.processes.list()` (retry transient 502/503/504). Tune polling with
-`NEEVAI_WAIT_TIMEOUT_MS` and `NEEVAI_POLL_INTERVAL_MS`. See
-[Processes API — end-to-end flow](docs/api-inventory.md#processes-api) for auth,
-raw endpoints, and troubleshooting.
-
-```python
-proc = sandbox.processes.start(["sh", "-c", "echo started; sleep 30"])
-for event in proc.follow():
-    if event["type"] == "stdout":
-        print(event["data"], end="")
-    elif event["type"] == "exit":
-        print(f"exit {event['exit_code']}")
-        break
-final = proc.wait()
-```
-
-See [`examples/processes.py`](examples/processes.py) and
-[`examples/process_pool.py`](examples/process_pool.py).
-
-## Agents
-
-Provision a packaged agent from the catalogue template (`agent_template` is the
-template **name**, e.g. `"claude-code"`), wait for it to become `Ready`, then
-reach its environment through the backing sandbox:
-
-```python
-from neevai import NeevAI
-
-with NeevAI(api_key="...", org_id="...", project_id="...") as client:
-    agent = client.agents.create({
-        "name": "my-agent",
-        "agent_template": "claude-code",
-    })
-    agent.wait_until_ready()
-    sandbox = agent.sandbox()
-    sandbox.files.write("notes.md", "# scratch\n")
-    agent.update({"resources": {"cpu": 2, "memory_gb": 4}})
-    agent.pause()
-    agent.delete()
-```
-
-Browse templates with `client.agent_templates.list()` / `.get(id)`. Region is
-optional on create — the client injects `default_region` only when set (unlike
-sandbox create, which requires a region). See [`examples/create_agent.py`](examples/create_agent.py).
 
 ## Examples
 
@@ -181,14 +130,11 @@ See [`examples/README.md`](examples/README.md) for the full catalogue and learni
 | Example | What it shows |
 | ------- | ------------- |
 | [`templates_list.py`](examples/templates_list.py) | List templates → get by id → create sandbox |
-| [`create_agent.py`](examples/create_agent.py) | Agent templates → create agent → sandbox → update/pause/delete |
 | [`sandbox_lifecycle.py`](examples/sandbox_lifecycle.py) | Create → wait → metrics → pause → delete |
 | [`snapshot_fork_restore.py`](examples/snapshot_fork_restore.py) | Snapshot → `from_snapshot` rollback → fork |
 | [`async_sandbox.py`](examples/async_sandbox.py) | End-to-end `AsyncNeevAI` workflow |
 | [`files_api.py`](examples/files_api.py) | `files.write` / `read_text` / `list` |
 | [`streaming_exec.py`](examples/streaming_exec.py) | Live `sandbox.exec_stream()` output |
-| [`processes.py`](examples/processes.py) | Supervised process lifecycle (start, follow, logs, kill) |
-| [`process_pool.py`](examples/process_pool.py) | Parallel processes with `kill_all` |
 | [`parallel_fanout.py`](examples/parallel_fanout.py) | 3 sandboxes, parallel repo analysis, aggregated file counts |
 | [`sandbox_metrics.py`](examples/sandbox_metrics.py) | Metrics under CPU load |
 | [`raw_request.py`](examples/raw_request.py) | Untyped `client.raw.request()` |
