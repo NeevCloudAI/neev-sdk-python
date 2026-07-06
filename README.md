@@ -35,39 +35,35 @@ Set these environment variables before running scripts, or pass equivalent kwarg
 
 | Variable | Purpose |
 | -------- | ------- |
-| `NEEVCLOUD_API_KEY` | Bearer token (**required**) |
-| `NEEVCLOUD_ORG_ID` | Default organization ID |
-| `NEEVCLOUD_PROJECT_ID` | Default project ID |
-| `NEEVCLOUD_REGION` | Default deployment region for sandbox create |
-| `NEEVCLOUD_BASE_URL` | Control-plane base URL (default: `https://api.ai.neevcloud.com/agent`) |
-| `NEEVCLOUD_SANDBOX_TEMPLATE_ID` | Optional sandbox template id (defaults to `sb-ubuntu-26-04-minimal` in examples) |
+| `NEEV_API_KEY` | Bearer token (**required**) |
+| `NEEV_ORG_ID` | Default organization ID |
+| `NEEV_PROJECT_ID` | Default project ID |
+| `NEEV_BASE_URL` | Base URL (default: `https://api.ai.neevcloud.com/agent`) |
+| `NEEV_SANDBOX_TEMPLATE_ID` | Optional sandbox template id (defaults to `sb-ubuntu-26-04-minimal` in examples) |
 | `NEEV_AGENT_TEMPLATE` | Optional agent template **name** for `create_agent.py` (default: `claude-code`) |
 
 **Linux / macOS (bash/zsh)** — current session:
 
 ```bash
-export NEEVCLOUD_API_KEY="your-api-key"
-export NEEVCLOUD_ORG_ID="org-abc123"
-export NEEVCLOUD_PROJECT_ID="proj-xyz789"
-export NEEVCLOUD_REGION="as-south-1"
+export NEEV_API_KEY="your-api-key"
+export NEEV_ORG_ID="org-abc123"
+export NEEV_PROJECT_ID="proj-xyz789"
 ```
 
 **Windows PowerShell** — current session:
 
 ```powershell
-$env:NEEVCLOUD_API_KEY = "your-api-key"
-$env:NEEVCLOUD_ORG_ID = "org-abc123"
-$env:NEEVCLOUD_PROJECT_ID = "proj-xyz789"
-$env:NEEVCLOUD_REGION = "as-south-1"
+$env:NEEV_API_KEY = "your-api-key"
+$env:NEEV_ORG_ID = "org-abc123"
+$env:NEEV_PROJECT_ID = "proj-xyz789"
 ```
 
 **Windows CMD** — current session:
 
 ```cmd
-set NEEVCLOUD_API_KEY=your-api-key
-set NEEVCLOUD_ORG_ID=org-abc123
-set NEEVCLOUD_PROJECT_ID=proj-xyz789
-set NEEVCLOUD_REGION=as-south-1
+set NEEV_API_KEY=your-api-key
+set NEEV_ORG_ID=org-abc123
+set NEEV_PROJECT_ID=proj-xyz789
 ```
 
 You can also pass credentials directly when creating the client:
@@ -85,7 +81,6 @@ If you just cloned the repo, follow these steps to reach your first successful r
 
 1. Clone and enter the repo (see [Install from source (contributors)](#install-from-source-contributors) above if you have not already).
 2. Install dependencies: `uv sync`.
-3. Set the four required environment variables (`NEEVCLOUD_API_KEY`, `NEEVCLOUD_ORG_ID`, `NEEVCLOUD_PROJECT_ID`, `NEEVCLOUD_REGION`) using the [platform-specific blocks](#configure-credentials) above.
 4. Verify the install:
 
    ```bash
@@ -122,7 +117,7 @@ with NeevAI(api_key="...", org_id="...", project_id="...", region="...") as clie
 For detached workloads that outlive a single HTTP request, use `sandbox.processes`
 (unlike request-scoped `sandbox.exec`). Before `processes.start`, wait for
 `connect_url` (it may appear before `phase == "Ready"`), then
-`sandbox.wait_until_ready()`, then probe the data plane with
+`sandbox.wait_until_ready()`, then probe the sandbox runtime with
 `sandbox.processes.list()` (retry transient 502/503/504). Tune polling with
 `NEEVAI_WAIT_TIMEOUT_MS` and `NEEVAI_POLL_INTERVAL_MS`. See
 [Processes API — end-to-end flow](docs/api-inventory.md#processes-api) for auth,
@@ -204,10 +199,9 @@ Start with [`docs/getting-started.md`](docs/getting-started.md) for installation
 | Doc | Purpose |
 | --- | ------- |
 | [`getting-started.md`](docs/getting-started.md) | Install, env vars, quick starts, doc map |
-| [`api-reference.md`](docs/api-reference.md) | Control-plane vs data-plane API lists + copy-paste snippets |
+| [`api-reference.md`](docs/api-reference.md) | Lifecycle vs sandbox runtime lists + copy-paste snippets |
 | [`api-inventory.md`](docs/api-inventory.md) | Full method signatures, types, errors, symbol index |
 | [`example-coverage.md`](docs/example-coverage.md) | Example catalog and API → examples lookup |
-| [`architecture.md`](docs/architecture.md) | SDK layout and module responsibilities |
 
 Contributors: update docs when the public API changes. See [`docs/development.md`](docs/development.md) for the contributor workflow, typing notes, and test commands.
 

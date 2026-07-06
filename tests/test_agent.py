@@ -14,7 +14,6 @@ def _make_client(mock_transport) -> NeevAI:
         api_key="test",
         org_id="org1",
         project_id="proj1",
-        region="us-east-1",
         client=mock_transport,
     )
 

@@ -8,17 +8,17 @@ For install and first scripts, see [`getting-started.md`](./getting-started.md).
 
 ## Table of contents
 
-- [Control-plane / lifecycle](#control-plane--lifecycle)
+- [Lifecycle](#lifecycle)
 - [Snapshots](#snapshots)
-- [Data-plane / runtime](#data-plane--runtime)
+- [Runtime](#runtime)
 - [Inline example snippets](#inline-example-snippets)
 - [Maintaining this reference](#maintaining-this-reference)
 
 ---
 
-## Control-plane / lifecycle
+## Lifecycle
 
-Control-plane APIs manage sandboxes, agents, agent templates, and sandbox
+Lifecycle APIs manage sandboxes, agents, agent templates, and sandbox
 templates via the platform gateway. All sync symbols have async counterparts
 (`AsyncNeevAI`, `AsyncSandboxes`, `AsyncAgents`, etc.) — add `await` and use
 `async with` / `aclose()` where noted.
@@ -65,7 +65,6 @@ pending = sandbox.snapshot({"name": "checkpoint"})
 restored = client.sandboxes.create({
     "name": "restored",
     "sandbox_template_id": template_id,
-    "region": region,
     "from_snapshot": str(pending.id),
 })
 restored.wait_until_ready()
@@ -105,7 +104,7 @@ workspace on some backends. See
 
 | Method | Returns | Summary |
 | ------ | ------- | ------- |
-| `request(method, path, query=None, body=None)` | JSON dict/list or `None` | Untyped control-plane HTTP call; returns parsed JSON or `None` for HTTP 204. |
+| `request(method, path, query=None, body=None)` | JSON dict/list or `None` | Untyped API call; returns parsed JSON or `None` for HTTP 204. |
 
 ### Sandbox handle (lifecycle)
 
@@ -115,7 +114,7 @@ Returned by `create()`, `get()`, `list().items`, etc.
 | --- | ---- |
 | `id`, `name`, `phase`, `replicas`, `connect_url`, `data` | properties |
 | `refresh()` | method |
-| `wait_until_ready(timeout_ms=120000, ...)` | method — polls control plane until `Ready` |
+| `wait_until_ready(timeout_ms=120000, ...)` | method — polls the API until `Ready` |
 | `pause(preserve_memory=None)` / `resume()` | methods |
 | `snapshot(params=None)` / `snapshots()` | methods |
 | `restore(snapshot_id)` / `fork(name)` | methods |
@@ -133,14 +132,14 @@ Returned by `client.agents.create()`, `get()`, `list().items`, etc.
 | `refresh()` / `update(params)` | methods |
 | `wait_until_ready(timeout_ms=120000, poll_interval_ms=2000, on_poll=None)` | method — polls until `Ready`; fails fast on `Failed` / `Paused` |
 | `pause()` / `resume()` / `delete()` | methods |
-| `sandbox()` | method — backing `Sandbox` handle for data-plane `exec`, `files`, and `processes` |
+| `sandbox()` | method — backing `Sandbox` handle for runtime `exec`, `files`, and `processes` |
 | `to_json()` | method |
 
 ---
 
-## Data-plane / runtime
+## Runtime
 
-Data-plane APIs run commands, access files, and manage supervised processes
+Sandbox runtime APIs run commands, access files, and manage supervised processes
 inside a **ready** sandbox (after `wait_until_ready()`). Most callers use
 `sandbox.exec` / `sandbox.files` / `sandbox.processes` on the handle rather than
 constructing `SandboxConnection` directly.
@@ -160,7 +159,7 @@ Supervised detached processes (lifetime outlives the start request). Complements
 request-scoped `sandbox.exec`.
 
 **Prerequisites:** Wait for `connect_url`, `phase == "Ready"`, and a successful
-data-plane probe before calling these methods. See
+runtime probe before calling these methods. See
 [`api-inventory.md` → End-to-end flow](./api-inventory.md#end-to-end-flow).
 
 | Method | Returns | Summary |
@@ -203,7 +202,7 @@ Listed for completeness; prefer handle methods above.
 | Processes helper | `SandboxProcesses` | `AsyncSandboxProcesses` |
 | Close | `connection.close()` | `await connection.aclose()` |
 
-Details: [`api-inventory.md` → Data-plane connection](./api-inventory.md#data-plane-connection)
+Details: [`api-inventory.md` → Runtime connection](./api-inventory.md#runtime-connection)
 
 ---
 
@@ -211,7 +210,7 @@ Details: [`api-inventory.md` → Data-plane connection](./api-inventory.md#data-
 
 Minimal one-liners for each public API. Runnable examples link to repo paths.
 
-### Control-plane / lifecycle
+### Lifecycle
 
 | API | Sync snippet | Async snippet | Runnable example |
 | --- | ------------ | ------------- | ---------------- |
@@ -263,7 +262,7 @@ Minimal one-liners for each public API. Runnable examples link to repo paths.
 | `agent.pause()` / `.resume()` / `.delete()` | `agent.pause(); agent.resume(); agent.delete()` | `await agent.pause(); await agent.resume(); await agent.delete()` | [create_agent.py](../examples/create_agent.py) (pause/delete; resume via handle API) |
 | `agent.to_json()` | `agent.to_json()` | `agent.to_json()` | — |
 
-### Data-plane / runtime
+### Runtime
 
 | API | Sync snippet | Async snippet | Runnable example |
 | --- | ------------ | ------------- | ---------------- |

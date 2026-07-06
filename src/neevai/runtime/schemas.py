@@ -1,4 +1,4 @@
-"""Hand-written Pydantic schemas for sandboxd (data-plane) responses."""
+"""Hand-written Pydantic schemas for runtime (runtime) responses."""
 
 from __future__ import annotations
 

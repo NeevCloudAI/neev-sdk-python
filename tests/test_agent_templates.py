@@ -13,7 +13,6 @@ def _make_client(mock_transport) -> NeevAI:
         api_key="test",
         org_id="org1",
         project_id="proj1",
-        region="us-east-1",
         client=mock_transport,
     )
 
@@ -89,7 +88,6 @@ async def test_async_agent_templates_list():
         api_key="test",
         org_id="org1",
         project_id="proj1",
-        region="us-east-1",
         client=httpx.AsyncClient(transport=MockControlTransport()),
     ) as client:
         page = await client.agent_templates.list()
@@ -102,7 +100,6 @@ async def test_async_agent_templates_get():
         api_key="test",
         org_id="org1",
         project_id="proj1",
-        region="us-east-1",
         client=httpx.AsyncClient(transport=MockControlTransport()),
     ) as client:
         template = await client.agent_templates.get("ag-claude-code")

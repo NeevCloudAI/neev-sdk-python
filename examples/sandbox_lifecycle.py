@@ -1,7 +1,7 @@
 """
 Walk through a sandbox's full lifecycle from creation to deletion.
 
-Provisions a sandbox from ``NEEVCLOUD_SANDBOX_TEMPLATE_ID``, waits for it to
+Provisions a sandbox from ``NEEV_SANDBOX_TEMPLATE_ID``, waits for it to
 become ready, reads live metrics, pauses it, and tears it down. Each step is
 separated by a configurable delay so you can follow progress in the console or
 watch the sandbox in the NeevCloud dashboard.
@@ -11,15 +11,14 @@ Prerequisites
 
 Required environment variables:
 
-- ``NEEVCLOUD_API_KEY`` — API key for your organization
-- ``NEEVCLOUD_ORG_ID`` — organization ID
-- ``NEEVCLOUD_PROJECT_ID`` — project ID
+- ``NEEV_API_KEY`` — API key for your organization
+- ``NEEV_ORG_ID`` — organization ID
+- ``NEEV_PROJECT_ID`` — project ID
 
 Optional overrides:
 
-- ``NEEVCLOUD_SANDBOX_TEMPLATE_ID`` — template to provision (default:
+- ``NEEV_SANDBOX_TEMPLATE_ID`` — template to provision (default:
   ``sb-ubuntu-26-04-minimal``)
-- ``NEEVCLOUD_REGION`` — deployment region (default: ``as-south-1``)
 - ``NEEVAI_WAIT_TIMEOUT_MS`` — max time to wait for ready state in ms
   (default: ``300000``)
 - ``NEEVAI_STEP_DELAY_SEC`` — pause between lifecycle steps in seconds
@@ -28,7 +27,7 @@ Optional overrides:
 Flow
 ----
 
-1. **Create** — call ``client.sandboxes.create`` with the template and region
+1. **Create** — call ``client.sandboxes.create`` with the template
 2. **Wait** — block on ``sandbox.wait_until_ready``, printing phase/replica
    updates on each poll
 3. **Metrics** — call ``sandbox.metrics()`` and list available metric series
@@ -45,8 +44,8 @@ Stdout / stderr
 
 Run::
 
-    NEEVCLOUD_API_KEY=... NEEVCLOUD_ORG_ID=... NEEVCLOUD_PROJECT_ID=... \\
-    NEEVCLOUD_SANDBOX_TEMPLATE_ID=sb-ubuntu-26-04-minimal \\
+    NEEV_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=... \\
+    NEEV_SANDBOX_TEMPLATE_ID=sb-ubuntu-26-04-minimal \\
     uv run python examples/sandbox_lifecycle.py
 """
 
@@ -60,10 +59,9 @@ from neevai import NeevAI
 from neevai.errors import NeevAIError
 
 # Tunable defaults — override via environment variables listed in the docstring.
-REGION = os.environ.get("NEEVCLOUD_REGION", "as-south-1")
 WAIT_TIMEOUT_MS = int(os.environ.get("NEEVAI_WAIT_TIMEOUT_MS", "300000"))
 STEP_DELAY_SEC = float(os.environ.get("NEEVAI_STEP_DELAY_SEC", "3"))
-SANDBOX_TEMPLATE_ID = os.environ.get("NEEVCLOUD_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-minimal")
+SANDBOX_TEMPLATE_ID = os.environ.get("NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-minimal")
 
 
 def _pause_between_steps(label: str) -> None:
@@ -76,9 +74,9 @@ def _pause_between_steps(label: str) -> None:
 
 def main() -> None:
     with NeevAI(
-        api_key=os.environ.get("NEEVCLOUD_API_KEY"),
-        org_id=os.environ.get("NEEVCLOUD_ORG_ID"),
-        project_id=os.environ.get("NEEVCLOUD_PROJECT_ID"),
+        api_key=os.environ.get("NEEV_API_KEY"),
+        org_id=os.environ.get("NEEV_ORG_ID"),
+        project_id=os.environ.get("NEEV_PROJECT_ID"),
     ) as client:
         try:
             # --- Create ---
@@ -86,7 +84,6 @@ def main() -> None:
                 {
                     "name": "example-agent",
                     "sandbox_template_id": SANDBOX_TEMPLATE_ID,
-                    "region": REGION,
                 }
             )
             print(f"created {sandbox.id} from {SANDBOX_TEMPLATE_ID} (phase: {sandbox.phase})")

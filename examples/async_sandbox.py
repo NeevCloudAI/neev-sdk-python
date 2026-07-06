@@ -19,20 +19,19 @@ Prerequisites
 
 Required environment variables:
 
-- ``NEEVCLOUD_API_KEY`` — API key for your organization
-- ``NEEVCLOUD_ORG_ID`` — organization ID
-- ``NEEVCLOUD_PROJECT_ID`` — project ID
+- ``NEEV_API_KEY`` — API key for your organization
+- ``NEEV_ORG_ID`` — organization ID
+- ``NEEV_PROJECT_ID`` — project ID
 
 Optional overrides:
 
-- ``NEEVCLOUD_SANDBOX_TEMPLATE_ID`` — template to provision (default:
+- ``NEEV_SANDBOX_TEMPLATE_ID`` — template to provision (default:
   ``sb-ubuntu-26-04-minimal``)
-- ``NEEVCLOUD_REGION`` — deployment region (default: ``as-south-1``)
 
 Flow
 ----
 
-1. **Create** — ``await client.sandboxes.create`` with the template and region
+1. **Create** — ``await client.sandboxes.create`` with the template
 2. **Wait** — ``await sandbox.wait_until_ready``
 3. **Exec** — ``await sandbox.exec`` and print stdout and exit code
 4. **Delete** — ``await sandbox.delete`` in a ``finally`` block
@@ -42,7 +41,7 @@ Example Output
 
 ::
 
-    [async] creating sandbox (sb-ubuntu-26-04-minimal, as-south-1)…
+    [async] creating sandbox (sb-ubuntu-26-04-minimal)…
     created sb-abc123 (phase: Provisioning)
     [async] waiting until ready…
     ready at https://connect.example/sb-abc123
@@ -57,8 +56,8 @@ Stdout / stderr
 
 Run::
 
-    NEEVCLOUD_API_KEY=... NEEVCLOUD_ORG_ID=... NEEVCLOUD_PROJECT_ID=... \\
-    NEEVCLOUD_SANDBOX_TEMPLATE_ID=sb-ubuntu-26-04-minimal \\
+    NEEV_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=... \\
+    NEEV_SANDBOX_TEMPLATE_ID=sb-ubuntu-26-04-minimal \\
     uv run python examples/async_sandbox.py
 """
 
@@ -74,8 +73,7 @@ from neevai import AsyncNeevAI
 from neevai.errors import NeevAIError
 
 # Tunable defaults — override via environment variables listed in the docstring.
-REGION = os.environ.get("NEEVCLOUD_REGION", "as-south-1")
-TEMPLATE = os.environ.get("NEEVCLOUD_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-minimal")
+TEMPLATE = os.environ.get("NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-minimal")
 
 
 def log(message: str) -> None:
@@ -93,12 +91,11 @@ async def main() -> None:
         sandbox = None
         try:
             # --- Create ---
-            log(f"creating sandbox ({TEMPLATE}, {REGION})…")
+            log(f"creating sandbox ({TEMPLATE})…")
             sandbox = await client.sandboxes.create(
                 {
                     "name": f"async-demo-{_rand_suffix()}",
                     "sandbox_template_id": TEMPLATE,
-                    "region": REGION,
                 }
             )
             print(f"created {sandbox.id} (phase: {sandbox.phase})")

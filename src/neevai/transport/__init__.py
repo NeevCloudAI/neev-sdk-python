@@ -1,1 +1,1 @@
-"""Canonical ``transport/`` slot — HTTP transport layers (control, dataplane, retry)."""
+"""Canonical ``transport/`` slot — HTTP transport layers (control, runtime, retry)."""

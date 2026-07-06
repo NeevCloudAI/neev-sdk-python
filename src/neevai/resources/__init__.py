@@ -1,4 +1,4 @@
-"""Hand-written control-plane resource classes."""
+"""Hand-written resource classes."""
 
 from neevai.resources.agent_templates import AgentTemplates, AsyncAgentTemplates
 from neevai.resources.agents import Agents, AsyncAgents

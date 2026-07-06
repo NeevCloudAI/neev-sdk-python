@@ -1,4 +1,4 @@
-"""Runtime validation helpers for control-plane API boundaries."""
+"""Runtime validation helpers for API boundaries."""
 
 from __future__ import annotations
 

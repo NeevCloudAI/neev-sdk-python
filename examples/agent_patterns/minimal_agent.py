@@ -25,22 +25,21 @@ Prerequisites
 
 Required environment variables:
 
-- ``NEEVCLOUD_API_KEY`` — API key for your organization
-- ``NEEVCLOUD_ORG_ID`` — organization ID
-- ``NEEVCLOUD_PROJECT_ID`` — project ID
+- ``NEEV_API_KEY`` — API key for your organization
+- ``NEEV_ORG_ID`` — organization ID
+- ``NEEV_PROJECT_ID`` — project ID
 
 Inference (see ``utils/model_config.py`` for key resolution):
 
-- ``NEEV_INFERENCE_API_KEY`` or ``NEEVCLOUD_INFERENCE_API_KEY`` — model API key
-  (falls back to ``NEEVCLOUD_API_KEY``)
+- ``NEEV_INFERENCE_API_KEY`` — model API key
+  (falls back to ``NEEV_API_KEY``)
 
 Optional overrides:
 
-- ``NEEVCLOUD_SANDBOX_TEMPLATE_ID`` — template to provision (default:
+- ``NEEV_SANDBOX_TEMPLATE_ID`` — template to provision (default:
   ``sb-ubuntu-26-04-minimal``)
-- ``NEEVCLOUD_REGION`` — deployment region (default: ``as-south-1``)
 - ``NEEV_MODEL`` — inference model name (default: ``gpt-oss-120b``)
-- ``NEEV_INFERENCE_BASE_URL`` or ``NEEVCLOUD_INFERENCE_BASE_URL`` — OpenAI-compatible
+- ``NEEV_INFERENCE_BASE_URL`` — OpenAI-compatible
   endpoint (default: ``https://inference.ai.neevcloud.com/v1``)
 
 Module constants (not env-overridable):
@@ -51,7 +50,7 @@ Module constants (not env-overridable):
 Flow
 ----
 
-1. **Create** — call ``client.sandboxes.create`` with the template and region
+1. **Create** — call ``client.sandboxes.create`` with the template
 2. **Wait** — block on ``sandbox.wait_until_ready``
 3. **Agent loop** — POST ``/chat/completions`` with the ``run_shell`` tool schema
 4. **Tool call** — on each tool request, run ``sandbox.exec_stream`` and append
@@ -68,7 +67,7 @@ Example Output
     AI code-interpreter (gpt-oss-120b → Neev sandbox)
     task: Print every prime number below 50…
 
-    [sandbox] creating (template=sb-ubuntu-26-04-minimal, region=as-south-1)…
+    [sandbox] creating (template=sb-ubuntu-26-04-minimal)…
 
     ━━━━━ step 1 ━━━━━
     [model] calling gpt-oss-120b with 2 messages…
@@ -100,7 +99,7 @@ Stdout / stderr
 
 Run::
 
-    NEEVCLOUD_API_KEY=... NEEVCLOUD_ORG_ID=... NEEVCLOUD_PROJECT_ID=... \\
+    NEEV_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=... \\
     uv run python examples/agent_patterns/minimal_agent.py
 """
 
@@ -133,8 +132,7 @@ TASK = (
 )
 
 # Tunable defaults — override via environment variables listed in the docstring.
-REGION = os.environ.get("NEEVCLOUD_REGION", "as-south-1")
-TEMPLATE = os.environ.get("NEEVCLOUD_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-minimal")
+TEMPLATE = os.environ.get("NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-minimal")
 MAX_STEPS = 6
 
 TOOLS: list[dict[str, Any]] = [
@@ -204,12 +202,11 @@ def main() -> None:
 
     with NeevAI() as client:
         # --- Create ---
-        line(_dim(f"\n[sandbox] creating (template={TEMPLATE}, region={REGION})…"))
+        line(_dim(f"\n[sandbox] creating (template={TEMPLATE})…"))
         sandbox = client.sandboxes.create(
             {
                 "name": f"ai-{_rand_suffix()}",
                 "sandbox_template_id": TEMPLATE,
-                "region": REGION,
             }
         )
 

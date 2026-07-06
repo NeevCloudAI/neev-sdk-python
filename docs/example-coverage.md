@@ -49,10 +49,10 @@ path and run commands, see [`examples/README.md`](../examples/README.md).
 | `sandbox.refresh` | `processes.py`, `process_pool.py` | `sandbox.refresh()` — poll until `connect_url` is set |
 | `sandbox.exec` | `parallel_fanout.py`, `async_sandbox.py`, `sandbox_metrics.py`, `agent_patterns/*`, `workflow_examples/*` | `result = sandbox.exec(["echo", "hi"])` / `await sandbox.exec(...)` |
 | `sandbox.exec_stream` | `streaming_exec.py`, `agent_patterns/minimal_agent.py`, `agent_patterns/utils/agent_loop.py` | `for event in sandbox.exec_stream(cmd):` |
-| `sandbox.processes.start` | `processes.py`, `process_pool.py` | `proc = sandbox.processes.start(["sleep", "30"])` — after connect_url → Ready → dataplane probe |
+| `sandbox.processes.start` | `processes.py`, `process_pool.py` | `proc = sandbox.processes.start(["sleep", "30"])` — after connect_url → Ready → runtime probe |
 | `sandbox.processes.follow` | `processes.py` | `for event in proc.follow():` |
 | `sandbox.processes.logs` | `processes.py` | `page = proc.logs()` |
-| `sandbox.processes.list` | `processes.py`, `process_pool.py` | `sandbox.processes.list()` — dataplane probe before start; list running processes after |
+| `sandbox.processes.list` | `processes.py`, `process_pool.py` | `sandbox.processes.list()` — runtime probe before start; list running processes after |
 | `sandbox.processes.kill` | `processes.py` | `proc.kill(signal=Signal.TERM)` |
 | `sandbox.processes.get` | — | `sandbox.processes.get(proc.id)` — no dedicated example; `proc.wait()` uses `get(wait=True)` |
 | `Process.status` | — | `proc.status()` — no dedicated example |
@@ -83,8 +83,8 @@ path and run commands, see [`examples/README.md`](../examples/README.md).
 | Async workflow | `examples/async_sandbox.py` | `AsyncNeevAI` create → wait → exec → delete |
 | Files API | `examples/files_api.py` | Write, read_text, list (recursive) |
 | Streaming exec | `examples/streaming_exec.py` | `exec_stream` with progress output |
-| Processes lifecycle | `examples/processes.py` | Create → connect_url wait → Ready → dataplane probe → start → follow → logs → list → kill → wait |
-| Process pool | `examples/process_pool.py` | Create → connect_url wait → Ready → dataplane probe → parallel start → list → kill_all → wait |
+| Processes lifecycle | `examples/processes.py` | Create → connect_url wait → Ready → runtime probe → start → follow → logs → list → kill → wait |
+| Process pool | `examples/process_pool.py` | Create → connect_url wait → Ready → runtime probe → parallel start → list → kill_all → wait |
 | Parallel fan-out | `examples/parallel_fanout.py` | Multiple sandboxes, parallel `exec` |
 | Sandbox metrics | `examples/sandbox_metrics.py` | Poll `metrics()` under CPU load |
 | Raw request | `examples/raw_request.py` | Untyped `client.raw.request` |

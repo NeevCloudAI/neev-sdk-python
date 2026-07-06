@@ -9,7 +9,7 @@ Workspace paths
 ---------------
 
 All file paths are **workspace-relative** (for example ``demo/hello.txt``).
-The sandbox daemon rejects absolute paths — use paths relative to the workspace
+The sandbox runtime rejects absolute paths — use paths relative to the workspace
 root, not ``/tmp/...`` or ``/home/...``.
 
 Prerequisites
@@ -17,15 +17,14 @@ Prerequisites
 
 Required environment variables:
 
-- ``NEEVCLOUD_API_KEY`` — API key for your organization
-- ``NEEVCLOUD_ORG_ID`` — organization ID
-- ``NEEVCLOUD_PROJECT_ID`` — project ID
+- ``NEEV_API_KEY`` — API key for your organization
+- ``NEEV_ORG_ID`` — organization ID
+- ``NEEV_PROJECT_ID`` — project ID
 
 Optional overrides:
 
-- ``NEEVCLOUD_SANDBOX_TEMPLATE_ID`` — template to provision (default:
+- ``NEEV_SANDBOX_TEMPLATE_ID`` — template to provision (default:
   ``sb-ubuntu-26-04-minimal``)
-- ``NEEVCLOUD_REGION`` — deployment region (default: ``as-south-1``)
 
 Flow
 ----
@@ -41,7 +40,7 @@ Example Output
 
 ::
 
-    [files] creating sandbox (sb-ubuntu-26-04-minimal, as-south-1)…
+    [files] creating sandbox (sb-ubuntu-26-04-minimal)…
     [files] ready: sb-abc123
     read_text: Hello from files API
       file: demo/hello.txt (23 bytes)
@@ -56,8 +55,8 @@ Stdout / stderr
 
 Run::
 
-    NEEVCLOUD_API_KEY=... NEEVCLOUD_ORG_ID=... NEEVCLOUD_PROJECT_ID=... \\
-    NEEVCLOUD_SANDBOX_TEMPLATE_ID=sb-ubuntu-26-04-minimal \\
+    NEEV_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=... \\
+    NEEV_SANDBOX_TEMPLATE_ID=sb-ubuntu-26-04-minimal \\
     uv run python examples/files_api.py
 """
 
@@ -72,8 +71,7 @@ from neevai import NeevAI
 from neevai.errors import NeevAIError
 
 # Tunable defaults — override via environment variables listed in the docstring.
-REGION = os.environ.get("NEEVCLOUD_REGION", "as-south-1")
-TEMPLATE = os.environ.get("NEEVCLOUD_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-minimal")
+TEMPLATE = os.environ.get("NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-minimal")
 
 
 def log(message: str) -> None:
@@ -91,12 +89,11 @@ def main() -> None:
         sandbox = None
         try:
             # --- Create & wait ---
-            log(f"creating sandbox ({TEMPLATE}, {REGION})…")
+            log(f"creating sandbox ({TEMPLATE})…")
             sandbox = client.sandboxes.create(
                 {
                     "name": f"files-demo-{_rand_suffix()}",
                     "sandbox_template_id": TEMPLATE,
-                    "region": REGION,
                 }
             )
             sandbox.wait_until_ready()

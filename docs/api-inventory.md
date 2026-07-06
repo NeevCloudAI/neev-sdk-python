@@ -5,7 +5,7 @@ reference, type field tables, symbol index, and contract notes. Use this documen
 when you need exhaustive detail on the entire SDK surface.
 
 For installation, credentials, and first scripts, see
-[`getting-started.md`](./getting-started.md). For control-plane vs data-plane API
+[`getting-started.md`](./getting-started.md). For lifecycle vs runtime API
 lists and copy-paste snippets, see [`api-reference.md`](./api-reference.md). For
 which examples demonstrate which APIs, see
 [`example-coverage.md`](./example-coverage.md).
@@ -37,7 +37,7 @@ which examples demonstrate which APIs, see
 - [Exec and streaming](#exec-and-streaming)
 - [Files API](#files-api)
 - [Processes API](#processes-api)
-- [Data-plane connection](#data-plane-connection)
+- [Runtime connection](#runtime-connection)
 - [Raw client](#raw-client)
 - [Types reference](#types-reference)
 - [Errors](#errors)
@@ -74,10 +74,10 @@ Everything in `neevai.__all__`:
 | `AgentListResponse` | model | `types.py` |
 | `AgentTemplate` | model | generated |
 | `AgentTemplateListResponse` | model | generated |
-| `SandboxConnection` | class | `runtime/sandboxd.py` |
-| `AsyncSandboxConnection` | class | `runtime/sandboxd.py` |
-| `SandboxFiles` | class | `runtime/sandboxd.py` |
-| `AsyncSandboxFiles` | class | `runtime/sandboxd.py` |
+| `SandboxConnection` | class | `runtime/connection.py` |
+| `AsyncSandboxConnection` | class | `runtime/connection.py` |
+| `SandboxFiles` | class | `runtime/connection.py` |
+| `AsyncSandboxFiles` | class | `runtime/connection.py` |
 | `SandboxProcesses` | class | `runtime/processes.py` |
 | `AsyncSandboxProcesses` | class | `runtime/processes.py` |
 | `Process` | class | `runtime/processes.py` |
@@ -134,17 +134,16 @@ Synchronous platform client. Exposes three resource namespaces:
 - `client.agents` — CRUD and lifecycle for agents in a project
 - `client.agent_templates` — read-only agent template catalogue (global)
 - `client.templates` — read-only sandbox template catalogue
-- `client.raw` — untyped control-plane HTTP escape hatch
+- `client.raw` — untyped API escape hatch
 
 **Parameters:**
 
 | Name | Type | Default | Description |
 | ---- | ---- | ------- | ----------- |
-| `api_key` | `str \| None` | `NEEVCLOUD_API_KEY` | Bearer token |
-| `org_id` | `str \| None` | `NEEVCLOUD_ORG_ID` | Default org scope |
-| `project_id` | `str \| None` | `NEEVCLOUD_PROJECT_ID` | Default project scope |
-| `region` | `str \| None` | `NEEVCLOUD_REGION` | Default region for create |
-| `base_url` | `str \| None` | `https://api.ai.neevcloud.com/agent` | Control-plane URL |
+| `api_key` | `str \| None` | `NEEV_API_KEY` | Bearer token |
+| `org_id` | `str \| None` | `NEEV_ORG_ID` | Default org scope |
+| `project_id` | `str \| None` | `NEEV_PROJECT_ID` | Default project scope |
+| `base_url` | `str \| None` | `https://api.ai.neevcloud.com/agent` | Lifecycle URL |
 | `timeout_ms` | `int` | `60000` | Per-request timeout |
 | `max_retries` | `int` | `2` | Retries on network / 429 / 5xx |
 | `client` | `httpx.Client \| None` | new client | Inject custom HTTP client |
@@ -154,7 +153,7 @@ Synchronous platform client. Exposes three resource namespaces:
 Use as a context manager to ensure the HTTP transport is closed:
 
 ```python
-with NeevAI(api_key="...", org_id="...", project_id="...", region="...") as client:
+with NeevAI(api_key="...", org_id="...", project_id="...") as client:
     sandbox = client.sandboxes.create({...})
 ```
 
@@ -189,14 +188,14 @@ Creates a new sandbox in the resolved project context.
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
-| `params` | `CreateSandboxParams \| Mapping[str, Any]` | Create body; `region` defaults from client if omitted |
+| `params` | `CreateSandboxParams \| Mapping[str, Any]` | Create body |
 | `org_id` | `str \| None` | Override org (else client default) |
 | `project_id` | `str \| None` | Override project (else client default) |
 
-**Returns:** `Sandbox` handle with initial control-plane state (`phase` is typically
+**Returns:** `Sandbox` handle with initial API state (`phase` is typically
 `Pending` immediately after create).
 
-**Raises:** `NeevAIError` (missing scope/region), `BadRequestError`,
+**Raises:** `NeevAIError` (missing scope), `BadRequestError`,
 `AuthenticationError`, `PermissionDeniedError`, `ConflictError`, `RateLimitError`,
 `InternalServerError`, etc.
 
@@ -204,7 +203,6 @@ Creates a new sandbox in the resolved project context.
 sandbox = client.sandboxes.create({
     "name": "my-agent",
     "sandbox_template_id": "tmpl-abc123",
-    "region": "as-south-1",
     "env": [{"name": "LOG_LEVEL", "value": "debug"}],
 })
 sandbox.wait_until_ready()
@@ -213,7 +211,6 @@ sandbox.wait_until_ready()
 restored = client.sandboxes.create({
     "name": "restored-agent",
     "sandbox_template_id": "tmpl-abc123",
-    "region": "as-south-1",
     "from_snapshot": str(snap.id),
 })
 ```
@@ -254,7 +251,7 @@ print(sandbox.phase, sandbox.connect_url)
 
 ### `client.sandboxes.pause(id, *, preserve_memory=None, org_id=None, project_id=None)`
 
-Scales the sandbox to 0 replicas. Control-plane phase becomes `Paused`. When
+Scales the sandbox to 0 replicas. Lifecycle phase becomes `Paused`. When
 `preserve_memory` is set, it is sent in the request body (`PauseSandboxRequest`);
 omit it to use the server default (`true`).
 
@@ -397,7 +394,7 @@ In-place restore may leave an empty workspace on some backends.
 
 ```python
 restored = client.sandboxes.restore(sandbox.id, str(snap.id))
-# or via handle (updates state in place, invalidates data-plane connection):
+# or via handle (updates state in place, invalidates runtime connection):
 sandbox.restore(str(snap.id))
 ```
 
@@ -428,7 +425,6 @@ creating a new sandbox:
 restored = client.sandboxes.create({
     "name": "restored-from-snap",
     "sandbox_template_id": template_id,
-    "region": "as-south-1",
     "from_snapshot": str(snap.id),
 })
 restored.wait_until_ready()
@@ -440,9 +436,7 @@ restored.wait_until_ready()
 
 ## Agents resource
 
-Access via `client.agents` (`Agents`). Requires org/project scope. Injects
-`client.default_region` on create only when the client has a default region set
-(region is optional per spec — unlike sandbox create).
+Access via `client.agents` (`Agents`). Requires org/project scope.
 
 ### `client.agents.create(params, org_id=None, project_id=None)`
 
@@ -532,7 +526,7 @@ print(tmpl.description)
 ## Agent handle
 
 Returned by `client.agents.create()`, `get()`, and `list().items`. Holds mutable
-in-memory state mirroring the last control-plane response.
+in-memory state mirroring the last API response.
 
 ### Properties
 
@@ -574,7 +568,7 @@ Delegate to `client.agents` with scope threading. Empty `update({})` raises loca
 ## Sandbox handle
 
 Returned by `create()`, `get()`, and `list().items`. Holds mutable in-memory state
-mirroring the last control-plane response. Call `refresh()` to sync from the server.
+mirroring the last API response. Call `refresh()` to sync from the server.
 
 ### Properties
 
@@ -584,12 +578,12 @@ mirroring the last control-plane response. Call `refresh()` to sync from the ser
 | `name` | `str` | Human-readable name |
 | `phase` | `str` | OpenAPI steady states: `"Pending"`, `"Ready"`, `"NotReady"`, `"Unknown"`, `"Paused"`. API may also return transitional values (e.g. `"Pausing"`, `"Resuming"`) not in the spec enum; SDK accepts any phase string. |
 | `replicas` | `int` | `0` or `1` |
-| `connect_url` | `str \| None` | Regional data-plane URL (available when ready) |
+| `connect_url` | `str \| None` | Regional runtime URL (available when ready) |
 | `data` | `dict[str, Any]` | Full record snapshot |
 
 ### `sandbox.refresh()`
 
-Re-fetches the sandbox from the control plane and updates this handle in place.
+Re-fetches the sandbox from the API and updates this handle in place.
 
 **Returns:** `self`.
 
@@ -602,7 +596,7 @@ print(sandbox.phase, sandbox.replicas)
 
 ### `sandbox.wait_until_ready(timeout_ms=120000, poll_interval_ms=2000, on_poll=None)`
 
-Polls `refresh()` until `phase == "Ready"`. Data-plane operations (`exec`,
+Polls `refresh()` until `phase == "Ready"`. Sandbox runtime operations (`exec`,
 `files`, `processes`) establish a lazy connection on first use via `_connection()`.
 
 **Raises:**
@@ -655,7 +649,7 @@ all_snaps = sandbox.snapshots()
 ### `sandbox.restore(snapshot_id)` / `sandbox.fork(name)`
 
 `restore` delegates to `client.sandboxes.restore`, updates handle state in place,
-invalidates the cached data-plane connection, and returns `self`. `fork` returns a
+invalidates the cached runtime connection, and returns `self`. `fork` returns a
 new `Sandbox` handle.
 
 For rollback workflows, prefer `client.sandboxes.create({..., "from_snapshot": ...})`
@@ -670,7 +664,6 @@ sandbox.restore(str(snap.id))
 restored = client.sandboxes.create({
     "name": "restored",
     "sandbox_template_id": template_id,
-    "region": region,
     "from_snapshot": str(snap.id),
 })
 
@@ -689,7 +682,7 @@ Returns the raw API record as a JSON-compatible `dict` suitable for
 
 ## Exec and streaming
 
-Data-plane command execution requires the sandbox to be `Ready` with a populated
+Sandbox runtime command execution requires the sandbox to be `Ready` with a populated
 `connect_url`. Most callers use `sandbox.exec` / `sandbox.exec_stream` rather than
 constructing `SandboxConnection` directly.
 
@@ -767,7 +760,7 @@ Sync: `for event in sandbox.exec_stream(...)`. Async:
 ## Files API
 
 Access via the `sandbox.files` property (`SandboxFiles` / `AsyncSandboxFiles`).
-Paths are **workspace-relative**; absolute paths are rejected by the daemon.
+Paths are **workspace-relative**; absolute paths are rejected by the sandbox.
 
 ### `sandbox.files.write(path, content, cwd=None)`
 
@@ -808,33 +801,33 @@ for entry in entries:
 ## Processes API
 
 Access via `sandbox.processes` (`SandboxProcesses` / `AsyncSandboxProcesses`) or
-`connection.processes` on a raw data-plane connection. Detached processes outlive
+`connection.processes` on a raw runtime connection. Detached processes outlive
 the HTTP request that started them; use `sandbox.exec` for request-scoped commands.
 
 All endpoints are **POST** to `{connect_url}/v1/processes/*` with no retries.
 
 ### End-to-end flow
 
-Supervised processes require both the **control plane** (create/get sandbox) and the
-**data plane** (`connect_url`). A typical sequence:
+Supervised processes require both the **the API** (create/get sandbox) and the
+**sandbox runtime** (`connect_url`). A typical sequence:
 
 ```mermaid
 sequenceDiagram
     participant Client
-    participant ControlPlane
-    participant DataPlane
+    participant LifecycleApi
+    participant SandboxRuntime
 
-    Client->>ControlPlane: POST sandboxes/create
-    ControlPlane-->>Client: sandbox_id, connect_url, phase
+    Client->>LifecycleApi: POST sandboxes/create
+    LifecycleApi-->>Client: sandbox_id, connect_url, phase
     loop Until deadline
-        Client->>ControlPlane: GET sandboxes/{id}
-        ControlPlane-->>Client: connect_url, phase
+        Client->>LifecycleApi: GET sandboxes/{id}
+        LifecycleApi-->>Client: connect_url, phase
     end
-    Client->>DataPlane: POST /v1/processes/list (probe)
-    Client->>DataPlane: POST /v1/processes/start
-    DataPlane-->>Client: process_id, state
-    Client->>DataPlane: POST /v1/processes/logs or follow
-    Client->>DataPlane: POST /v1/processes/kill
+    Client->>SandboxRuntime: POST /v1/processes/list (probe)
+    Client->>SandboxRuntime: POST /v1/processes/start
+    SandboxRuntime-->>Client: process_id, state
+    Client->>SandboxRuntime: POST /v1/processes/logs or follow
+    Client->>SandboxRuntime: POST /v1/processes/kill
 ```
 
 #### Prerequisites before `processes.start`
@@ -843,26 +836,26 @@ sequenceDiagram
    `phase` (often `Pending`), and sometimes `connect_url`.
 2. **Wait for `connect_url`** — poll `sandbox.refresh()` until `connect_url` is set.
    The URL may appear while `phase` is still `Pending` or `NotReady`; do not call
-   data-plane APIs until you also complete the steps below.
+   sandbox runtimes until you also complete the steps below.
 3. **Wait for Ready** — `sandbox.wait_until_ready()` until `phase == "Ready"`.
-4. **Probe data plane** — call `sandbox.processes.list()` and retry transient
-   `502` / `503` / `504` (or connection errors) until the daemon accepts requests.
+4. **Probe sandbox runtime** — call `sandbox.processes.list()` and retry transient
+   `502` / `503` / `504` (or connection errors) until the sandbox accepts requests.
 
 This matches [`examples/processes.py`](../examples/processes.py) and
 [`examples/process_pool.py`](../examples/process_pool.py). Tunables:
 
 | Variable | Default | Purpose |
 | -------- | ------- | ------- |
-| `NEEVAI_WAIT_TIMEOUT_MS` | `300000` | Shared deadline for connect URL, Ready, and data-plane probe |
+| `NEEVAI_WAIT_TIMEOUT_MS` | `300000` | Shared deadline for connect URL, Ready, and runtime probe |
 | `NEEVAI_POLL_INTERVAL_MS` | `2000` | Sleep between `refresh()` / probe retries |
 
-#### Authentication (data-plane)
+#### Authentication (runtime)
 
 Every `{connect_url}/v1/processes/*` request requires:
 
 | Header | Value |
 | ------ | ----- |
-| `Authorization` | `Bearer <NEEVCLOUD_API_KEY>` (same key as the control plane) |
+| `Authorization` | `Bearer <NEEV_API_KEY>` (same key as the API) |
 | `X-Sandbox-Id` | `<sandbox_id>` UUID from create/get |
 
 The SDK sends both headers automatically when using `sandbox.processes` or
@@ -886,12 +879,12 @@ The SDK sends both headers automatically when using `sandbox.processes` or
 After create/get returns `connect_url` and the sandbox is Ready:
 
 ```bash
-export NEEVCLOUD_API_KEY="..."
+export NEEV_API_KEY="..."
 export CONNECT_URL="https://..."
 export SANDBOX_ID="550e8400-e29b-41d4-a716-446655440000"
 
 curl -sS -X POST "${CONNECT_URL}/v1/processes/start" \
-  -H "Authorization: Bearer ${NEEVCLOUD_API_KEY}" \
+  -H "Authorization: Bearer ${NEEV_API_KEY}" \
   -H "X-Sandbox-Id: ${SANDBOX_ID}" \
   -H "Content-Type: application/json" \
   -d '{"program":"sh","args":["-c","echo hello"]}'
@@ -901,7 +894,7 @@ PowerShell:
 
 ```powershell
 $headers = @{
-    Authorization  = "Bearer $env:NEEVCLOUD_API_KEY"
+    Authorization  = "Bearer $env:NEEV_API_KEY"
     "X-Sandbox-Id" = $sandboxId
     "Content-Type" = "application/json"
 }
@@ -930,7 +923,6 @@ with NeevAI() as client:
     sandbox = client.sandboxes.create({
         "name": "processes-demo",
         "sandbox_template_id": "sb-ubuntu-26-04-minimal",
-        "region": "as-south-1",
     })
     deadline = time.time() + WAIT_MS / 1000.0
 
@@ -967,9 +959,9 @@ with NeevAI() as client:
 
 | Symptom | Likely cause | What to do |
 | ------- | ------------ | ---------- |
-| `401` / invalid credentials | Wrong or expired `NEEVCLOUD_API_KEY` | Use the same Bearer token as control-plane calls |
+| `401` / invalid credentials | Wrong or expired `NEEV_API_KEY` | Use the same Bearer token as API calls |
 | `connect_url` is `None` | Sandbox still provisioning | Keep calling `sandbox.refresh()` until the URL appears |
-| Data-plane `502` / `503` / `504` right after Ready | Daemon not accepting traffic yet | Retry `sandbox.processes.list()` (see prerequisites) |
+| Sandbox runtime `502` / `503` / `504` right after Ready | Runtime not accepting traffic yet | Retry `sandbox.processes.list()` (see prerequisites) |
 | `follow` read timeout on a quiet process | No stdout/stderr for longer than HTTP read timeout | Prefer `proc.follow()` (SDK manages streaming) or increase client read timeout |
 
 ### `sandbox.processes.start(program, args=None, cwd=None, env=None, stdin=None)`
@@ -1041,9 +1033,9 @@ for event in proc.follow():
 
 ---
 
-## Data-plane connection
+## Runtime connection
 
-Low-level connection to the regional sandbox daemon. Constructed internally by
+Low-level connection to the sandbox runtime. Constructed internally by
 `sandbox.exec`, `sandbox.files`, and `sandbox.processes`; exposed for advanced use
 cases. Pass `sandbox_id` so the transport sends `X-Sandbox-Id` on every request
 (the sandbox handle does this automatically via `_connection()`).
@@ -1080,7 +1072,7 @@ finally:
 
 ## Raw client
 
-Untyped escape hatch over the control-plane transport. Same auth, timeout, retry,
+Untyped escape hatch over the API transport. Same auth, timeout, retry,
 and error mapping as typed resources.
 
 ### `client.raw.request(method, path, query=None, body=None)`
@@ -1101,7 +1093,6 @@ for item in data["items"]:
 body = {
     "name": "raw-demo",
     "sandbox_template_id": template_id,
-    "region": "as-south-1",
 }
 created = client.raw.request(
     "POST",
@@ -1118,7 +1109,7 @@ created = client.raw.request(
 
 ## Types reference
 
-Import from `neevai.types`. Control-plane models are generated from
+Import from `neevai.types`. Lifecycle models are generated from
 `specs/aiagent.yaml` (regenerate with `scripts/gen_types.py`). After spec changes,
 manually verify field tables here and in [`api-reference.md`](./api-reference.md).
 
@@ -1160,7 +1151,7 @@ Alias for generated `CreateAgentRequest`.
 | ----- | ---- | -------- |
 | `name` | `str` (DNS-1123 label, max 63) | yes |
 | `agent_template` | `str` | yes (template **name**, e.g. `claude-code`) |
-| `region` | `str \| None` | no (injected from client default only when set) |
+| `region` | `str \| None` | no (set it in the create body) |
 | `config` | `dict \| None` | no |
 | `env` | `list[EnvVar] \| None` | no |
 | `resources` | `SandboxResources \| None` | no |
@@ -1216,7 +1207,7 @@ Alias for generated `CreateSandboxRequest`.
 | ----- | ---- | -------- |
 | `name` | `str` (DNS-1123 label, max 63) | yes |
 | `sandbox_template_id` | `str` (`sb-…` pattern) | no |
-| `region` | `str \| None` | no (auto-filled from client if omitted at API boundary) |
+| `region` | `str \| None` | no (set it in the create body) |
 | `env` | `list[EnvVar] \| None` | no |
 | `resources` | `SandboxResources \| None` | no |
 | `egress` | `SandboxEgressConfig \| None` | no |
@@ -1231,7 +1222,7 @@ Alias for generated `CreateSandboxRequest`.
 
 ### `SandboxData`
 
-Full control-plane sandbox record. Subclasses generated `Sandbox` with `phase: str`
+Full API sandbox record. Subclasses generated `Sandbox` with `phase: str`
 so transitional or future phase strings from the API are accepted.
 
 | Field | Type | Required |
@@ -1306,7 +1297,7 @@ On handles, `sandbox.phase` returns a `str` (not the generated enum). The OpenAP
 
 Type alias for documented phase strings: `Literal["Pending", "Ready", "NotReady", "Unknown", "Paused", "Pausing", "Resuming"]`.
 
-The OpenAPI `SandboxPhase` enum lists only the five steady states (`Pending`, `Ready`, `NotReady`, `Unknown`, `Paused`). The control plane may return transitional values such as `Pausing` and `Resuming` while pause/resume reconciliation is in progress; `SandboxData` and handle `phase` accept any string so future API values do not break the SDK.
+The OpenAPI `SandboxPhase` enum lists only the five steady states (`Pending`, `Ready`, `NotReady`, `Unknown`, `Paused`). The API may return transitional values such as `Pausing` and `Resuming` while pause/resume reconciliation is in progress; `SandboxData` and handle `phase` accept any string so future API values do not break the SDK.
 
 ### `FileEntry`
 
@@ -1414,7 +1405,7 @@ All SDK errors inherit from `NeevAIError`. Import from `neevai` or `neevai.error
 `APIError` attributes: `status_code`, `body`, `code`, `details`, `request_id`,
 `request_method`, `request_url`.
 
-Data-plane exec errors are mapped to the same hierarchy via gRPC-style reason codes.
+Sandbox runtime exec errors are mapped to the same hierarchy via gRPC-style reason codes.
 
 ```python
 from neevai import NeevAI
@@ -1426,7 +1417,7 @@ try:
 except NotFoundError as e:
     print(f"404 — code={e.code}, request_id={e.request_id}")
 except AuthenticationError:
-    print("Check NEEVCLOUD_API_KEY")
+    print("Check NEEV_API_KEY")
 except NeevAIError as e:
     print(f"SDK error: {e}")
 ```
@@ -1516,7 +1507,7 @@ Compact reviewer index. Each symbol should also appear in
 | Symbol | Kind | Description |
 | ------ | ---- | ----------- |
 | `NeevAI` | class | Sync platform client; exposes `.sandboxes`, `.agents`, `.agent_templates`, `.templates`, `.raw` |
-| `NeevAI.__init__` | method | `api_key`, `org_id`, `project_id`, `region`, `base_url`, `timeout_ms`, `max_retries`, `client` |
+| `NeevAI.__init__` | method | `api_key`, `org_id`, `project_id`, `base_url`, `timeout_ms`, `max_retries`, `client` |
 | `NeevAI.close` | method | Release HTTP transport |
 | `AsyncNeevAI` | class | Async platform client |
 | `AsyncNeevAI.aclose` | method | Release async HTTP transport |
@@ -1575,7 +1566,7 @@ Compact reviewer index. Each symbol should also appear in
 | ------ | ---- | ----- |
 | `Agent.id`, `.name`, `.status`, `.sandbox_id`, `.agent_template_id` | properties | `status` is `str` |
 | `Agent.data` / `.to_json` | property / method | JSON-serializable dict |
-| `Agent.refresh` | method | Re-fetch from control plane |
+| `Agent.refresh` | method | Re-fetch from the API |
 | `Agent.wait_until_ready` | method | Poll until `Ready`; timing validation |
 | `Agent.sandbox` | method | Backing `Sandbox` handle |
 | `Agent.update` / `.pause` / `.resume` / `.delete` | methods | Scope-threaded |
@@ -1588,7 +1579,7 @@ Compact reviewer index. Each symbol should also appear in
 | `Sandbox.id`, `.name`, `.phase`, `.replicas`, `.connect_url` | properties | `phase` is `str` (any API phase string) |
 | `Sandbox.data` | property | `dict[str, Any]` snapshot |
 | `Sandbox.to_json` | method | JSON-serializable dict |
-| `Sandbox.refresh` | method | Re-fetch from control plane → `Sandbox` |
+| `Sandbox.refresh` | method | Re-fetch from the API → `Sandbox` |
 | `Sandbox.wait_until_ready` | method | Poll until `Ready` |
 | `Sandbox.pause` / `.resume` | methods | Return updated `Sandbox` |
 | `Sandbox.snapshot` / `.snapshots` | methods | `Snapshot` / `list[Snapshot]` |
@@ -1621,7 +1612,7 @@ Compact reviewer index. Each symbol should also appear in
 | `AsyncSandboxProcesses.*` | methods | Same as sync with `await` |
 | `AsyncProcess.*` | methods | Same as sync with `await`; `follow` is `async for` |
 
-### Data-plane (`runtime/sandboxd.py`)
+### Sandbox runtime (`runtime/connection.py`)
 
 | Symbol | Kind | Notes |
 | ------ | ---- | ----- |
@@ -1640,7 +1631,7 @@ Compact reviewer index. Each symbol should also appear in
 
 | Symbol | Kind | Notes |
 | ------ | ---- | ----- |
-| `RawClient.request` | method | Untyped control-plane HTTP |
+| `RawClient.request` | method | Untyped API |
 | `AsyncRawClient.request` | method | Async variant |
 
 ---
@@ -1650,9 +1641,7 @@ Compact reviewer index. Each symbol should also appear in
 - `ResponseValidationError` in `neevai._parse` is **internal** — not public API.
 - `Scope` is exported from both `neevai` and `neevai.types` intentionally.
 - Pagination types are public but not in top-level `__all__`.
-- Client env vars: `NEEVCLOUD_*` (primary) with `NEEV_*` aliases — `NEEVCLOUD_API_KEY`
-  / `NEEV_API_KEY`, `NEEVCLOUD_ORG_ID` / `NEEV_ORG_ID`, `NEEVCLOUD_PROJECT_ID` /
-  `NEEV_PROJECT_ID`, `NEEVCLOUD_REGION` / `NEEV_REGION`, `NEEVCLOUD_BASE_URL` /
+- Client env vars: `NEEV_API_KEY`, `NEEV_ORG_ID`, `NEEV_PROJECT_ID`, and
   `NEEV_BASE_URL` (default: `https://api.ai.neevcloud.com/agent`).
 - Sandbox create uses `sandbox_template_id` in params (not `template_id`).
 - `Sandbox.pause()` / `.resume()` return updated handles (not `None`).
@@ -1668,7 +1657,7 @@ Compact reviewer index. Each symbol should also appear in
 - For rollback, prefer `sandboxes.create({..., "from_snapshot": snapshot_id})` over
   in-place `restore()` — some backends may return an empty workspace after in-place
   restore.
-- `restore()`, `pause()`, and `resume()` invalidate the cached data-plane connection
+- `restore()`, `pause()`, and `resume()` invalidate the cached runtime connection
   on the handle; call `wait_until_ready()` again before file/exec/process operations when
   needed.
 
@@ -1681,7 +1670,7 @@ Update manually when the public API changes. Cross-check against `src/neevai/`.
 On API changes, also update:
 
 - [`docs/getting-started.md`](./getting-started.md) — if install, env vars, or quick-start flows change
-- [`docs/api-reference.md`](./api-reference.md) — control-plane/data-plane API lists and inline snippet table
+- [`docs/api-reference.md`](./api-reference.md) — API/sandbox runtime lists and inline snippet table
 - [`docs/example-coverage.md`](./example-coverage.md) — example catalog and API → examples lookup
 - [`examples/`](../examples/) — if a new capability lacks an example
 

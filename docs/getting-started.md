@@ -11,7 +11,7 @@ Before installing, confirm you have:
 
 - **Python ≥ 3.10** (`python --version` or `python3 --version`)
 - A supported OS: **Windows**, **macOS**, or **Linux**
-- A NeevCloud API key and org/project/region values (from your NeevCloud account)
+- A NeevCloud API key and org/project values (from your NeevCloud account)
 
 The package depends on `httpx` and `pydantic` for HTTP transport and response
 validation. These are installed automatically with the SDK.
@@ -109,41 +109,37 @@ or pass equivalent constructor kwargs to `NeevAI(...)` / `AsyncNeevAI(...)`.
 
 | Variable | Purpose |
 | -------- | ------- |
-| `NEEVCLOUD_API_KEY` | Bearer token (**required**) |
-| `NEEVCLOUD_ORG_ID` | Default organization ID |
-| `NEEVCLOUD_PROJECT_ID` | Default project ID |
-| `NEEVCLOUD_REGION` | Default deployment region for sandbox create |
-| `NEEVCLOUD_BASE_URL` | Control-plane base URL (default: `https://api.ai.neevcloud.com/agent`) |
-| `NEEVCLOUD_SANDBOX_TEMPLATE_ID` | Optional sandbox template id (defaults to `sb-ubuntu-26-04-minimal` in examples) |
+| `NEEV_API_KEY` | Bearer token (**required**) |
+| `NEEV_ORG_ID` | Default organization ID |
+| `NEEV_PROJECT_ID` | Default project ID |
+| `NEEV_BASE_URL` | Base URL (default: `https://api.ai.neevcloud.com/agent`) |
+| `NEEV_SANDBOX_TEMPLATE_ID` | Optional sandbox template id (defaults to `sb-ubuntu-26-04-minimal` in examples) |
 | `NEEV_AGENT_TEMPLATE` | Optional agent template **name** for [`create_agent.py`](../examples/create_agent.py) (default: `claude-code`) |
-| `NEEVAI_WAIT_TIMEOUT_MS` | Shared deadline for connect URL, Ready phase, and data-plane probe (default: `300000`) |
-| `NEEVAI_POLL_INTERVAL_MS` | Poll interval while waiting for connect URL / data plane (default: `2000`) |
+| `NEEVAI_WAIT_TIMEOUT_MS` | Shared deadline for connect URL, Ready phase, and runtime probe (default: `300000`) |
+| `NEEVAI_POLL_INTERVAL_MS` | Poll interval while waiting for connect URL / sandbox runtime (default: `2000`) |
 
 **Linux / macOS (bash/zsh)** — current session:
 
 ```bash
-export NEEVCLOUD_API_KEY="your-api-key"
-export NEEVCLOUD_ORG_ID="org-abc123"
-export NEEVCLOUD_PROJECT_ID="proj-xyz789"
-export NEEVCLOUD_REGION="as-south-1"
+export NEEV_API_KEY="your-api-key"
+export NEEV_ORG_ID="org-abc123"
+export NEEV_PROJECT_ID="proj-xyz789"
 ```
 
 **Windows PowerShell** — current session:
 
 ```powershell
-$env:NEEVCLOUD_API_KEY = "your-api-key"
-$env:NEEVCLOUD_ORG_ID = "org-abc123"
-$env:NEEVCLOUD_PROJECT_ID = "proj-xyz789"
-$env:NEEVCLOUD_REGION = "as-south-1"
+$env:NEEV_API_KEY = "your-api-key"
+$env:NEEV_ORG_ID = "org-abc123"
+$env:NEEV_PROJECT_ID = "proj-xyz789"
 ```
 
 **Windows CMD** — current session:
 
 ```cmd
-set NEEVCLOUD_API_KEY=your-api-key
-set NEEVCLOUD_ORG_ID=org-abc123
-set NEEVCLOUD_PROJECT_ID=proj-xyz789
-set NEEVCLOUD_REGION=as-south-1
+set NEEV_API_KEY=your-api-key
+set NEEV_ORG_ID=org-abc123
+set NEEV_PROJECT_ID=proj-xyz789
 ```
 
 **Persistence:** The commands above apply only to your current terminal session.
@@ -152,7 +148,7 @@ in your OS settings (Windows System Properties → Environment Variables, macOS/
 shell profile, or your preferred secrets manager). The SDK does not load a
 `.env` file automatically.
 
-You can override org, project, or region on individual API calls via `org_id` and
+You can override org and project on individual API calls via `org_id` and
 `project_id` keyword arguments without changing the client defaults.
 
 ### Imports
@@ -164,7 +160,7 @@ from neevai.errors import NeevAIError, NotFoundError, AuthenticationError
 ```
 
 The top-level `neevai` package re-exports clients, handles, connection types,
-errors, and `Scope`. Control-plane models live in `neevai.types` and should be
+errors, and `Scope`. Lifecycle models live in `neevai.types` and should be
 imported from there (not from generated modules directly).
 
 ---
@@ -182,8 +178,7 @@ This section walks through the full path from a fresh clone to a running sandbox
    ```
 
 2. **Set credentials** using the [platform-specific blocks](#configure-credentials)
-   above. You need at minimum `NEEVCLOUD_API_KEY`, `NEEVCLOUD_ORG_ID`,
-   `NEEVCLOUD_PROJECT_ID`, and `NEEVCLOUD_REGION`.
+   above. You need at minimum `NEEV_API_KEY`, `NEEV_ORG_ID`, and `NEEV_PROJECT_ID`.
 
 3. **Verify the install** (see [Verify installation](#verify-installation)).
 
@@ -235,15 +230,13 @@ with NeevAI() as client:
     template_id = templates.items[0].id
     print(f"Using template: {templates.items[0].name} ({template_id})")
 
-    # 2. Create a sandbox (region defaults from NEEVCLOUD_REGION or client)
     sandbox = client.sandboxes.create({
         "name": "quickstart-demo",
         "sandbox_template_id": template_id,
-        "region": "as-south-1",
     })
     print(f"Created sandbox {sandbox.id}, phase={sandbox.phase}")
 
-    # 3. Poll until the data plane is reachable
+    # 3. Poll until the sandbox runtime is reachable
     sandbox.wait_until_ready(timeout_ms=120_000)
     print(f"Ready — connect_url={sandbox.connect_url}")
 
@@ -267,11 +260,11 @@ Key points:
   [`api-inventory.md`](./api-inventory.md#clientsandboxescreateparams-org_idnone-project_idnone)
   for the full parameter table.
 - `connect_url` is a property on the handle; it may appear while `phase` is still
-  `Pending` or `NotReady`. Wait until `phase == "Ready"` **and** the data plane
+  `Pending` or `NotReady`. Wait until `phase == "Ready"` **and** the sandbox runtime
   accepts requests before `exec`, `files`, or `processes`.
 - `sandbox.pause()` and `sandbox.resume()` return updated `Sandbox` handles (they do
   not return `None`).
-- Always call `wait_until_ready()` before data-plane operations; for supervised
+- Always call `wait_until_ready()` before runtime operations; for supervised
   processes, also probe with `sandbox.processes.list()` (see
   [Supervised processes](#supervised-processes)).
 
@@ -301,9 +294,7 @@ the model-driven demos under [`examples/agent_patterns/`](../examples/agent_patt
 
 2. **Create** — pass the template **name** (e.g. `"claude-code"`) as
    `agent_template` at create — not the catalogue id (`agent_template_id` is a
-   read-only property on the handle). Region is optional; the client injects
-   `default_region` only when `NEEVCLOUD_REGION` (or the `region=` constructor
-   kwarg) is set.
+   read-only property on the handle).
 
 3. **Wait and use the backing sandbox** — `agent.sandbox()` returns a
    `Sandbox` handle for exec, files, and processes.
@@ -353,11 +344,11 @@ long-running workers, log streaming, and process pools. Before calling
 1. Poll `sandbox.refresh()` until `connect_url` is set (may appear before
    `phase == "Ready"`).
 2. Call `sandbox.wait_until_ready()` until `phase == "Ready"`.
-3. Probe the data plane with `sandbox.processes.list()` — retry transient
-   `502` / `503` / `504` until the daemon accepts requests.
+3. Probe the sandbox runtime with `sandbox.processes.list()` — retry transient
+   `502` / `503` / `504` until the sandbox accepts requests.
 
 [`examples/processes.py`](../examples/processes.py) implements the full wait
-helpers (`_wait_for_connect_url`, `_wait_for_dataplane`, `_wait_before_processes`).
+helpers (`_wait_for_connect_url`, `_wait_for_runtime`, `_wait_before_processes`).
 Use it as the reference for production code.
 
 ```python
@@ -365,7 +356,7 @@ Use it as the reference for production code.
 while not sandbox.connect_url:
     sandbox.refresh()
 sandbox.wait_until_ready(timeout_ms=120_000)
-sandbox.processes.list()  # probe data plane
+sandbox.processes.list()  # probe sandbox runtime
 
 proc = sandbox.processes.start(["sh", "-c", "echo started; sleep 3"])
 for event in proc.follow():
@@ -401,7 +392,6 @@ async def main() -> None:
         sandbox = await client.sandboxes.create({
             "name": "async-demo",
             "sandbox_template_id": template_id,
-            "region": "as-south-1",
         })
         await sandbox.wait_until_ready()
 
@@ -431,10 +421,9 @@ asyncio.run(main())
 | -------- | ---------------- |
 | [README](../README.md) | Short install overview, clone-to-first-run checklist, examples table |
 | **Getting started** (this file) | Full install walkthrough, env vars, first sync/async script, [create an agent](#create-an-agent), [supervised processes](#supervised-processes) |
-| [`api-reference.md`](./api-reference.md) | Control-plane vs data-plane API lists and copy-paste snippets |
+| [`api-reference.md`](./api-reference.md) | Lifecycle vs sandbox runtime lists and copy-paste snippets |
 | [`api-inventory.md`](./api-inventory.md) | Full method signatures, parameter tables, types, errors, symbol index |
 | [`api-inventory.md` → Processes E2E](./api-inventory.md#end-to-end-flow) | connect_url wait, auth, raw HTTP, curl/PowerShell, troubleshooting |
 | [`example-coverage.md`](./example-coverage.md) | Example catalog and API → examples lookup |
-| [`architecture.md`](./architecture.md) | SDK layout and module responsibilities |
 | [`development.md`](./development.md) | Contributor workflow and doc maintenance |
 | [`examples/README.md`](../examples/README.md) | Tiered learning path and run commands |

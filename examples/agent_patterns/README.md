@@ -2,7 +2,7 @@
 
 These examples wire a **Neev sandbox** into agent workflows as a secure
 code-execution tool. Each agent reasons over a task, runs shell (or Python) inside
-a gVisor-isolated Neev sandbox, and uses the captured output to answer.
+a isolated Neev sandbox, and uses the captured output to answer.
 
 All examples drive the **same NeevCloud model — `gpt-oss-120b`** — over the
 OpenAI-compatible Neev inference endpoint.
@@ -37,21 +37,20 @@ First do the one-time setup in [`../README.md`](../README.md). One NeevCloud API
 key often covers both the sandbox and the model:
 
 ```sh
-export NEEVCLOUD_API_KEY=...        # sandbox (+ model if keys are shared)
-export NEEVCLOUD_ORG_ID=...
-export NEEVCLOUD_PROJECT_ID=...
+export NEEV_API_KEY=...        # sandbox (+ model if keys are shared)
+export NEEV_ORG_ID=...
+export NEEV_PROJECT_ID=...
 ```
 
 Defaults applied for you:
 
 | Setting | Default | Override |
 | ------- | ------- | -------- |
-| Platform API base | production | `NEEVCLOUD_BASE_URL` |
+| Platform API base | production | `NEEV_BASE_URL` |
 | Model | `gpt-oss-120b` | `NEEV_MODEL` |
-| Inference endpoint | `https://inference.ai.neevcloud.com/v1` | `NEEV_INFERENCE_BASE_URL` or `NEEVCLOUD_INFERENCE_BASE_URL` |
-| Inference key | `NEEVCLOUD_API_KEY` | `NEEV_INFERENCE_API_KEY` or `NEEVCLOUD_INFERENCE_API_KEY` |
-| Region | `as-south-1` | `NEEVCLOUD_REGION` |
-| Template | `sb-ubuntu-26-04-minimal` | `NEEVCLOUD_SANDBOX_TEMPLATE_ID` |
+| Inference endpoint | `https://inference.ai.neevcloud.com/v1` | `NEEV_INFERENCE_BASE_URL` |
+| Inference key | `NEEV_API_KEY` | `NEEV_INFERENCE_API_KEY` |
+| Template | `sb-ubuntu-26-04-minimal` | `NEEV_SANDBOX_TEMPLATE_ID` |
 
 **Templates and binaries.** Discover templates with `client.templates.list()`
 (e.g. `sb-debian-12-minimal`, `sb-ubuntu-26-04-minimal`). The minimal images are
@@ -85,7 +84,7 @@ warmup notice on stderr):
 5
 ```
 
-Right after the sandbox reaches Ready, its data-plane hostname can take a few
+Right after the sandbox reaches Ready, its runtime hostname can take a few
 seconds to resolve, so the first tool call may need a moment — the agent loop
 waits and retries on its own (`recursion_limit: 100` for LangGraph).
 
@@ -130,8 +129,7 @@ Shared model configuration — endpoint URL, API key resolution, and model name
 (overridable via `NEEV_MODEL`). Key resolution order:
 
 1. `NEEV_INFERENCE_API_KEY`
-2. `NEEVCLOUD_INFERENCE_API_KEY`
-3. `NEEVCLOUD_API_KEY`
+2. `NEEV_API_KEY`
 
 ### `utils/sandbox_tool.py`
 

@@ -53,7 +53,7 @@ class SandboxResources(BaseModel):
 class PauseSandboxRequest(BaseModel):
     preserve_memory: bool | None = Field(
         True,
-        description="When true, capture FS+process memory as an implicit snapshot before\nterminating the pod. The snapshot is auto-consumed on the next resume.\n",
+        description="When true, capture FS+process memory as an implicit snapshot before\nstopping the sandbox. The snapshot is auto-consumed on the next resume.\n",
     )
 
 
@@ -184,7 +184,7 @@ class MetricSeries(BaseModel):
 class ConnectTokenResponse(BaseModel):
     token: str = Field(
         ...,
-        description="Signed JWT connect-token, presented as a bearer credential to the sandbox data plane.",
+        description="Signed JWT connect-token, presented as a bearer credential to the sandbox runtime.",
     )
     expires_in: int = Field(..., description="Token lifetime in seconds.")
 
@@ -257,7 +257,7 @@ class SandboxEgressConfig(BaseModel):
 class CreateAgentRequest(BaseModel):
     name: constr(pattern=r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", min_length=1, max_length=63) = Field(
         ...,
-        description="Agent name. Used verbatim as the backing Sandbox CR name, so it must\nbe a valid DNS-1123 label: lowercase alphanumeric characters or '-',\nstarting and ending with an alphanumeric, max 63 characters.\n",
+        description="Agent name. Used verbatim as the backing sandbox name, so it must\nbe a valid DNS-1123 label: lowercase alphanumeric characters or '-',\nstarting and ending with an alphanumeric, max 63 characters.\n",
         examples=["my-agent"],
     )
     agent_template: constr(min_length=1) = Field(
@@ -287,11 +287,11 @@ class CreateAgentRequest(BaseModel):
 class UpdateAgentRequest(BaseModel):
     egress: SandboxEgressConfig | None = Field(
         None,
-        description="Replace the agent's egress policy (re-applied live, no pod restart).",
+        description="Replace the agent's egress policy (re-applied live, no restart).",
     )
     resources: SandboxResources | None = Field(
         None,
-        description="New cpu/memory sizing, resized in place on the running pod. Only the\nfields provided change. disk_gb is not resizable in place and is\nrejected if supplied with a different value.\n",
+        description="New cpu/memory sizing, resized in place on the running sandbox. Only the\nfields provided change. disk_gb is not resizable in place and is\nrejected if supplied with a different value.\n",
     )
 
 
@@ -361,7 +361,7 @@ class Sandbox(BaseModel):
 class CreateSandboxRequest(BaseModel):
     name: constr(pattern=r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", min_length=1, max_length=63) = Field(
         ...,
-        description="Sandbox name. Used verbatim as the Sandbox CR name and as a routing\nlabel, so it must be a valid DNS-1123 label: lowercase alphanumeric\ncharacters or '-', starting and ending with an alphanumeric, max 63\ncharacters.\n",
+        description="Sandbox name. Used verbatim as the sandbox name and as a routing\nlabel, so it must be a valid DNS-1123 label: lowercase alphanumeric\ncharacters or '-', starting and ending with an alphanumeric, max 63\ncharacters.\n",
         examples=["my-sandbox"],
     )
     region: str | None = Field(

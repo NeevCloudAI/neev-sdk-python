@@ -23,7 +23,6 @@ keywords = [
     "sandbox",
     "ai",
     "gpu",
-    "gvisor",
 ]
 
 classifiers = [

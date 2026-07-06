@@ -9,26 +9,25 @@ Prerequisites
 
 Required environment variables:
 
-- ``NEEVCLOUD_API_KEY`` — API key for your organization
-- ``NEEVCLOUD_ORG_ID`` — organization ID
-- ``NEEVCLOUD_PROJECT_ID`` — project ID
+- ``NEEV_API_KEY`` — API key for your organization
+- ``NEEV_ORG_ID`` — organization ID
+- ``NEEV_PROJECT_ID`` — project ID
 
 Optional overrides:
 
-- ``NEEVCLOUD_SANDBOX_TEMPLATE_ID`` — template to provision (default:
+- ``NEEV_SANDBOX_TEMPLATE_ID`` — template to provision (default:
   ``sb-ubuntu-26-04-minimal``)
-- ``NEEVCLOUD_REGION`` — deployment region (default: ``as-south-1``)
 - ``NEEVAI_WAIT_TIMEOUT_MS`` — max time to wait for connect URL, Ready phase,
-  and data-plane in ms (default: ``300000``)
+  and runtime in ms (default: ``300000``)
 - ``NEEVAI_POLL_INTERVAL_MS`` — poll interval while waiting in ms (default:
   ``2000``)
 
 Flow
 ----
 
-1. **Create** — call ``client.sandboxes.create`` with the template and region
+1. **Create** — call ``client.sandboxes.create`` with the template
 2. **Wait** — poll until ``connect_url`` is set, block on ``wait_until_ready``,
-   then probe the data-plane with ``sandbox.processes.list`` before starting
+   then probe the sandbox runtime with ``sandbox.processes.list`` before starting
    processes
 3. **Start & follow** — ``sandbox.processes.start`` and stream stdout via
    ``follow``
@@ -38,7 +37,7 @@ Flow
 
 Run::
 
-    NEEVCLOUD_API_KEY=... NEEVCLOUD_ORG_ID=... NEEVCLOUD_PROJECT_ID=... \\
+    NEEV_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=... \\
     uv run python examples/processes.py
 """
 
@@ -55,8 +54,7 @@ from neevai.errors import APIConnectionError, APIError, APITimeoutError, NeevAIE
 from neevai.handles.sandbox import Sandbox
 
 # Tunable defaults — override via environment variables listed in the docstring.
-REGION = os.environ.get("NEEVCLOUD_REGION", "as-south-1")
-TEMPLATE = os.environ.get("NEEVCLOUD_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-minimal")
+TEMPLATE = os.environ.get("NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-minimal")
 WAIT_TIMEOUT_MS = int(os.environ.get("NEEVAI_WAIT_TIMEOUT_MS", "300000"))
 POLL_INTERVAL_MS = int(os.environ.get("NEEVAI_POLL_INTERVAL_MS", "2000"))
 
@@ -73,7 +71,7 @@ def _remaining_ms(deadline_ms: float) -> int:
     return max(0, int(deadline_ms - time.time() * 1000.0))
 
 
-def _is_transient_dataplane_error(exc: Exception) -> bool:
+def _is_transient_runtime_error(exc: Exception) -> bool:
     if isinstance(exc, (APIConnectionError, APITimeoutError)):
         return True
     return isinstance(exc, APIError) and exc.status_code in (502, 503, 504)
@@ -94,26 +92,26 @@ def _wait_for_connect_url(sandbox: Sandbox, *, deadline_ms: float) -> None:
     log(f"connect_url: {sandbox.connect_url}")
 
 
-def _wait_for_dataplane(sandbox: Sandbox, *, deadline_ms: float) -> None:
+def _wait_for_runtime(sandbox: Sandbox, *, deadline_ms: float) -> None:
     while True:
         remaining = _remaining_ms(deadline_ms)
         if remaining <= 0:
             raise NeevAIError(
-                f"Sandbox {sandbox.id} data-plane did not become reachable within "
+                f"Sandbox {sandbox.id} runtime did not become reachable within "
                 f"{WAIT_TIMEOUT_MS}ms (connect_url: {sandbox.connect_url})."
             )
         try:
             sandbox.processes.list()
             return
         except Exception as exc:
-            if not _is_transient_dataplane_error(exc):
+            if not _is_transient_runtime_error(exc):
                 raise
-            log("waiting for data-plane…")
+            log("waiting for the sandbox runtime…")
             time.sleep(min(POLL_INTERVAL_MS, remaining) / 1000.0)
 
 
 def _wait_before_processes(sandbox: Sandbox) -> None:
-    """Wait for connect_url, Ready phase, and a reachable data-plane (shared deadline)."""
+    """Wait for connect_url, Ready phase, and a reachable runtime (shared deadline)."""
     deadline_ms = time.time() * 1000.0 + WAIT_TIMEOUT_MS
 
     _wait_for_connect_url(sandbox, deadline_ms=deadline_ms)
@@ -131,19 +129,18 @@ def _wait_before_processes(sandbox: Sandbox) -> None:
         on_poll=lambda s: log(f"phase={s.phase} replicas={s.replicas}"),
     )
 
-    _wait_for_dataplane(sandbox, deadline_ms=deadline_ms)
+    _wait_for_runtime(sandbox, deadline_ms=deadline_ms)
 
 
 def main() -> None:
     with NeevAI() as client:
         sandbox = None
         try:
-            log(f"creating sandbox ({TEMPLATE}, {REGION})…")
+            log(f"creating sandbox ({TEMPLATE})…")
             sandbox = client.sandboxes.create(
                 {
                     "name": f"processes-demo-{_rand_suffix()}",
                     "sandbox_template_id": TEMPLATE,
-                    "region": REGION,
                 }
             )
             _wait_before_processes(sandbox)

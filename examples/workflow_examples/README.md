@@ -6,8 +6,8 @@ as a secure code-execution environment. Every example uses a shared
 `run_shell` tool.
 
 Do the one-time credential setup in [`../README.md`](../README.md), then set an
-inference key (`NEEV_INFERENCE_API_KEY` or `NEEVCLOUD_INFERENCE_API_KEY`; falls
-back to `NEEVCLOUD_API_KEY`).
+inference key (`NEEV_INFERENCE_API_KEY`; falls
+back to `NEEV_API_KEY`).
 
 These workflows use sandboxes directly — not platform agents (`client.agents`).
 For catalogue-managed agents, see [`create_agent.py`](../create_agent.py).
@@ -38,7 +38,7 @@ uv run python examples/workflow_examples/repo_analyzer.py \
 ```
 
 **Recommended template** — one that ships `git` and `ripgrep` (`rg`) preinstalled.
-Set `NEEVCLOUD_SANDBOX_TEMPLATE_ID` accordingly. If `git` is missing, the script
+Set `NEEV_SANDBOX_TEMPLATE_ID` accordingly. If `git` is missing, the script
 tries GitHub archive fallback (HTTPS GitHub URLs only) or a static binary from
 `NEEV_GIT_STATIC_URL`.
 
@@ -48,7 +48,7 @@ tries GitHub archive fallback (HTTPS GitHub URLs only) or a static binary from
 
 ### Browser Automation (`browser_agent.py`)
 
-Uses `NEEVCLOUD_SANDBOX_TEMPLATE_ID` (default `sb-ubuntu-26-04-minimal`). Bootstrap
+Uses `NEEV_SANDBOX_TEMPLATE_ID` (default `sb-ubuntu-26-04-minimal`). Bootstrap
 runs `pip install playwright` and `playwright install chromium` before the agent
 loop. The agent scrapes [Hacker News](https://news.ycombinator.com) for story
 titles matching `--query` (case-insensitive) and saves matches to
@@ -71,16 +71,13 @@ partial results after max steps). Exits with code 1 if the artifact is missing.
 
 | Variable | Required | Default | Used by |
 | -------- | -------- | ------- | ------- |
-| `NEEVCLOUD_API_KEY` | yes | — | All |
-| `NEEVCLOUD_ORG_ID` | yes | — | All |
-| `NEEVCLOUD_PROJECT_ID` | yes | — | All |
-| `NEEV_INFERENCE_API_KEY` | yes (or alias below) | — | All |
-| `NEEVCLOUD_INFERENCE_API_KEY` | alias | — | All |
+| `NEEV_API_KEY` | yes | — | All |
+| `NEEV_ORG_ID` | yes | — | All |
+| `NEEV_PROJECT_ID` | yes | — | All |
+| `NEEV_INFERENCE_API_KEY` | yes | — | All |
 | `NEEV_INFERENCE_BASE_URL` | no | `https://inference.ai.neevcloud.com/v1` | All |
-| `NEEVCLOUD_INFERENCE_BASE_URL` | alias | same as above | All |
 | `NEEV_MODEL` | no | `gpt-oss-120b` | All |
-| `NEEVCLOUD_REGION` | no | `as-south-1` | All |
-| `NEEVCLOUD_SANDBOX_TEMPLATE_ID` | no | `sb-ubuntu-26-04-minimal` | All |
+| `NEEV_SANDBOX_TEMPLATE_ID` | no | `sb-ubuntu-26-04-minimal` | All |
 | `NEEVAI_WORKFLOW_MAX_STEPS` | no | `35` (`repo_analyzer`), `70` (`browser_agent`) | All |
 | `NEEV_GIT_STATIC_URL` | no | — | `repo_analyzer.py` (optional static git binary) |
 

@@ -13,7 +13,7 @@ from neevai.transport.retry import calculate_backoff, parse_retry_after
 
 
 class ControlTransport:
-    """Synchronous HTTP transport for NeevAI control-plane API."""
+    """Synchronous HTTP transport for NeevAI API."""
 
     def __init__(
         self,
@@ -39,7 +39,7 @@ class ControlTransport:
         query: dict[str, Any] | None = None,
         body: Any | None = None,
     ) -> Any:
-        """Dispatches an HTTP request to control plane with retries & error handling."""
+        """Dispatches an HTTP request to the API with retries & error handling."""
         # Concatenate base + path, preserving path prefixes correctly
         url = f"{self.base_url}/{path.lstrip('/')}"
 
@@ -125,7 +125,7 @@ class ControlTransport:
 
 
 class AsyncControlTransport:
-    """Asynchronous HTTP transport for NeevAI control-plane API."""
+    """Asynchronous HTTP transport for NeevAI API."""
 
     def __init__(
         self,
@@ -151,7 +151,7 @@ class AsyncControlTransport:
         query: dict[str, Any] | None = None,
         body: Any | None = None,
     ) -> Any:
-        """Dispatches an HTTP request to control plane asynchronously with retries."""
+        """Dispatches an HTTP request to the API asynchronously with retries."""
         url = f"{self.base_url}/{path.lstrip('/')}"
 
         headers = {

@@ -2,7 +2,7 @@
 Shared, framework-agnostic helper used by the agent examples in this folder.
 
 ``SandboxCodeExecutor`` wraps the NeevAI SDK and exposes run_python / run_shell
-tools backed by a gVisor-isolated Neev sandbox.
+tools backed by an isolated Neev sandbox.
 """
 
 from __future__ import annotations
@@ -34,26 +34,23 @@ class SandboxCodeExecutor:
     def __init__(
         self,
         template_id: str | None = None,
-        region: str | None = None,
         name_prefix: str = "agent-demo",
     ):
         self._client = NeevAI()
         self._template_id = template_id or os.environ.get(
-            "NEEVCLOUD_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-minimal"
+            "NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-minimal"
         )
-        self._region = region or os.environ.get("NEEVCLOUD_REGION", "as-south-1")
         self._name_prefix = name_prefix
         self._sandbox: Sandbox | None = None
 
     def _ensure(self) -> Sandbox:
         if self._sandbox is None:
             suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
-            log(f"creating sandbox (template={self._template_id}, region={self._region})…")
+            log(f"creating sandbox (template={self._template_id})…")
             self._sandbox = self._client.sandboxes.create(
                 {
                     "name": f"{self._name_prefix}-{suffix}",
                     "sandbox_template_id": self._template_id,
-                    "region": self._region,
                 }
             )
             log(f"created {self._sandbox.id} ({self._sandbox.phase}); waiting until ready…")

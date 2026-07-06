@@ -10,7 +10,7 @@ import httpx
 import pytest
 
 from neevai.errors import NeevAIError, NotFoundError
-from neevai.runtime.sandboxd import AsyncSandboxConnection, SandboxConnection
+from neevai.runtime.connection import AsyncSandboxConnection, SandboxConnection
 from neevai.types import Signal
 
 CONNECT_URL = "https://sbx.example.com"

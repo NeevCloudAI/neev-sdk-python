@@ -1,4 +1,4 @@
-"""Basic sanity tests for the Sandboxes resource (control plane, sync)."""
+"""Basic sanity tests for the Sandboxes resource (the API, sync)."""
 
 import uuid
 
@@ -6,17 +6,16 @@ import pytest
 
 from neevai._parse import ResponseValidationError
 from neevai.client import NeevAI
-from neevai.errors import NeevAIError, NotFoundError
+from neevai.errors import NotFoundError
 from neevai.generated.aiagent import SnapshotStatus
 from neevai.types import CreateSandboxParams, Snapshot
 
 
-def _make_client(mock_transport, region: str = "us-east-1") -> NeevAI:
+def _make_client(mock_transport) -> NeevAI:
     return NeevAI(
         api_key="test",
         org_id="org1",
         project_id="proj1",
-        region=region,
         client=mock_transport,
     )
 
@@ -37,7 +36,7 @@ def snapshot_data(**overrides) -> dict:
         "project_id": "proj1",
         "status": "Pending",
         "include_memory": False,
-        "source_region": "us-east-1",
+        "source_region": "as-south-1",
         "created_at": "2026-06-05T00:00:00Z",
         "updated_at": "2026-06-05T00:00:00Z",
     }
@@ -60,48 +59,46 @@ def test_sandboxes_create_with_model_instance(mock_transport):
     params = CreateSandboxParams(
         name="s1",
         sandbox_template_id="sb-ubuntu-24-04-minimal",
-        region="us-east-1",
+        region="as-south-1",
     )
     sb = client.sandboxes.create(params)
     assert sb.name == "s1"
     client.close()
 
 
-def test_sandboxes_create_injects_default_region(mock_transport):
-    client = _make_client(mock_transport, region="eu-central-1")
-    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
-    assert sb.data["region"] == "eu-central-1"
-    client.close()
-
-
-def test_sandboxes_create_explicit_region_overrides_default(mock_transport):
-    client = _make_client(mock_transport, region="eu-central-1")
-    sb = client.sandboxes.create(
-        {
-            "name": "s1",
-            "sandbox_template_id": "sb-ubuntu-24-04-minimal",
-            "region": "ap-south-1",
-        }
-    )
-    assert sb.data["region"] == "ap-south-1"
-    client.close()
-
-
-def test_sandboxes_create_raises_when_region_missing(mock_transport, monkeypatch):
-    monkeypatch.delenv("NEEVCLOUD_REGION", raising=False)
+def test_sandboxes_create_uses_explicit_region(mock_transport):
     client = NeevAI(
         api_key="test",
         org_id="org1",
         project_id="proj1",
         client=mock_transport,
     )
-    with pytest.raises(NeevAIError, match="Missing region"):
-        client.sandboxes.create(
-            {
-                "name": "s1",
-                "sandbox_template_id": "sb-ubuntu-24-04-minimal",
-            }
-        )
+    sb = client.sandboxes.create(
+        {
+            "name": "s1",
+            "sandbox_template_id": "sb-ubuntu-24-04-minimal",
+            "region": "as-south-1",
+        }
+    )
+    assert sb.data["region"] == "as-south-1"
+    client.close()
+
+
+def test_sandboxes_create_omits_region_when_not_configured(mock_transport):
+    client = NeevAI(
+        api_key="test",
+        org_id="org1",
+        project_id="proj1",
+        client=mock_transport,
+    )
+    # No region configured anywhere: create still succeeds; the server picks the default.
+    sandbox = client.sandboxes.create(
+        {
+            "name": "s1",
+            "sandbox_template_id": "sb-ubuntu-24-04-minimal",
+        }
+    )
+    assert sandbox.id
     client.close()
 
 

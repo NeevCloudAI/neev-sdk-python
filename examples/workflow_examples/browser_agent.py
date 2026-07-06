@@ -54,18 +54,16 @@ OUTPUT_DIR = HERE / "output"
 
 
 def create_browser_sandbox(client: NeevAI, region: str | None = None) -> Sandbox:
-    template_id = os.environ.get("NEEVCLOUD_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-minimal")
-    resolved_region = region or os.environ.get("NEEVCLOUD_REGION", "as-south-1")
+    template_id = os.environ.get("NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-minimal")
     suffix = hex(int(time.time() * 1e6))[-6:]
     print(
-        f"[sandbox] creating browser sandbox (template={template_id}, region={resolved_region})…",
+        f"[sandbox] creating browser sandbox (template={template_id})…",
         file=sys.stderr,
     )
     sandbox = client.sandboxes.create(
         {
             "name": f"browser-agent-{suffix}",
             "sandbox_template_id": template_id,
-            "region": resolved_region,
         }
     )
     print(f"[sandbox] created {sandbox.id}; waiting until ready…", file=sys.stderr)

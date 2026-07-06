@@ -17,17 +17,17 @@ from neevai.types import (
 
 if TYPE_CHECKING:
     from neevai.resources.sandboxes import AsyncSandboxes, Sandboxes
-    from neevai.runtime.processes import AsyncSandboxProcesses, SandboxProcesses
-    from neevai.runtime.sandboxd import (
+    from neevai.runtime.connection import (
         AsyncSandboxConnection,
         AsyncSandboxFiles,
         SandboxConnection,
         SandboxFiles,
     )
+    from neevai.runtime.processes import AsyncSandboxProcesses, SandboxProcesses
 
 DEFAULT_WAIT_TIMEOUT_MS = 120_000
 DEFAULT_POLL_INTERVAL_MS = 2_000
-DEFAULT_DATAPLANE_PROBE_TIMEOUT_MS = 5_000
+DEFAULT_RUNTIME_PROBE_TIMEOUT_MS = 5_000
 
 
 def _wait_timeout_message(sandbox: Sandbox | AsyncSandbox, timeout_ms: int) -> str:
@@ -40,7 +40,7 @@ def _wait_timeout_message(sandbox: Sandbox | AsyncSandbox, timeout_ms: int) -> s
 
 def _runtime_wait_timeout_message(sandbox: Sandbox | AsyncSandbox, timeout_ms: int) -> str:
     return (
-        f"Sandbox {sandbox.id} data-plane did not become reachable within {timeout_ms}ms "
+        f"Sandbox {sandbox.id} runtime did not become reachable within {timeout_ms}ms "
         f"(connect_url: {sandbox.connect_url or '<none>'})."
     )
 
@@ -64,7 +64,7 @@ def _state_as_json(state: SandboxData) -> dict[str, Any]:
 class Sandbox:
     """Synchronous lifecycle handle for a single sandbox.
 
-    Updates its state in-place and caches the data-plane connection.
+    Updates its state in-place and caches the runtime connection.
     """
 
     def __init__(
@@ -100,7 +100,7 @@ class Sandbox:
 
     @property
     def connect_url(self) -> str | None:
-        """Direct address of the sandbox daemon, or None if not ready/configured."""
+        """Direct address of the sandbox runtime, or None if not ready/configured."""
         return self._state.connect_url
 
     @property
@@ -261,12 +261,12 @@ class Sandbox:
 
     @property
     def files(self) -> SandboxFiles:
-        """Exposes files operations on the sandbox daemon."""
+        """Exposes files operations on the sandbox runtime."""
         return self._connection().files
 
     @property
     def processes(self) -> SandboxProcesses:
-        """Exposes supervised process operations on the sandbox daemon."""
+        """Exposes supervised process operations on the sandbox runtime."""
         return self._connection().processes
 
     def exec(
@@ -314,14 +314,14 @@ class Sandbox:
 
     def _probe_runtime(
         self,
-        timeout_ms: int = DEFAULT_DATAPLANE_PROBE_TIMEOUT_MS,
+        timeout_ms: int = DEFAULT_RUNTIME_PROBE_TIMEOUT_MS,
     ) -> bool:
-        """Probe the sandbox daemon with a fresh connection (never cached on the handle)."""
+        """Probe the sandbox runtime with a fresh connection (never cached on the handle)."""
         connect_url = self.connect_url
         if not connect_url or self.sandboxes is None:
             return False
 
-        from neevai.runtime.sandboxd import SandboxConnection
+        from neevai.runtime.connection import SandboxConnection
 
         conn = SandboxConnection(
             connect_url=connect_url,
@@ -377,7 +377,7 @@ class Sandbox:
         if self._conn is not None and self._conn._transport.connect_url != connect_url.rstrip("/"):
             self._invalidate_connection()
         if not self._conn:
-            from neevai.runtime.sandboxd import SandboxConnection
+            from neevai.runtime.connection import SandboxConnection
 
             assert self.sandboxes is not None
             read_timeout = self.sandboxes._client._transport.timeout.read or 60.0
@@ -393,7 +393,7 @@ class Sandbox:
 class AsyncSandbox:
     """Asynchronous lifecycle handle for a single sandbox.
 
-    Updates its state in-place and caches the async data-plane connection.
+    Updates its state in-place and caches the async runtime connection.
     """
 
     def __init__(
@@ -577,7 +577,7 @@ class AsyncSandbox:
 
     @property
     def processes(self) -> AsyncSandboxProcesses:
-        """Exposes supervised process operations on the sandbox daemon."""
+        """Exposes supervised process operations on the sandbox runtime."""
         return self._connection().processes
 
     async def exec(
@@ -624,13 +624,13 @@ class AsyncSandbox:
 
     async def _probe_runtime(
         self,
-        timeout_ms: int = DEFAULT_DATAPLANE_PROBE_TIMEOUT_MS,
+        timeout_ms: int = DEFAULT_RUNTIME_PROBE_TIMEOUT_MS,
     ) -> bool:
         connect_url = self.connect_url
         if not connect_url or self.sandboxes is None:
             return False
 
-        from neevai.runtime.sandboxd import AsyncSandboxConnection
+        from neevai.runtime.connection import AsyncSandboxConnection
 
         conn = AsyncSandboxConnection(
             connect_url=connect_url,
@@ -702,7 +702,7 @@ class AsyncSandbox:
             )
         self._drop_stale_connection(connect_url)
         if not self._conn:
-            from neevai.runtime.sandboxd import AsyncSandboxConnection
+            from neevai.runtime.connection import AsyncSandboxConnection
 
             assert self.sandboxes is not None
             read_timeout = self.sandboxes._client._transport.timeout.read or 60.0

@@ -19,15 +19,14 @@ Prerequisites
 
 Required environment variables:
 
-- ``NEEVCLOUD_API_KEY`` — API key for your organization
-- ``NEEVCLOUD_ORG_ID`` — organization ID
-- ``NEEVCLOUD_PROJECT_ID`` — project ID
+- ``NEEV_API_KEY`` — API key for your organization
+- ``NEEV_ORG_ID`` — organization ID
+- ``NEEV_PROJECT_ID`` — project ID
 
 Optional overrides:
 
-- ``NEEVCLOUD_SANDBOX_TEMPLATE_ID`` — template to provision (default:
+- ``NEEV_SANDBOX_TEMPLATE_ID`` — template to provision (default:
   ``sb-ubuntu-26-04-minimal``)
-- ``NEEVCLOUD_REGION`` — deployment region (default: ``as-south-1``)
 - ``NEEVAI_WAIT_TIMEOUT_MS`` — max time to wait for sandbox ready (default:
   ``300000``)
 - ``NEEVAI_SNAPSHOT_POLL_MS`` — interval between snapshot status polls (default:
@@ -76,8 +75,8 @@ Stdout / stderr
 
 Run::
 
-    NEEVCLOUD_API_KEY=... NEEVCLOUD_ORG_ID=... NEEVCLOUD_PROJECT_ID=... \\
-    NEEVCLOUD_SANDBOX_TEMPLATE_ID=sb-ubuntu-26-04-minimal \\
+    NEEV_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=... \\
+    NEEV_SANDBOX_TEMPLATE_ID=sb-ubuntu-26-04-minimal \\
     uv run python examples/snapshot_fork_restore.py
 """
 
@@ -90,8 +89,7 @@ import time
 from neevai import NeevAI, NeevAIError, Snapshot, SnapshotStatus
 
 # Tunable defaults — override via environment variables listed in the docstring.
-REGION = os.environ.get("NEEVCLOUD_REGION", "as-south-1")
-TEMPLATE = os.environ.get("NEEVCLOUD_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-minimal")
+TEMPLATE = os.environ.get("NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-minimal")
 WAIT_TIMEOUT_MS = int(os.environ.get("NEEVAI_WAIT_TIMEOUT_MS", "300000"))
 SNAPSHOT_POLL_MS = int(os.environ.get("NEEVAI_SNAPSHOT_POLL_MS", "3000"))
 
@@ -138,23 +136,21 @@ def main() -> None:
     restored = None
 
     with NeevAI(
-        api_key=os.environ.get("NEEVCLOUD_API_KEY"),
-        org_id=os.environ.get("NEEVCLOUD_ORG_ID"),
-        project_id=os.environ.get("NEEVCLOUD_PROJECT_ID"),
-        region=REGION,
+        api_key=os.environ.get("NEEV_API_KEY"),
+        org_id=os.environ.get("NEEV_ORG_ID"),
+        project_id=os.environ.get("NEEV_PROJECT_ID"),
     ) as client:
         # --- Create source sandbox ---
         sandbox = client.sandboxes.create(
             {
                 "name": "snapshot-demo",
                 "sandbox_template_id": TEMPLATE,
-                "region": REGION,
             }
         )
         log(f"created sandbox {sandbox.id}")
 
         try:
-            # --- Wait until data plane is reachable ---
+            # --- Wait until sandbox runtime is reachable ---
             sandbox.wait_until_ready(timeout_ms=WAIT_TIMEOUT_MS)
             log(f"ready: {sandbox.connect_url}")
 
@@ -181,7 +177,6 @@ def main() -> None:
                 {
                     "name": "snapshot-restored",
                     "sandbox_template_id": TEMPLATE,
-                    "region": REGION,
                     "from_snapshot": str(snapshot.id),
                 }
             )

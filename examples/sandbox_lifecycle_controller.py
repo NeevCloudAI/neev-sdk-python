@@ -10,15 +10,14 @@ Prerequisites
 
 Required environment variables:
 
-- ``NEEVCLOUD_API_KEY`` — API key for your organization
-- ``NEEVCLOUD_ORG_ID`` — organization ID
-- ``NEEVCLOUD_PROJECT_ID`` — project ID
+- ``NEEV_API_KEY`` — API key for your organization
+- ``NEEV_ORG_ID`` — organization ID
+- ``NEEV_PROJECT_ID`` — project ID
 
 Optional overrides:
 
-- ``NEEVCLOUD_SANDBOX_TEMPLATE_ID`` — default template for ``create`` (or pass
+- ``NEEV_SANDBOX_TEMPLATE_ID`` — default template for ``create`` (or pass
   ``--template-id``)
-- ``NEEVCLOUD_REGION`` — deployment region for ``create``
 - ``NEEVAI_WAIT_TIMEOUT_MS`` — max wait for ``create --wait`` (default:
   ``300000``)
 
@@ -48,8 +47,8 @@ Stdout / stderr
 
 Usage::
 
-    NEEVCLOUD_API_KEY=... NEEVCLOUD_ORG_ID=... NEEVCLOUD_PROJECT_ID=... \\
-    NEEVCLOUD_REGION=... NEEVCLOUD_SANDBOX_TEMPLATE_ID=... \\
+    NEEV_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=... \\
+    NEEV_SANDBOX_TEMPLATE_ID=... \\
     python examples/sandbox_lifecycle_controller.py create --name my-sandbox
 
     python examples/sandbox_lifecycle_controller.py list --page 1 --limit 20
@@ -101,10 +100,10 @@ def _print_sandbox(sandbox: Sandbox, *, as_json: bool) -> None:
 
 def _cmd_create(client: NeevAI, args: argparse.Namespace) -> None:
     """Create a sandbox; optionally wait until ready."""
-    template_id = args.template_id or os.environ.get("NEEVCLOUD_SANDBOX_TEMPLATE_ID")
+    template_id = args.template_id or os.environ.get("NEEV_SANDBOX_TEMPLATE_ID")
     if not template_id:
         print(
-            "Error: --template-id or NEEVCLOUD_SANDBOX_TEMPLATE_ID is required for create",
+            "Error: --template-id or NEEV_SANDBOX_TEMPLATE_ID is required for create",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -202,7 +201,7 @@ def _build_parser() -> argparse.ArgumentParser:
     create.add_argument("--name", required=True, help="Sandbox name.")
     create.add_argument(
         "--template-id",
-        help="Sandbox template ID (default: NEEVCLOUD_SANDBOX_TEMPLATE_ID).",
+        help="Sandbox template ID (default: NEEV_SANDBOX_TEMPLATE_ID).",
     )
     create.add_argument(
         "--wait",
@@ -259,9 +258,9 @@ def main() -> None:
 
     # --- Dispatch ---
     with NeevAI(
-        api_key=os.environ.get("NEEVCLOUD_API_KEY"),
-        org_id=os.environ.get("NEEVCLOUD_ORG_ID"),
-        project_id=os.environ.get("NEEVCLOUD_PROJECT_ID"),
+        api_key=os.environ.get("NEEV_API_KEY"),
+        org_id=os.environ.get("NEEV_ORG_ID"),
+        project_id=os.environ.get("NEEV_PROJECT_ID"),
     ) as client:
         try:
             handlers[args.command](client, args)
