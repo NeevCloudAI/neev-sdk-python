@@ -162,6 +162,83 @@ paths:
         "403": {$ref: '#/components/responses/Forbidden'}
         "404": {$ref: '#/components/responses/NotFound'}
         "500": {$ref: '#/components/responses/InternalServerError'}
+  /api/v1beta1/orgs/{org_id}/projects/{project_id}/sandboxes/{sandbox_id}/ports:
+    get:
+      tags: [Sandboxes]
+      summary: List the ports exposed for preview URLs
+      description: |
+        Returns the ports currently exposed for this sandbox's preview URLs,
+        each with its public preview URL. Ports are private by default — a port
+        is only reachable through a preview URL after you expose it.
+      operationId: listSandboxPorts
+      parameters:
+        - {$ref: '#/components/parameters/OrgID'}
+        - {$ref: '#/components/parameters/ProjectID'}
+        - {$ref: '#/components/parameters/SandboxID'}
+      responses:
+        "200":
+          description: Exposed ports
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SandboxPortList'}
+        "401": {$ref: '#/components/responses/Unauthorized'}
+        "403": {$ref: '#/components/responses/Forbidden'}
+        "404": {$ref: '#/components/responses/NotFound'}
+        "500": {$ref: '#/components/responses/InternalServerError'}
+    post:
+      tags: [Sandboxes]
+      summary: Expose a port for credential-free preview URLs
+      description: |
+        Exposes a port so it can be reached through a public preview URL, and
+        returns that URL. Exposing a port that is already exposed returns the
+        same URL and makes no other change.
+
+        The port must be between 1 and 65535. Some ports are reserved by the
+        platform and cannot be exposed; requests for those are rejected.
+      operationId: exposeSandboxPort
+      parameters:
+        - {$ref: '#/components/parameters/OrgID'}
+        - {$ref: '#/components/parameters/ProjectID'}
+        - {$ref: '#/components/parameters/SandboxID'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ExposePortRequest'}
+      responses:
+        "200":
+          description: Port exposed
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SandboxPort'}
+        "400": {$ref: '#/components/responses/BadRequest'}
+        "401": {$ref: '#/components/responses/Unauthorized'}
+        "403": {$ref: '#/components/responses/Forbidden'}
+        "404": {$ref: '#/components/responses/NotFound'}
+        "500": {$ref: '#/components/responses/InternalServerError'}
+  /api/v1beta1/orgs/{org_id}/projects/{project_id}/sandboxes/{sandbox_id}/ports/{port}:
+    delete:
+      tags: [Sandboxes]
+      summary: Revoke a previously exposed preview port
+      description: |
+        Stops serving a port through its preview URL. Revoking a port that is
+        not currently exposed succeeds and changes nothing.
+      operationId: revokeSandboxPort
+      parameters:
+        - {$ref: '#/components/parameters/OrgID'}
+        - {$ref: '#/components/parameters/ProjectID'}
+        - {$ref: '#/components/parameters/SandboxID'}
+        - name: port
+          in: path
+          required: true
+          schema: {type: integer, minimum: 1, maximum: 65535}
+      responses:
+        "204": {description: Port revoked}
+        "400": {$ref: '#/components/responses/BadRequest'}
+        "401": {$ref: '#/components/responses/Unauthorized'}
+        "403": {$ref: '#/components/responses/Forbidden'}
+        "404": {$ref: '#/components/responses/NotFound'}
+        "500": {$ref: '#/components/responses/InternalServerError'}
   # --- Sandbox Memory Snapshots ---
   /api/v1beta1/orgs/{org_id}/projects/{project_id}/sandboxes/{sandbox_id}/snapshots:
     get:
@@ -728,6 +805,7 @@ components:
         resources: {$ref: '#/components/schemas/SandboxResources'}
         phase: {$ref: '#/components/schemas/SandboxPhase'}
         connect_url: {type: string, nullable: true, description: "Public URL the SDK calls (API key + X-Sandbox-Id). null when not configured."}
+        preview_url_template: {type: string, nullable: true, description: "Template for a public preview URL with {port} left for get_url(port=...) to fill client-side. null when not configured."}
         replicas: {type: integer, minimum: 0, maximum: 1, description: "0 = paused, 1 = running."}
         egress:
           allOf:
@@ -778,6 +856,24 @@ components:
             When set, the new sandbox is restored from this snapshot instead of
             cold-starting from the image. Snapshot must belong to the same
             project. Sizing and region must match the snapshot's origin.
+    ExposePortRequest:
+      type: object
+      required: [port]
+      properties:
+        port: {type: integer, minimum: 1, maximum: 65535, description: "User port to expose for preview URLs."}
+    SandboxPort:
+      type: object
+      required: [port, preview_url]
+      properties:
+        port: {type: integer, description: "The exposed user port."}
+        preview_url: {type: string, description: "Public credential-free preview URL for this port."}
+    SandboxPortList:
+      type: object
+      required: [ports]
+      properties:
+        ports:
+          type: array
+          items: {$ref: '#/components/schemas/SandboxPort'}
     PauseSandboxRequest:
       type: object
       description: Optional body for the pause endpoint.

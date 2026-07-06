@@ -34,6 +34,7 @@ __all__ = [
     "SandboxMetricsResponse",
     "SandboxPhase",
     "SandboxPhaseEnum",
+    "SandboxPort",
     "SandboxResources",
     "SandboxTemplate",
     "SandboxTemplateListResponse",
@@ -97,6 +98,9 @@ from neevai.generated.aiagent import (  # noqa: F401
 )
 from neevai.generated.aiagent import (  # noqa: F401
     SandboxPhase as SandboxPhaseEnum,
+)
+from neevai.generated.aiagent import (  # noqa: F401
+    SandboxPort as SandboxPort,
 )
 from neevai.generated.aiagent import (  # noqa: F401
     SandboxResources as SandboxResources,

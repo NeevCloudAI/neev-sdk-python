@@ -633,6 +633,29 @@ sandbox.wait_until_ready()
 
 Same as `client.sandboxes.metrics(self.id, ...)` using the handle's scope.
 
+### Preview ports
+
+Ports are private by default. Expose a port to reach it through a public,
+credential-free preview URL.
+
+- `sandbox.expose_port(port)` → `SandboxPort` (`port`, `preview_url`). Idempotent;
+  exposing an already-exposed port returns the same URL.
+- `sandbox.list_ports()` → `list[SandboxPort]` currently exposed.
+- `sandbox.revoke_port(port)` → `None`. Revoking a port that is not exposed is a no-op.
+- `sandbox.get_url(port, wait_until_ready=True, timeout_ms=60000, poll_interval_ms=2000)`
+  → `str`. Exposes the port and returns its preview URL, polling until the gateway
+  routes it. Pass `wait_until_ready=False` to return immediately. A successful wait
+  means the URL is routable — the server behind the port must still be listening to
+  answer a real request.
+
+```python
+url = sandbox.get_url(8080)
+print(url)
+sandbox.revoke_port(8080)
+```
+
+**Example:** [`preview_ports.py`](../examples/preview_ports.py)
+
 ### `sandbox.snapshot(params=None)` / `sandbox.snapshots()`
 
 Convenience wrappers for `create_snapshot` and `list_snapshots` on this sandbox.

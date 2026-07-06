@@ -283,6 +283,36 @@ def _control_response(
 
         return json_resp(400, {"message": "bad request"})
 
+    # ---- Preview ports: /sandboxes/{id}/ports[/{port}] ------------------------
+    m_ports = re.match(
+        r"^/api/v1beta1/orgs/([^/]+)/projects/([^/]+)/sandboxes/([^/]+)/ports(?:/([0-9]+))?$",
+        path,
+    )
+    if m_ports:
+        sandbox_id = m_ports.group(3)
+        port_seg = m_ports.group(4)
+        ports: list[int] = _FAKE_DB.setdefault("ports", {}).setdefault(sandbox_id, [])
+
+        def _port_obj(p: int) -> dict:
+            return {"port": p, "preview_url": f"https://{p}-{sandbox_id}.preview.example.com"}
+
+        if port_seg is None:
+            if method == "GET":
+                return json_resp(200, {"ports": [_port_obj(p) for p in ports]})
+            if method == "POST":
+                if not isinstance(body, dict) or "port" not in body:
+                    return json_resp(400, {"message": "port is required"})
+                p = int(body["port"])
+                if p not in ports:
+                    ports.append(p)
+                return json_resp(200, _port_obj(p))
+        elif method == "DELETE":
+            p = int(port_seg)
+            if p in ports:
+                ports.remove(p)
+            return json_resp(204)
+        return json_resp(400, {"message": "bad request"})
+
     # ---- Real API paths: /api/v1beta1/orgs/{org}/projects/{proj}/sandboxes[...] --
     m = re.match(
         r"^/api/v1beta1/orgs/([^/]+)/projects/([^/]+)/sandboxes"
@@ -626,6 +656,7 @@ def control_transport() -> httpx.Client:
     _FAKE_DB["next_id"] = 1
     _FAKE_DB["next_snapshot_id"] = 1
     _FAKE_DB["next_agent_id"] = 1
+    _FAKE_DB["ports"] = {}
     return httpx.Client(transport=MockControlTransport())
 
 
@@ -644,4 +675,18 @@ def mock_transport() -> httpx.Client:
     _FAKE_DB["next_id"] = 1
     _FAKE_DB["next_snapshot_id"] = 1
     _FAKE_DB["next_agent_id"] = 1
+    _FAKE_DB["ports"] = {}
     return httpx.Client(transport=MockControlTransport())
+
+
+@pytest.fixture
+def async_mock_transport() -> httpx.AsyncClient:
+    """A fresh mock lifecycle httpx AsyncClient per test (shares the sync mock handler)."""
+    _FAKE_DB["sandboxes"].clear()
+    _FAKE_DB["snapshots"].clear()
+    _FAKE_DB["agents"].clear()
+    _FAKE_DB["next_id"] = 1
+    _FAKE_DB["next_snapshot_id"] = 1
+    _FAKE_DB["next_agent_id"] = 1
+    _FAKE_DB["ports"] = {}
+    return httpx.AsyncClient(transport=MockControlTransport())
