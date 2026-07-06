@@ -8,8 +8,8 @@ from neevai.errors import error_from_status
 SANDBOX_ID_HEADER = "X-Sandbox-Id"
 
 
-class DataplaneTransport:
-    """Synchronous HTTP transport for regional Sandbox daemon."""
+class RuntimeTransport:
+    """Synchronous HTTP transport for sandbox runtime."""
 
     def __init__(
         self,
@@ -43,7 +43,7 @@ class DataplaneTransport:
         content: str | bytes | None = None,
         body: Any | None = None,
     ) -> httpx.Response:
-        """Sends a request to the sandbox daemon without retries."""
+        """Sends a request to the sandbox runtime without retries."""
         url = f"{self.connect_url}/{path.lstrip('/')}"
 
         req_headers = self._auth_headers()
@@ -67,14 +67,14 @@ class DataplaneTransport:
         except httpx.TimeoutException as e:
             from neevai.errors import APITimeoutError
 
-            raise APITimeoutError("Data-plane request timed out") from e
+            raise APITimeoutError("Sandbox runtime request timed out") from e
         except httpx.RequestError as e:
             from neevai.errors import APIConnectionError
 
-            raise APIConnectionError("Failed to reach the sandbox data-plane daemon") from e
+            raise APIConnectionError("Failed to reach the sandbox runtime") from e
 
         if not response.is_success:
-            raise self._daemon_error(response)
+            raise self._runtime_error(response)
 
         return response
 
@@ -101,20 +101,18 @@ class DataplaneTransport:
             ) as response:
                 if not response.is_success:
                     response.read()  # Buffer response text for mapping error
-                    raise self._daemon_error(response)
+                    raise self._runtime_error(response)
                 yield from response.iter_lines()
         except httpx.TimeoutException as e:
             from neevai.errors import APITimeoutError
 
-            raise APITimeoutError("Data-plane request timed out during stream") from e
+            raise APITimeoutError("Sandbox runtime request timed out during stream") from e
         except httpx.RequestError as e:
             from neevai.errors import APIConnectionError
 
-            raise APIConnectionError(
-                "Failed to reach the sandbox data-plane daemon during stream"
-            ) from e
+            raise APIConnectionError("Failed to reach the sandbox runtime during stream") from e
 
-    def _daemon_error(self, response: httpx.Response) -> Exception:
+    def _runtime_error(self, response: httpx.Response) -> Exception:
         text = response.text
         body = None
         if len(text) > 0:
@@ -133,8 +131,8 @@ class DataplaneTransport:
         return error_from_status(response.status_code, body, request_id)
 
 
-class AsyncDataplaneTransport:
-    """Asynchronous HTTP transport for regional Sandbox daemon."""
+class AsyncRuntimeTransport:
+    """Asynchronous HTTP transport for sandbox runtime."""
 
     def __init__(
         self,
@@ -168,7 +166,7 @@ class AsyncDataplaneTransport:
         content: str | bytes | None = None,
         body: Any | None = None,
     ) -> httpx.Response:
-        """Sends an async request to the sandbox daemon without retries."""
+        """Sends an async request to the sandbox runtime without retries."""
         url = f"{self.connect_url}/{path.lstrip('/')}"
 
         req_headers = self._auth_headers()
@@ -192,14 +190,14 @@ class AsyncDataplaneTransport:
         except httpx.TimeoutException as e:
             from neevai.errors import APITimeoutError
 
-            raise APITimeoutError("Data-plane request timed out") from e
+            raise APITimeoutError("Sandbox runtime request timed out") from e
         except httpx.RequestError as e:
             from neevai.errors import APIConnectionError
 
-            raise APIConnectionError("Failed to reach the sandbox data-plane daemon") from e
+            raise APIConnectionError("Failed to reach the sandbox runtime") from e
 
         if not response.is_success:
-            raise self._daemon_error(response)
+            raise self._runtime_error(response)
 
         return response
 
@@ -226,21 +224,19 @@ class AsyncDataplaneTransport:
             ) as response:
                 if not response.is_success:
                     await response.aread()
-                    raise self._daemon_error(response)
+                    raise self._runtime_error(response)
                 async for line in response.aiter_lines():
                     yield line
         except httpx.TimeoutException as e:
             from neevai.errors import APITimeoutError
 
-            raise APITimeoutError("Data-plane request timed out during stream") from e
+            raise APITimeoutError("Sandbox runtime request timed out during stream") from e
         except httpx.RequestError as e:
             from neevai.errors import APIConnectionError
 
-            raise APIConnectionError(
-                "Failed to reach the sandbox data-plane daemon during stream"
-            ) from e
+            raise APIConnectionError("Failed to reach the sandbox runtime during stream") from e
 
-    def _daemon_error(self, response: httpx.Response) -> Exception:
+    def _runtime_error(self, response: httpx.Response) -> Exception:
         text = response.text
         body = None
         if len(text) > 0:

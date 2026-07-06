@@ -1,7 +1,7 @@
 # conftest.py
 """Test fixtures for NeevAI Python SDK.
 Provides a mock httpx transport that returns deterministic JSON payloads
-for control‑plane and data‑plane endpoints. The fixtures are used across
+for lifecycle and runtime endpoints. The fixtures are used across
 all test modules.
 """
 
@@ -14,7 +14,7 @@ from typing import Any
 import httpx
 import pytest
 
-# Simple in‑memory store to simulate backend state for sandbox resources
+# Simple in-memory store to simulate backend state for sandbox resources
 _FAKE_DB: dict[str, Any] = {
     "sandboxes": {},
     "snapshots": {},
@@ -70,7 +70,7 @@ def _make_snapshot_record(
         "name": req.get("name"),
         "status": "Pending",
         "include_memory": req.get("include_memory", False),
-        "source_region": "us-east-1",
+        "source_region": "as-south-1",
         "size_bytes": None,
         "error_message": None,
         "expires_at": None,
@@ -144,7 +144,7 @@ def _make_sandbox_record(
         "org_id": org_id,
         "project_id": project_id,
         "name": req.get("name", "test-sandbox"),
-        "region": req.get("region", "us-east-1"),
+        "region": req.get("region", "as-south-1"),
         "image": "ubuntu:22.04",
         "command": None,
         "env": req.get("env"),
@@ -170,7 +170,7 @@ def _normalize_control_path(path: str) -> str:
 def _control_response(
     method: str, path: str, query: dict[str, Any] | None, body: Any
 ) -> httpx.Response:
-    """Return a mocked control‑plane response.
+    """Return a mocked lifecycle response.
     Only a subset of endpoints required for the test suite are handled.
     """
     path = _normalize_control_path(path)
@@ -553,10 +553,10 @@ def _control_response(
     return json_resp(404, {"message": "unknown endpoint"})
 
 
-def _dataplane_response(
+def _runtime_response(
     method: str, path: str, query: dict[str, Any] | None, body: Any
 ) -> httpx.Response:
-    """Mock data‑plane (sandboxd) responses.
+    """Mock runtime responses.
     Only the minimal subset needed for the current tests is implemented.
     """
 
@@ -575,7 +575,7 @@ def _dataplane_response(
     if path.endswith("/files") and method == "GET":
         return json_resp(200, {"files": []})
 
-    return json_resp(404, {"message": "unknown dataplane endpoint"})
+    return json_resp(404, {"message": "unknown runtime endpoint"})
 
 
 class MockControlTransport(httpx.MockTransport):
@@ -601,15 +601,15 @@ class MockControlTransport(httpx.MockTransport):
         )
 
 
-class MockDataPlaneTransport(httpx.MockTransport):
-    """httpx.MockTransport for the sandboxd (data‑plane) API."""
+class MockSandboxRuntimeTransport(httpx.MockTransport):
+    """httpx.MockTransport for the runtime API."""
 
     def __init__(self):
         super().__init__(self.handler)
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         body = json.loads(request.content) if request.content else None
-        return _dataplane_response(
+        return _runtime_response(
             method=request.method,
             path=request.url.path,
             query=dict(request.url.params),
@@ -619,7 +619,7 @@ class MockDataPlaneTransport(httpx.MockTransport):
 
 @pytest.fixture
 def control_transport() -> httpx.Client:
-    """Provides a fresh mock control‑plane httpx Client for each test."""
+    """Provides a fresh mock lifecycle httpx Client for each test."""
     _FAKE_DB["sandboxes"].clear()
     _FAKE_DB["snapshots"].clear()
     _FAKE_DB["agents"].clear()
@@ -630,14 +630,14 @@ def control_transport() -> httpx.Client:
 
 
 @pytest.fixture
-def dataplane_transport() -> httpx.Client:
-    """Provides a mock data‑plane httpx Client used by sandboxd tests."""
-    return httpx.Client(transport=MockDataPlaneTransport())
+def runtime_transport() -> httpx.Client:
+    """Provides a mock runtime httpx Client used by runtime tests."""
+    return httpx.Client(transport=MockSandboxRuntimeTransport())
 
 
 @pytest.fixture
 def mock_transport() -> httpx.Client:
-    """Alias for `control_transport` – a fresh mock control‑plane httpx Client per test."""
+    """Alias for `control_transport` – a fresh mock lifecycle httpx Client per test."""
     _FAKE_DB["sandboxes"].clear()
     _FAKE_DB["snapshots"].clear()
     _FAKE_DB["agents"].clear()

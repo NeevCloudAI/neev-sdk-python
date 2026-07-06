@@ -1,4 +1,4 @@
-"""Shared NDJSON stream decoding and argv helpers for sandboxd."""
+"""Shared NDJSON stream decoding and argv helpers for runtime."""
 
 # pyright: reportUnusedFunction=false
 

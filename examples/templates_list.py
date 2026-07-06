@@ -9,15 +9,14 @@ Prerequisites
 
 Required environment variables:
 
-- ``NEEVCLOUD_API_KEY`` — API key for your organization
-- ``NEEVCLOUD_ORG_ID`` — organization ID
-- ``NEEVCLOUD_PROJECT_ID`` — project ID
+- ``NEEV_API_KEY`` — API key for your organization
+- ``NEEV_ORG_ID`` — organization ID
+- ``NEEV_PROJECT_ID`` — project ID
 
 Optional overrides:
 
-- ``NEEVCLOUD_SANDBOX_TEMPLATE_ID`` — template to provision after listing
+- ``NEEV_SANDBOX_TEMPLATE_ID`` — template to provision after listing
   (default: first active template in the list, or ``sb-ubuntu-26-04-minimal``)
-- ``NEEVCLOUD_REGION`` — deployment region (default: ``as-south-1``)
 
 Flow
 ----
@@ -37,7 +36,7 @@ Example Output
       sb-ubuntu-26-04-minimal — Ubuntu Minimal [ACTIVE]
       sb-python-3-12 — Python 3.12 [ACTIVE]
     selected: sb-ubuntu-26-04-minimal — Minimal Ubuntu 26.04 image
-    [templates] creating sandbox (sb-ubuntu-26-04-minimal, as-south-1)…
+    [templates] creating sandbox (sb-ubuntu-26-04-minimal)…
     created sb-abc123 (phase: Provisioning)
     [templates] waiting until ready…
     ready at https://connect.example/sb-abc123
@@ -51,8 +50,8 @@ Stdout / stderr
 
 Run::
 
-    NEEVCLOUD_API_KEY=... NEEVCLOUD_ORG_ID=... NEEVCLOUD_PROJECT_ID=... \\
-    NEEVCLOUD_SANDBOX_TEMPLATE_ID=sb-ubuntu-26-04-minimal \\
+    NEEV_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=... \\
+    NEEV_SANDBOX_TEMPLATE_ID=sb-ubuntu-26-04-minimal \\
     uv run python examples/templates_list.py
 """
 
@@ -68,8 +67,7 @@ from neevai import NeevAI
 from neevai.errors import NeevAIError
 
 # Tunable defaults — override via environment variables listed in the docstring.
-REGION = os.environ.get("NEEVCLOUD_REGION", "as-south-1")
-DEFAULT_TEMPLATE = os.environ.get("NEEVCLOUD_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-minimal")
+DEFAULT_TEMPLATE = os.environ.get("NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-minimal")
 
 
 def log(message: str) -> None:
@@ -101,12 +99,11 @@ def main() -> None:
             print(f"selected: {detail.id} — {detail.description}")
 
             # --- Create ---
-            log(f"creating sandbox ({template_id}, {REGION})…")
+            log(f"creating sandbox ({template_id})…")
             sandbox = client.sandboxes.create(
                 {
                     "name": f"templates-demo-{_rand_suffix()}",
                     "sandbox_template_id": template_id,
-                    "region": REGION,
                 }
             )
             print(f"created {sandbox.id} (phase: {sandbox.phase})")

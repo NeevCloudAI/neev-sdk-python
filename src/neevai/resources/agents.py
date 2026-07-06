@@ -57,8 +57,6 @@ def _prepare_create_params(
         raw: dict[str, Any] = dict(params)
     else:
         raw = params.model_dump(exclude_unset=True)
-    if not raw.get("region") and client.default_region:
-        raw["region"] = client.default_region
     return coerce_params(CreateAgentParams, raw)
 
 
@@ -78,7 +76,7 @@ def _prepare_update_body(
 
 
 class Agents:
-    """Operations on the /agents API endpoint (control plane, synchronous)."""
+    """Operations on the /agents API endpoint (synchronous)."""
 
     def __init__(self, client: NeevAI, sandboxes: Sandboxes):
         self._client = client
@@ -216,7 +214,7 @@ class Agents:
 
 
 class AsyncAgents:
-    """Operations on the /agents API endpoint (control plane, asynchronous)."""
+    """Operations on the /agents API endpoint (asynchronous)."""
 
     def __init__(self, client: AsyncNeevAI, sandboxes: AsyncSandboxes):
         self._client = client

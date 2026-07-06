@@ -1,4 +1,4 @@
-"""Supervised long-running process APIs on the sandbox daemon."""
+"""Supervised long-running process APIs on the sandbox runtime."""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ from neevai.types import (
 )
 
 if TYPE_CHECKING:
-    from neevai.runtime.sandboxd import AsyncSandboxConnection, SandboxConnection
+    from neevai.runtime.connection import AsyncSandboxConnection, SandboxConnection
 
 
 def _prepare_start_body(
@@ -163,7 +163,7 @@ class AsyncProcess:
 
 
 class SandboxProcesses:
-    """Synchronous supervised process operations on the sandbox daemon."""
+    """Synchronous supervised process operations on the sandbox runtime."""
 
     def __init__(self, connection: SandboxConnection):
         self._conn = connection
@@ -265,7 +265,7 @@ class SandboxProcesses:
 
 
 class AsyncSandboxProcesses:
-    """Asynchronous supervised process operations on the sandbox daemon."""
+    """Asynchronous supervised process operations on the sandbox runtime."""
 
     def __init__(self, connection: AsyncSandboxConnection):
         self._conn = connection

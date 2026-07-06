@@ -1,7 +1,7 @@
 """
 Distribute work across multiple sandboxes and combine the results.
 
-Provisions one gVisor-isolated sandbox per job, downloads a different public
+Provisions one isolated sandbox per job, downloads a different public
 GitHub repository in each, counts source files by language in parallel, prints
 aggregated totals on stdout, and tears everything down.
 
@@ -19,15 +19,14 @@ Prerequisites
 
 Required environment variables:
 
-- ``NEEVCLOUD_API_KEY`` — API key for your organization
-- ``NEEVCLOUD_ORG_ID`` — organization ID
-- ``NEEVCLOUD_PROJECT_ID`` — project ID
+- ``NEEV_API_KEY`` — API key for your organization
+- ``NEEV_ORG_ID`` — organization ID
+- ``NEEV_PROJECT_ID`` — project ID
 
 Optional overrides:
 
-- ``NEEVCLOUD_SANDBOX_TEMPLATE_ID`` — template to provision (default:
+- ``NEEV_SANDBOX_TEMPLATE_ID`` — template to provision (default:
   ``sb-ubuntu-26-04-minimal``)
-- ``NEEVCLOUD_REGION`` — deployment region (default: ``as-south-1``)
 
 Flow
 ----
@@ -61,8 +60,8 @@ Example Output
 
 Run::
 
-    NEEVCLOUD_API_KEY=... NEEVCLOUD_ORG_ID=... NEEVCLOUD_PROJECT_ID=... \\
-    NEEVCLOUD_SANDBOX_TEMPLATE_ID=sb-ubuntu-26-04-minimal \\
+    NEEV_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=... \\
+    NEEV_SANDBOX_TEMPLATE_ID=sb-ubuntu-26-04-minimal \\
     uv run python examples/parallel_fanout.py
 """
 
@@ -79,8 +78,7 @@ from neevai import NeevAI
 from neevai.handles import Sandbox
 
 # Tunable defaults — override via environment variables listed in the docstring.
-REGION = os.environ.get("NEEVCLOUD_REGION", "as-south-1")
-TEMPLATE = os.environ.get("NEEVCLOUD_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-minimal")
+TEMPLATE = os.environ.get("NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-minimal")
 EXEC_TIMEOUT_MS = 300_000
 
 
@@ -191,7 +189,6 @@ def main() -> None:
                 {
                     "name": f"fanout-{job['id']}-{_rand_suffix()}",
                     "sandbox_template_id": TEMPLATE,
-                    "region": REGION,
                 }
             )
             for job in JOBS

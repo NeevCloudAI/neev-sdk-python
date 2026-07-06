@@ -159,7 +159,7 @@ def _install_git_static(sandbox: Sandbox) -> bool:
 
 
 def _bootstrap_failure_message(tool: str, details: str, *, required: bool) -> str:
-    template_id = os.environ.get("NEEVCLOUD_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-minimal")
+    template_id = os.environ.get("NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-minimal")
     requirement = "required" if required else "optional"
     return (
         f"Could not install {tool} ({requirement}) in the sandbox.\n"
@@ -167,7 +167,7 @@ def _bootstrap_failure_message(tool: str, details: str, *, required: bool) -> st
         f"supported manager was found.\n"
         f"Current template: {template_id}\n"
         f"Recommendations:\n"
-        f"  - Use a template with {tool} preinstalled (set NEEVCLOUD_SANDBOX_TEMPLATE_ID)\n"
+        f"  - Use a template with {tool} preinstalled (set NEEV_SANDBOX_TEMPLATE_ID)\n"
         f"  - For git only: host archive fallback is attempted automatically for GitHub URLs\n"
         f"  - For static git: set NEEV_GIT_STATIC_URL to a downloadable linux git binary\n"
         f"Details:\n{details or '(no package manager output)'}"
@@ -175,17 +175,13 @@ def _bootstrap_failure_message(tool: str, details: str, *, required: bool) -> st
 
 
 def create_standard_sandbox(client: NeevAI, region: str | None = None) -> Sandbox:
-    template_id = os.environ.get("NEEVCLOUD_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-minimal")
-    resolved_region = region or os.environ.get("NEEVCLOUD_REGION", "as-south-1")
+    template_id = os.environ.get("NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-minimal")
     suffix = hex(int(time.time() * 1e6))[-6:]
-    print(
-        f"[sandbox] creating (template={template_id}, region={resolved_region})…", file=sys.stderr
-    )
+    print(f"[sandbox] creating (template={template_id})…", file=sys.stderr)
     sandbox = client.sandboxes.create(
         {
             "name": f"repo-analyzer-{suffix}",
             "sandbox_template_id": template_id,
-            "region": resolved_region,
         }
     )
     print(f"[sandbox] created {sandbox.id}; waiting until ready…", file=sys.stderr)

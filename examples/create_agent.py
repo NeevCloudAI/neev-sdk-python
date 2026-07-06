@@ -3,12 +3,12 @@ Provision an agent from a catalogue template, wait for it to become Ready,
 drive its backing sandbox, then clean up.
 
 Set NEEV_AGENT_TEMPLATE to pick a template (default "claude-code"),
-NEEV_REGION to pin a region (e.g. on dev), and NEEV_BASE_URL to target
+NEEV_BASE_URL to target
 another environment.
 
 Run::
 
-    NEEVCLOUD_API_KEY=... NEEVCLOUD_ORG_ID=... NEEVCLOUD_PROJECT_ID=... \\
+    NEEV_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=... \\
     uv run python examples/create_agent.py
 """
 
@@ -22,15 +22,13 @@ from neevai import NeevAI
 from neevai.errors import NeevAIError
 
 AGENT_TEMPLATE = os.environ.get("NEEV_AGENT_TEMPLATE", "claude-code")
-REGION = os.environ.get("NEEVCLOUD_REGION")
 
 
 def main() -> None:
     with NeevAI(
-        api_key=os.environ.get("NEEVCLOUD_API_KEY"),
-        org_id=os.environ.get("NEEVCLOUD_ORG_ID"),
-        project_id=os.environ.get("NEEVCLOUD_PROJECT_ID"),
-        region=REGION,
+        api_key=os.environ.get("NEEV_API_KEY"),
+        org_id=os.environ.get("NEEV_ORG_ID"),
+        project_id=os.environ.get("NEEV_PROJECT_ID"),
     ) as client:
         try:
             templates = client.agent_templates.list()
@@ -41,8 +39,6 @@ def main() -> None:
                 "name": "example-coder",
                 "agent_template": AGENT_TEMPLATE,
             }
-            if REGION:
-                create_params["region"] = REGION
 
             agent = client.agents.create(create_params)
             print(f"created {agent.id} (status: {agent.status}, sandbox: {agent.sandbox_id})")

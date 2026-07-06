@@ -12,8 +12,8 @@ from neevai.errors import (
     NotFoundError,
     PermissionDeniedError,
 )
-from neevai.runtime.sandboxd import AsyncSandboxConnection, SandboxConnection
-from neevai.transport.runtime import SANDBOX_ID_HEADER, DataplaneTransport
+from neevai.runtime.connection import AsyncSandboxConnection, SandboxConnection
+from neevai.transport.runtime import SANDBOX_ID_HEADER, RuntimeTransport
 
 
 def _ndjson_lines(frames: list[dict]) -> bytes:
@@ -146,7 +146,7 @@ async def test_async_exec_stream_yields_events():
     await conn.aclose()
 
 
-def test_dataplane_transport_sends_x_sandbox_id_header():
+def test_runtime_transport_sends_x_sandbox_id_header():
     captured: dict[str, str] = {}
 
     class HeaderCaptureTransport(httpx.MockTransport):
@@ -158,7 +158,7 @@ def test_dataplane_transport_sends_x_sandbox_id_header():
             return httpx.Response(200, json={"status": "ok"})
 
     sandbox_id = "00000000-0000-0000-0000-000000000099"
-    transport = DataplaneTransport(
+    transport = RuntimeTransport(
         connect_url="https://sbx.example.com",
         api_key="test",
         timeout_ms=5000,
@@ -170,7 +170,7 @@ def test_dataplane_transport_sends_x_sandbox_id_header():
     transport.close()
 
 
-def test_dataplane_transport_omits_x_sandbox_id_without_sandbox_id():
+def test_runtime_transport_omits_x_sandbox_id_without_sandbox_id():
     captured: dict[str, str | None] = {}
 
     class HeaderCaptureTransport(httpx.MockTransport):
@@ -181,7 +181,7 @@ def test_dataplane_transport_omits_x_sandbox_id_without_sandbox_id():
             captured["sandbox_id"] = request.headers.get(SANDBOX_ID_HEADER)
             return httpx.Response(200, json={"status": "ok"})
 
-    transport = DataplaneTransport(
+    transport = RuntimeTransport(
         connect_url="https://sbx.example.com",
         api_key="test",
         timeout_ms=5000,
@@ -192,12 +192,12 @@ def test_dataplane_transport_omits_x_sandbox_id_without_sandbox_id():
     transport.close()
 
 
-def test_dataplane_transport_sanity(dataplane_transport):
-    transport = DataplaneTransport(
+def test_runtime_transport_sanity(runtime_transport):
+    transport = RuntimeTransport(
         connect_url="https://sbx.example.com",
         api_key="test",
         timeout_ms=5000,
-        client=dataplane_transport,
+        client=runtime_transport,
     )
     resp = transport.request("POST", "/v1/exec")
     assert resp.status_code == 200
@@ -208,7 +208,7 @@ def test_dataplane_transport_sanity(dataplane_transport):
         transport.request("GET", "/v1/nonexistent")
 
 
-def test_dataplane_transport_timeout():
+def test_runtime_transport_timeout():
     class TimeoutMock(httpx.MockTransport):
         def __init__(self):
             super().__init__(self.handler)
@@ -216,7 +216,7 @@ def test_dataplane_transport_timeout():
         def handler(self, request: httpx.Request) -> httpx.Response:
             raise httpx.TimeoutException("timeout", request=request)
 
-    transport = DataplaneTransport(
+    transport = RuntimeTransport(
         connect_url="https://sbx.example.com",
         api_key="test",
         timeout_ms=100,

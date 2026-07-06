@@ -1,4 +1,4 @@
-"""Tests for the Agents resource (control plane, sync)."""
+"""Tests for the Agents resource (the API, sync)."""
 
 import uuid
 from unittest.mock import MagicMock
@@ -9,12 +9,11 @@ from neevai.client import NeevAI
 from neevai.errors import NeevAIError, NotFoundError
 
 
-def _make_client(mock_transport, region: str | None = "us-east-1") -> NeevAI:
+def _make_client(mock_transport) -> NeevAI:
     return NeevAI(
         api_key="test",
         org_id="org1",
         project_id="proj1",
-        region=region,
         client=mock_transport,
     )
 
@@ -38,16 +37,7 @@ def test_agents_create(mock_transport):
     client.close()
 
 
-def test_agents_create_injects_default_region(mock_transport):
-    client = _make_client(mock_transport, region="eu-central-1")
-    agent = client.agents.create({"name": "my-agent", "agent_template": "claude-code"})
-    sandbox = client.sandboxes.get(agent.sandbox_id)
-    assert sandbox.data["region"] == "eu-central-1"
-    client.close()
-
-
-def test_agents_create_omits_region_when_unset(mock_transport, monkeypatch):
-    monkeypatch.delenv("NEEVCLOUD_REGION", raising=False)
+def test_agents_create_omits_region_when_unset(mock_transport):
     client = NeevAI(
         api_key="test",
         org_id="org1",
@@ -56,7 +46,7 @@ def test_agents_create_omits_region_when_unset(mock_transport, monkeypatch):
     )
     agent = client.agents.create({"name": "my-agent", "agent_template": "claude-code"})
     sandbox = client.sandboxes.get(agent.sandbox_id)
-    assert sandbox.data["region"] == "us-east-1"
+    assert sandbox.data["region"] == "as-south-1"
     client.close()
 
 

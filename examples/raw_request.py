@@ -1,5 +1,5 @@
 """
-Call the control-plane API through the untyped raw client escape hatch.
+Call the API through the untyped raw client escape hatch.
 
 Demonstrates ``client.raw.request("GET", path)`` for endpoints that do not yet
 have a typed resource wrapper. The response is parsed JSON (or ``None`` for 204).
@@ -7,7 +7,7 @@ have a typed resource wrapper. The response is parsed JSON (or ``None`` for 204)
 When to use raw.request
 -----------------------
 
-``client.raw.request(method, path)`` is an escape hatch for control-plane
+``client.raw.request(method, path)`` is an escape hatch for the API
 endpoints without typed SDK wrappers. It returns parsed JSON (or ``None`` for
 204 No Content). Prefer typed resources such as ``client.templates`` or
 ``client.sandboxes`` when they exist; use ``raw.request`` for new or internal
@@ -18,9 +18,9 @@ Prerequisites
 
 Required environment variables:
 
-- ``NEEVCLOUD_API_KEY`` — API key for your organization
-- ``NEEVCLOUD_ORG_ID`` — organization ID
-- ``NEEVCLOUD_PROJECT_ID`` — project ID
+- ``NEEV_API_KEY`` — API key for your organization
+- ``NEEV_ORG_ID`` — organization ID
+- ``NEEV_PROJECT_ID`` — project ID
 
 Flow
 ----
@@ -48,7 +48,7 @@ Stdout / stderr
 
 Run::
 
-    NEEVCLOUD_API_KEY=... NEEVCLOUD_ORG_ID=... NEEVCLOUD_PROJECT_ID=... \\
+    NEEV_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=... \\
     uv run python examples/raw_request.py
 """
 
@@ -64,8 +64,8 @@ from neevai.errors import NeevAIError
 
 def main() -> None:
     # Org and project IDs come from the environment (see Prerequisites).
-    org_id = os.environ.get("NEEVCLOUD_ORG_ID", "")
-    project_id = os.environ.get("NEEVCLOUD_PROJECT_ID", "")
+    org_id = os.environ.get("NEEV_ORG_ID", "")
+    project_id = os.environ.get("NEEV_PROJECT_ID", "")
 
     with NeevAI() as client:
         try:

@@ -45,8 +45,6 @@ def _prepare_create_params(
         raw: dict[str, Any] = dict(params)
     else:
         raw = params.model_dump(exclude_unset=True)
-    if not raw.get("region"):
-        raw["region"] = client._resolve_region()
     return coerce_params(CreateSandboxParams, raw)
 
 
@@ -65,7 +63,7 @@ def _prepare_create_snapshot_body(
 
 
 class Sandboxes:
-    """Operations on the /sandboxes API endpoint (control plane, synchronous)."""
+    """Operations on the /sandboxes API endpoint (synchronous)."""
 
     def __init__(self, client: NeevAI):
         self._client = client
@@ -316,7 +314,7 @@ class Sandboxes:
 
 
 class AsyncSandboxes:
-    """Operations on the /sandboxes API endpoint (control plane, asynchronous)."""
+    """Operations on the /sandboxes API endpoint (asynchronous)."""
 
     def __init__(self, client: AsyncNeevAI):
         self._client = client

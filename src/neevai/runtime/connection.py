@@ -8,7 +8,7 @@ from neevai.runtime._stream import (
     _prepare_argv,
 )
 from neevai.runtime.schemas import FileListResponse, FileWriteResponse
-from neevai.transport.runtime import AsyncDataplaneTransport, DataplaneTransport
+from neevai.transport.runtime import AsyncRuntimeTransport, RuntimeTransport
 from neevai.types import ExecResult, ExecStreamEvent, FileEntry
 
 
@@ -39,7 +39,7 @@ def _prepare_exec_body(
 
 
 class SandboxFiles:
-    """Synchronous file operations on the sandbox daemon."""
+    """Synchronous file operations on the sandbox runtime."""
 
     def __init__(self, connection: "SandboxConnection"):
         self._conn = connection
@@ -100,7 +100,7 @@ class SandboxFiles:
 
 
 class SandboxConnection:
-    """Synchronous connection to regional sandbox data-plane daemon."""
+    """Synchronous connection to sandbox runtime."""
 
     def __init__(
         self,
@@ -110,7 +110,7 @@ class SandboxConnection:
         client: httpx.Client | None = None,
         sandbox_id: str | None = None,
     ):
-        self._transport = DataplaneTransport(
+        self._transport = RuntimeTransport(
             connect_url, api_key, timeout_ms, client=client, sandbox_id=sandbox_id
         )
         self.files = SandboxFiles(self)
@@ -176,7 +176,7 @@ class SandboxConnection:
 
 
 class AsyncSandboxFiles:
-    """Asynchronous file operations on the sandbox daemon."""
+    """Asynchronous file operations on the sandbox runtime."""
 
     def __init__(self, connection: "AsyncSandboxConnection"):
         self._conn = connection
@@ -240,7 +240,7 @@ class AsyncSandboxFiles:
 
 
 class AsyncSandboxConnection:
-    """Asynchronous connection to regional sandbox data-plane daemon."""
+    """Asynchronous connection to sandbox runtime."""
 
     def __init__(
         self,
@@ -250,7 +250,7 @@ class AsyncSandboxConnection:
         client: httpx.AsyncClient | None = None,
         sandbox_id: str | None = None,
     ):
-        self._transport = AsyncDataplaneTransport(
+        self._transport = AsyncRuntimeTransport(
             connect_url, api_key, timeout_ms, client=client, sandbox_id=sandbox_id
         )
         self.files = AsyncSandboxFiles(self)

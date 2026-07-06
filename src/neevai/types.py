@@ -128,7 +128,7 @@ SandboxPhase = Literal["Pending", "Ready", "NotReady", "Unknown", "Paused", "Pau
 class AgentData(_GeneratedAgent):
     """Agent record with relaxed ``status`` validation.
 
-    The control plane may return future status strings beyond the OpenAPI
+    The API may return future status strings beyond the OpenAPI
     ``AgentStatus`` enum; accept any string at the SDK boundary.
     """
 
@@ -145,7 +145,7 @@ class AgentListResponse(BaseModel):
 class SandboxData(_GeneratedSandbox):
     """Sandbox record with relaxed ``phase`` validation.
 
-    The control plane may return transitional or future phase strings beyond the
+    The API may return transitional or future phase strings beyond the
     OpenAPI ``SandboxPhase`` enum; accept any string at the SDK boundary.
     """
 

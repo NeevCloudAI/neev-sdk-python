@@ -1,4 +1,4 @@
-"""Tests for the control‑plane transport layer (retry & back‑off)."""
+"""Tests for the lifecycle transport layer (retry & back-off)."""
 
 import email.utils
 import time
@@ -35,7 +35,7 @@ def test_parse_retry_after_http_date():
 
 
 class FlakyMockTransport(httpx.MockTransport):
-    """First request fails with 429+Retry‑After, second succeeds."""
+    """First request fails with 429+Retry-After, second succeeds."""
 
     def __init__(self):
         super().__init__(self.handler)

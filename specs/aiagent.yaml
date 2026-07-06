@@ -8,16 +8,8 @@ info:
     restore, fork, from_snapshot create).
   version: 0.2.0
 servers:
-  - url: https://api.{env}.ai.neevcloud.com/agent
-    description: Consolidated public API gateway
-    variables:
-      env:
-        default: dev
-        enum:
-          - stg
-          - dev
-  - url: http://localhost:7011
-    description: Local Development
+  - url: https://api.ai.neevcloud.com/agent
+    description: Neev production API
 security:
   - BearerAuth: []
 paths:
@@ -103,7 +95,7 @@ paths:
       summary: Pause a sandbox (stop billable runtime; preserve disks)
       description: |
         When `preserve_memory` is true the sandbox's full state (process memory
-        + filesystem) is captured as an implicit snapshot before the pod is
+        + filesystem) is captured as an implicit snapshot before the sandbox is
         terminated. The snapshot is retained for the duration of the paused
         state and consumed automatically on the next `resume`. When false
         (default) the existing volume-only behaviour applies.
@@ -131,7 +123,7 @@ paths:
   /api/v1beta1/orgs/{org_id}/projects/{project_id}/sandboxes/{sandbox_id}/connect-token:
     post:
       tags: [Sandboxes]
-      summary: Mint a short-lived data-plane connect-token for a sandbox
+      summary: Mint a short-lived runtime connect-token for a sandbox
       operationId: createConnectToken
       parameters:
         - {$ref: '#/components/parameters/OrgID'}
@@ -363,7 +355,7 @@ paths:
       description: |
         Returns platform-managed sandbox runtime templates available for
         sandbox create. Only templates with status `active` or `deprecated`
-        are returned. Registry paths are operator-internal and are not exposed.
+        are returned. Registry paths are internal and are not exposed.
       operationId: listSandboxTemplates
       parameters:
         - {$ref: '#/components/parameters/Page'}
@@ -468,8 +460,8 @@ paths:
       summary: Update an agent in place
       description: |
         Updates mutable fields of an agent without recreating it. `egress` is
-        re-applied live (no pod disruption). `resources` (cpu/memory) are resized
-        in place on the running pod via the pod resize subresource; the new size
+        re-applied live (no interruption). `resources` (cpu/memory) are resized
+        in place on the running sandbox; the new size
         also persists to the backing sandbox so it survives a restart. Disk is
         not resizable in place. Fields omitted from the body are left unchanged.
       operationId: updateAgent
@@ -554,7 +546,7 @@ paths:
       description: |
         Returns platform-managed agent templates available for agent create.
         Only templates with status `active` are returned. Registry paths and
-        other operator-internal fields are not exposed.
+        other internal fields are not exposed.
       operationId: listAgentTemplates
       parameters:
         - {$ref: '#/components/parameters/Page'}
@@ -761,7 +753,7 @@ components:
           maxLength: 63
           pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
           description: |
-            Sandbox name. Used verbatim as the Sandbox CR name and as a routing
+            Sandbox name. Used verbatim as the sandbox name and as a routing
             label, so it must be a valid DNS-1123 label: lowercase alphanumeric
             characters or '-', starting and ending with an alphanumeric, max 63
             characters.
@@ -795,7 +787,7 @@ components:
           default: true
           description: |
             When true, capture FS+process memory as an implicit snapshot before
-            terminating the pod. The snapshot is auto-consumed on the next resume.
+            stopping the sandbox. The snapshot is auto-consumed on the next resume.
     # --- Snapshot schemas ---
     SnapshotStatus:
       type: string
@@ -970,7 +962,7 @@ components:
       type: object
       required: [token, expires_in]
       properties:
-        token: {type: string, description: "Signed JWT connect-token, presented as a bearer credential to the sandbox data plane."}
+        token: {type: string, description: "Signed JWT connect-token, presented as a bearer credential to the sandbox runtime."}
         expires_in: {type: integer, description: "Token lifetime in seconds."}
     SandboxMetricsResponse:
       type: object
@@ -1018,7 +1010,7 @@ components:
           maxLength: 63
           pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
           description: |
-            Agent name. Used verbatim as the backing Sandbox CR name, so it must
+            Agent name. Used verbatim as the backing sandbox name, so it must
             be a valid DNS-1123 label: lowercase alphanumeric characters or '-',
             starting and ending with an alphanumeric, max 63 characters.
           example: my-agent
@@ -1060,12 +1052,12 @@ components:
         egress:
           allOf:
             - $ref: '#/components/schemas/SandboxEgressConfig'
-          description: Replace the agent's egress policy (re-applied live, no pod restart).
+          description: Replace the agent's egress policy (re-applied live, no restart).
         resources:
           allOf:
             - $ref: '#/components/schemas/SandboxResources'
           description: |
-            New cpu/memory sizing, resized in place on the running pod. Only the
+            New cpu/memory sizing, resized in place on the running sandbox. Only the
             fields provided change. disk_gb is not resizable in place and is
             rejected if supplied with a different value.
     AgentListResponse:

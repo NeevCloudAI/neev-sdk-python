@@ -13,29 +13,28 @@ Use a framework when you want a maintained agent graph, built-in tool wiring, an
 retry logic instead of implementing the model → tool → result loop yourself.
 ``create_react_agent`` builds a ReAct graph; ``ChatOpenAI`` points at the Neev
 inference endpoint. Sandbox execution still goes through the shared
-``utils/sandbox_tool.py`` helper so commands stay isolated in gVisor.
+``utils/sandbox_tool.py`` helper so commands stay isolated.
 
 Prerequisites
 -------------
 
 Required environment variables:
 
-- ``NEEVCLOUD_API_KEY`` — API key for your organization
-- ``NEEVCLOUD_ORG_ID`` — organization ID
-- ``NEEVCLOUD_PROJECT_ID`` — project ID
+- ``NEEV_API_KEY`` — API key for your organization
+- ``NEEV_ORG_ID`` — organization ID
+- ``NEEV_PROJECT_ID`` — project ID
 
 Inference (see ``utils/model_config.py`` for key resolution):
 
-- ``NEEV_INFERENCE_API_KEY`` or ``NEEVCLOUD_INFERENCE_API_KEY`` — model API key
-  (falls back to ``NEEVCLOUD_API_KEY``)
+- ``NEEV_INFERENCE_API_KEY`` — model API key
+  (falls back to ``NEEV_API_KEY``)
 
 Optional overrides:
 
-- ``NEEVCLOUD_SANDBOX_TEMPLATE_ID`` — template to provision (default:
+- ``NEEV_SANDBOX_TEMPLATE_ID`` — template to provision (default:
   ``sb-ubuntu-26-04-minimal``)
-- ``NEEVCLOUD_REGION`` — deployment region (default: ``as-south-1``)
 - ``NEEV_MODEL`` — inference model name (default: ``gpt-oss-120b``)
-- ``NEEV_INFERENCE_BASE_URL`` or ``NEEVCLOUD_INFERENCE_BASE_URL`` — OpenAI-compatible
+- ``NEEV_INFERENCE_BASE_URL`` — OpenAI-compatible
   endpoint (default: ``https://inference.ai.neevcloud.com/v1``)
 
 Extra Python dependencies::
@@ -79,7 +78,7 @@ Run::
 
     uv sync --extra agents
 
-    NEEVCLOUD_API_KEY=... NEEVCLOUD_ORG_ID=... NEEVCLOUD_PROJECT_ID=... \\
+    NEEV_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=... \\
     uv run --extra agents python examples/agent_patterns/langchain_agent.py
 """
 

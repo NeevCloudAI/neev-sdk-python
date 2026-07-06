@@ -15,7 +15,7 @@ def _sandbox_data(**overrides):
         "org_id": "org1",
         "project_id": "proj1",
         "name": "test-sandbox",
-        "region": "us-east-1",
+        "region": "as-south-1",
         "image": "ubuntu:22.04",
         "phase": "Ready",
         "replicas": 1,
@@ -47,12 +47,11 @@ def test_wait_until_ready_ready_phase():
 
 
 def test_wait_until_ready_ready_phase_does_not_probe_runtime(mock_transport, monkeypatch):
-    """wait_until_ready returns when control plane is Ready without probing the data plane."""
+    """wait_until_ready returns when the API is Ready without probing the sandbox runtime."""
     client = NeevAI(
         api_key="test",
         org_id="org1",
         project_id="proj1",
-        region="us-east-1",
         client=mock_transport,
     )
     sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
@@ -85,7 +84,6 @@ def test_sandbox_refresh(control_transport):
         api_key="test",
         org_id="org1",
         project_id="proj1",
-        region="us-east-1",
         client=control_transport,
     )
     sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
@@ -109,12 +107,11 @@ def _mark_ready(sb, *, connect_url: str = "https://old.example.com") -> None:
 
 
 def test_sandbox_restore_invalidates_cached_connection(mock_transport):
-    """Restore must drop the data-plane connection created before reconciliation."""
+    """Restore must drop the runtime connection created before reconciliation."""
     client = NeevAI(
         api_key="test",
         org_id="org1",
         project_id="proj1",
-        region="us-east-1",
         client=mock_transport,
     )
     sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
@@ -142,7 +139,6 @@ def test_sandbox_pause_and_resume_invalidate_cached_connection(mock_transport):
         api_key="test",
         org_id="org1",
         project_id="proj1",
-        region="us-east-1",
         client=mock_transport,
     )
     sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
@@ -161,12 +157,11 @@ def test_sandbox_pause_and_resume_invalidate_cached_connection(mock_transport):
 
 
 def test_sandbox_restore_does_not_wait_for_runtime(mock_transport, monkeypatch):
-    """restore invalidates the connection but does not probe the data plane."""
+    """restore invalidates the connection but does not probe the sandbox runtime."""
     client = NeevAI(
         api_key="test",
         org_id="org1",
         project_id="proj1",
-        region="us-east-1",
         client=mock_transport,
     )
     sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
@@ -193,12 +188,11 @@ def test_sandbox_restore_does_not_wait_for_runtime(mock_transport, monkeypatch):
 
 
 def test_wait_for_runtime_ready_clears_cached_connection(mock_transport, monkeypatch):
-    """Runtime readiness waits must drop any pre-existing cached data-plane client."""
+    """Runtime readiness waits must drop any pre-existing cached runtime client."""
     client = NeevAI(
         api_key="test",
         org_id="org1",
         project_id="proj1",
-        region="us-east-1",
         client=mock_transport,
     )
     sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
@@ -220,7 +214,6 @@ def test_sandbox_connection_passes_sandbox_id_to_transport(mock_transport):
         api_key="test",
         org_id="org1",
         project_id="proj1",
-        region="us-east-1",
         client=mock_transport,
     )
     sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
@@ -237,7 +230,6 @@ def test_sandbox_refresh_invalidates_connection_when_connect_url_changes(mock_tr
         api_key="test",
         org_id="org1",
         project_id="proj1",
-        region="us-east-1",
         client=mock_transport,
     )
     sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
