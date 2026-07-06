@@ -1,7 +1,7 @@
 """
 Write, read, and list files in a sandbox workspace.
 
-Demonstrates ``sandbox.files.write``, ``read_text``, and ``list(recursive=True)``.
+Demonstrates the full sandbox.files surface: write, read_text, list, stat, exists, mkdir, move, remove, and watch.
 Provisions a sandbox, writes nested workspace files, reads one back, lists the
 tree, and deletes the sandbox.
 
@@ -33,7 +33,8 @@ Flow
 2. **Write** — create ``demo/hello.txt`` and ``demo/nested/world.txt``
 3. **Read** — fetch ``demo/hello.txt`` with ``read_text``
 4. **List** — walk ``demo/`` recursively with ``files.list``
-5. **Delete** — remove the sandbox in a ``finally`` block
+5. **Control** — ``stat`` / ``exists``, then ``mkdir`` / ``move`` / ``remove``, and a short ``watch``
+6. **Delete** — remove the sandbox in a ``finally`` block
 
 Example Output
 --------------
@@ -111,6 +112,24 @@ def main() -> None:
             entries = sandbox.files.list("demo", recursive=True)
             for entry in entries:
                 print(f"  {entry.type}: {entry.path} ({entry.size} bytes)")
+
+            # --- Stat / exists ---
+            info = sandbox.files.stat("demo/hello.txt")
+            print(f"stat: {info.path} is a {info.type} of {info.size} bytes")
+            print(f"exists demo/hello.txt: {sandbox.files.exists('demo/hello.txt')}")
+            print(f"exists demo/missing: {sandbox.files.exists('demo/missing')}")
+
+            # --- mkdir / move / remove ---
+            sandbox.files.mkdir("demo/archive")
+            sandbox.files.move("demo/hello.txt", "demo/archive/hello.txt")
+            print(f"moved: exists archive copy = {sandbox.files.exists('demo/archive/hello.txt')}")
+            sandbox.files.remove("demo/nested", recursive=True)
+            print(f"removed demo/nested: exists = {sandbox.files.exists('demo/nested')}")
+
+            # --- Watch (short-lived) ---
+            # Start a watch that stops after 2s, then trigger a change from another call.
+            for event in sandbox.files.watch("demo", recursive=True, timeout_ms=2_000):
+                print(f"watch: {event.type} {event.path}")
         except NeevAIError as e:
             print(f"Error: {e}", file=sys.stderr)
             sys.exit(1)
@@ -120,8 +139,8 @@ def main() -> None:
                 try:
                     log(f"deleting sandbox {sandbox.id}")
                     sandbox.delete()
-                except Exception:
-                    pass
+                except NeevAIError as e:
+                    log(f"cleanup failed — sandbox {sandbox.id} may still be running: {e}")
 
 
 if __name__ == "__main__":

@@ -236,3 +236,118 @@ def test_sandbox_connection_init():
     assert conn.files is not None
     assert conn.processes is not None
     conn.close()
+
+
+def _raw_entry(name: str = "a.txt", type: str = "file", path: str = "a.txt") -> dict:
+    return {
+        "name": name,
+        "type": type,
+        "path": path,
+        "size": 3,
+        "mode": 420,
+        "permissions": "rw-r--r--",
+        "modified_time": "2026-07-06T00:00:00Z",
+    }
+
+
+class FilesMockTransport(httpx.MockTransport):
+    def __init__(self, *, exists: bool = True, watch_frames: list[dict] | None = None):
+        self._exists = exists
+        self._watch_frames = watch_frames or []
+        super().__init__(self.handler)
+
+    def handler(self, request: httpx.Request) -> httpx.Response:
+        p = request.url.path
+        if p.endswith("/v1/files/stat"):
+            return httpx.Response(200, json={"entry": _raw_entry()})
+        if p.endswith("/v1/files/exists"):
+            return httpx.Response(200, json={"exists": self._exists})
+        if p.endswith("/v1/files/mkdir"):
+            return httpx.Response(
+                200, json={"entry": _raw_entry(name="d", type="directory", path="d")}
+            )
+        if p.endswith("/v1/files/move"):
+            return httpx.Response(200, json={"entry": _raw_entry(name="b.txt", path="b.txt")})
+        if p.endswith("/v1/files/remove"):
+            return httpx.Response(200, content=b"")
+        if p.endswith("/v1/files/watch"):
+            return httpx.Response(200, content=_ndjson_lines(self._watch_frames))
+        return httpx.Response(404, json={"reason_code": "not_found", "message": "missing"})
+
+
+def _files_conn(**kw) -> SandboxConnection:
+    return SandboxConnection(
+        connect_url="https://sbx.example.com",
+        api_key="test",
+        timeout_ms=5000,
+        client=httpx.Client(transport=FilesMockTransport(**kw)),
+    )
+
+
+def test_files_stat_returns_entry():
+    conn = _files_conn()
+    entry = conn.files.stat("a.txt")
+    assert entry.name == "a.txt"
+    assert entry.type == "file"
+    assert entry.size == 3
+    conn.close()
+
+
+def test_files_exists_true_and_false():
+    conn = _files_conn(exists=True)
+    assert conn.files.exists("a.txt") is True
+    conn.close()
+    conn2 = _files_conn(exists=False)
+    assert conn2.files.exists("nope") is False
+    conn2.close()
+
+
+def test_files_mkdir_returns_directory_entry():
+    conn = _files_conn()
+    entry = conn.files.mkdir("d")
+    assert entry.type == "directory"
+    assert entry.name == "d"
+    conn.close()
+
+
+def test_files_move_returns_destination_entry():
+    conn = _files_conn()
+    entry = conn.files.move("a.txt", "b.txt")
+    assert entry.name == "b.txt"
+    conn.close()
+
+
+def test_files_remove_succeeds():
+    conn = _files_conn()
+    conn.files.remove("a.txt", recursive=True)  # should not raise
+    conn.close()
+
+
+def test_files_watch_yields_events_and_maps_entry():
+    frames = [
+        {"type": "create", "path": "new.txt", "entry": _raw_entry(name="new.txt", path="new.txt")},
+        {"type": "remove", "path": "old.txt"},
+    ]
+    conn = _files_conn(watch_frames=frames)
+    events = list(conn.files.watch("."))
+    assert [e.type for e in events] == ["create", "remove"]
+    assert events[0].entry is not None and events[0].entry.name == "new.txt"
+    assert events[1].entry is None
+    conn.close()
+
+
+@pytest.mark.asyncio
+async def test_async_files_stat_and_watch():
+    frames = [{"type": "write", "path": "f.txt", "entry": _raw_entry(name="f.txt", path="f.txt")}]
+    conn = AsyncSandboxConnection(
+        connect_url="https://sbx.example.com",
+        api_key="test",
+        timeout_ms=5000,
+        client=httpx.AsyncClient(transport=FilesMockTransport(watch_frames=frames)),
+    )
+    entry = await conn.files.stat("a.txt")
+    assert entry.name == "a.txt"
+    events = [e async for e in conn.files.watch(".")]
+    assert events[0].type == "write"
+    assert events[0].entry is not None and events[0].entry.name == "f.txt"
+    await conn.aclose()
