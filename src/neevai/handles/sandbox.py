@@ -29,6 +29,7 @@ if TYPE_CHECKING:
         SandboxFiles,
     )
     from neevai.runtime.processes import AsyncSandboxProcesses, SandboxProcesses
+    from neevai.runtime.pty import AsyncSandboxPty, SandboxPty
 
 DEFAULT_WAIT_TIMEOUT_MS = 120_000
 DEFAULT_POLL_INTERVAL_MS = 2_000
@@ -325,6 +326,11 @@ class Sandbox:
     def processes(self) -> SandboxProcesses:
         """Exposes supervised process operations on the sandbox runtime."""
         return self._connection().processes
+
+    @property
+    def pty(self) -> SandboxPty:
+        """Exposes interactive PTY sessions on the sandbox runtime."""
+        return self._connection().pty
 
     def exec(
         self,
@@ -688,6 +694,11 @@ class AsyncSandbox:
     def processes(self) -> AsyncSandboxProcesses:
         """Exposes supervised process operations on the sandbox runtime."""
         return self._connection().processes
+
+    @property
+    def pty(self) -> AsyncSandboxPty:
+        """Exposes interactive PTY sessions on the sandbox runtime."""
+        return self._connection().pty
 
     async def exec(
         self,
