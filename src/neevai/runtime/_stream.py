@@ -20,8 +20,9 @@ from neevai.runtime.schemas import (
     ProcessLogFrame,
     StderrFrame,
     StdoutFrame,
+    WatchFrame,
 )
-from neevai.types import ExecStreamEvent, ProcessLogEvent
+from neevai.types import ExecStreamEvent, FileEntry, ProcessLogEvent, WatchEvent
 
 REASON_STATUS: dict[str, int] = {
     "permission_denied": 403,
@@ -185,3 +186,27 @@ async def _aiter_process_log_events(lines: AsyncIterator[str]) -> AsyncIterator[
         frame = _parse_log_frame(json.loads(trimmed))
         for event in _yield_log_frame_events(frame, state):
             yield event
+
+
+def _watch_event_from_frame(frame: WatchFrame) -> WatchEvent:
+    """Maps a raw watch NDJSON frame to a public WatchEvent (mapping the entry, if any)."""
+    entry = FileEntry.model_validate(frame.entry.model_dump()) if frame.entry else None
+    return WatchEvent(type=frame.type, path=frame.path, entry=entry)
+
+
+def _iter_watch_events(lines: Iterator[str]) -> Iterator[WatchEvent]:
+    """Parses an NDJSON watch stream, yielding one WatchEvent per change frame."""
+    for line in lines:
+        trimmed = line.strip()
+        if not trimmed:
+            continue
+        yield _watch_event_from_frame(WatchFrame.model_validate_json(trimmed))
+
+
+async def _aiter_watch_events(lines: AsyncIterator[str]) -> AsyncIterator[WatchEvent]:
+    """Async variant of :func:`_iter_watch_events`."""
+    async for line in lines:
+        trimmed = line.strip()
+        if not trimmed:
+            continue
+        yield _watch_event_from_frame(WatchFrame.model_validate_json(trimmed))

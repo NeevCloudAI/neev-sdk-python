@@ -45,6 +45,7 @@ __all__ = [
     "StderrStreamEvent",
     "StdoutStreamEvent",
     "UpdateAgentParams",
+    "WatchEvent",
 ]
 
 # Public re-exports of generated types. These are aliased into
@@ -185,6 +186,15 @@ class FileEntry(BaseModel):
     permissions: str
     modified_time: str
     symlink_target: str | None = None
+
+
+class WatchEvent(BaseModel):
+    """A single filesystem change reported by ``sandbox.files.watch``."""
+
+    type: Literal["create", "write", "remove", "rename", "chmod"]
+    path: str
+    # Metadata for the entry when it still exists; absent on removal.
+    entry: FileEntry | None = None
 
 
 class ExecResult(BaseModel):

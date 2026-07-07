@@ -26,6 +26,20 @@ class FileListResponse(BaseModel):
     entries: list[FileListEntry]
 
 
+class FileEntryResponse(BaseModel):
+    entry: FileListEntry
+
+
+class FileExistsResponse(BaseModel):
+    exists: bool
+
+
+class WatchFrame(BaseModel):
+    type: Literal["create", "write", "remove", "rename", "chmod"]
+    path: str
+    entry: FileListEntry | None = None
+
+
 class StdoutFrame(BaseModel):
     type: Literal["stdout"]
     data: str

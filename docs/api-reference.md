@@ -281,6 +281,12 @@ Minimal one-liners for each public API. Runnable examples link to repo paths.
 | `sandbox.files.read(...)` | `data = sandbox.files.read("path.txt")` | `data = await sandbox.files.read("path.txt")` | [agent_loop.py](../examples/agent_patterns/utils/agent_loop.py) |
 | `sandbox.files.read_text(...)` | `text = sandbox.files.read_text("path.txt")` | `text = await sandbox.files.read_text("path.txt")` | [files_api.py](../examples/files_api.py), [snapshot_fork_restore.py](../examples/snapshot_fork_restore.py) |
 | `sandbox.files.list(...)` | `entries = sandbox.files.list("dir", recursive=True)` | `entries = await sandbox.files.list("dir", recursive=True)` | [files_api.py](../examples/files_api.py) |
+| `sandbox.files.stat(...)` | `entry = sandbox.files.stat("path.txt")` | `entry = await sandbox.files.stat("path.txt")` | [files_api.py](../examples/files_api.py) |
+| `sandbox.files.exists(...)` | `ok = sandbox.files.exists("path.txt")` | `ok = await sandbox.files.exists("path.txt")` | [files_api.py](../examples/files_api.py) |
+| `sandbox.files.mkdir(...)` | `sandbox.files.mkdir("dir")` | `await sandbox.files.mkdir("dir")` | [files_api.py](../examples/files_api.py) |
+| `sandbox.files.move(...)` | `sandbox.files.move("a.txt", "b.txt")` | `await sandbox.files.move("a.txt", "b.txt")` | [files_api.py](../examples/files_api.py) |
+| `sandbox.files.remove(...)` | `sandbox.files.remove("dir", recursive=True)` | `await sandbox.files.remove("dir", recursive=True)` | [files_api.py](../examples/files_api.py) |
+| `sandbox.files.watch(...)` | `for ev in sandbox.files.watch("."): ...` | `async for ev in sandbox.files.watch("."): ...` | [files_api.py](../examples/files_api.py) |
 | `workflow_examples/*` | Model-driven sandboxes via `StreamingAgentLoop` — not `client.agents` | same | [repo_analyzer.py](../examples/workflow_examples/repo_analyzer.py) |
 | `SandboxConnection` (low-level) | via `sandbox.exec` on handle | via `await sandbox.exec` on handle | — |
 | `SandboxFiles` (low-level) | via `sandbox.files` property | via `sandbox.files` property | [files_api.py](../examples/files_api.py) |

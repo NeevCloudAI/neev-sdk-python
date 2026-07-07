@@ -4,17 +4,29 @@ import httpx
 
 from neevai.runtime._stream import (
     _aiter_exec_stream_events,
+    _aiter_watch_events,
     _iter_exec_stream_events,
+    _iter_watch_events,
     _prepare_argv,
 )
-from neevai.runtime.schemas import FileListResponse, FileWriteResponse
+from neevai.runtime.schemas import (
+    FileEntryResponse,
+    FileExistsResponse,
+    FileListResponse,
+    FileWriteResponse,
+)
 from neevai.transport.runtime import AsyncRuntimeTransport, RuntimeTransport
-from neevai.types import ExecResult, ExecStreamEvent, FileEntry
+from neevai.types import ExecResult, ExecStreamEvent, FileEntry, WatchEvent
 
 
 def _entries_from_response(data: object) -> list[FileEntry]:
     parsed = FileListResponse.model_validate(data)
     return [FileEntry.model_validate(entry.model_dump()) for entry in parsed.entries]
+
+
+def _entry_from_response(data: object) -> FileEntry:
+    parsed = FileEntryResponse.model_validate(data)
+    return FileEntry.model_validate(parsed.entry.model_dump())
 
 
 def _prepare_exec_body(
@@ -97,6 +109,70 @@ class SandboxFiles:
             body=body,
         )
         return _entries_from_response(response.json())
+
+    def stat(self, path: str, cwd: str | None = None) -> FileEntry:
+        """Returns metadata for a single path in the sandbox."""
+        response = self._conn._transport.request(
+            method="POST",
+            path="/v1/files/stat",
+            headers={"Content-Type": "application/json"},
+            body={"path": path, "cwd": cwd},
+        )
+        return _entry_from_response(response.json())
+
+    def exists(self, path: str, cwd: str | None = None) -> bool:
+        """Reports whether a path exists in the sandbox."""
+        response = self._conn._transport.request(
+            method="POST",
+            path="/v1/files/exists",
+            headers={"Content-Type": "application/json"},
+            body={"path": path, "cwd": cwd},
+        )
+        return FileExistsResponse.model_validate(response.json()).exists
+
+    def mkdir(self, path: str, cwd: str | None = None) -> FileEntry:
+        """Creates a directory (and parents) in the sandbox, returning its entry."""
+        response = self._conn._transport.request(
+            method="POST",
+            path="/v1/files/mkdir",
+            headers={"Content-Type": "application/json"},
+            body={"path": path, "cwd": cwd},
+        )
+        return _entry_from_response(response.json())
+
+    def move(self, source: str, destination: str, cwd: str | None = None) -> FileEntry:
+        """Moves or renames a path in the sandbox, returning the destination entry."""
+        response = self._conn._transport.request(
+            method="POST",
+            path="/v1/files/move",
+            headers={"Content-Type": "application/json"},
+            body={"source": source, "destination": destination, "cwd": cwd},
+        )
+        return _entry_from_response(response.json())
+
+    def remove(self, path: str, cwd: str | None = None, recursive: bool = False) -> None:
+        """Removes a file or directory from the sandbox."""
+        self._conn._transport.request(
+            method="POST",
+            path="/v1/files/remove",
+            headers={"Content-Type": "application/json"},
+            body={"path": path, "cwd": cwd, "recursive": recursive},
+        )
+
+    def watch(
+        self,
+        path: str,
+        cwd: str | None = None,
+        recursive: bool = False,
+        timeout_ms: int | None = None,
+    ) -> Iterator[WatchEvent]:
+        """Streams filesystem change events under a path until the watch ends."""
+        headers = {"Content-Type": "application/json", "Accept": "application/x-ndjson"}
+        body = {"path": path, "cwd": cwd, "recursive": recursive, "timeout_ms": timeout_ms}
+        lines = self._conn._transport.stream_request(
+            "POST", "/v1/files/watch", headers=headers, body=body
+        )
+        yield from _iter_watch_events(iter(lines))
 
 
 class SandboxConnection:
@@ -237,6 +313,76 @@ class AsyncSandboxFiles:
             body=body,
         )
         return _entries_from_response(response.json())
+
+    async def stat(self, path: str, cwd: str | None = None) -> FileEntry:
+        """Returns metadata for a single path in the sandbox."""
+        response = await self._conn._transport.request(
+            method="POST",
+            path="/v1/files/stat",
+            headers={"Content-Type": "application/json"},
+            body={"path": path, "cwd": cwd},
+        )
+        return _entry_from_response(response.json())
+
+    async def exists(self, path: str, cwd: str | None = None) -> bool:
+        """Reports whether a path exists in the sandbox."""
+        response = await self._conn._transport.request(
+            method="POST",
+            path="/v1/files/exists",
+            headers={"Content-Type": "application/json"},
+            body={"path": path, "cwd": cwd},
+        )
+        return FileExistsResponse.model_validate(response.json()).exists
+
+    async def mkdir(self, path: str, cwd: str | None = None) -> FileEntry:
+        """Creates a directory (and parents) in the sandbox, returning its entry."""
+        response = await self._conn._transport.request(
+            method="POST",
+            path="/v1/files/mkdir",
+            headers={"Content-Type": "application/json"},
+            body={"path": path, "cwd": cwd},
+        )
+        return _entry_from_response(response.json())
+
+    async def move(self, source: str, destination: str, cwd: str | None = None) -> FileEntry:
+        """Moves or renames a path in the sandbox, returning the destination entry."""
+        response = await self._conn._transport.request(
+            method="POST",
+            path="/v1/files/move",
+            headers={"Content-Type": "application/json"},
+            body={"source": source, "destination": destination, "cwd": cwd},
+        )
+        return _entry_from_response(response.json())
+
+    async def remove(self, path: str, cwd: str | None = None, recursive: bool = False) -> None:
+        """Removes a file or directory from the sandbox."""
+        await self._conn._transport.request(
+            method="POST",
+            path="/v1/files/remove",
+            headers={"Content-Type": "application/json"},
+            body={"path": path, "cwd": cwd, "recursive": recursive},
+        )
+
+    async def watch(
+        self,
+        path: str,
+        cwd: str | None = None,
+        recursive: bool = False,
+        timeout_ms: int | None = None,
+    ) -> AsyncIterator[WatchEvent]:
+        """Streams filesystem change events under a path until the watch ends."""
+        headers = {"Content-Type": "application/json", "Accept": "application/x-ndjson"}
+        body = {"path": path, "cwd": cwd, "recursive": recursive, "timeout_ms": timeout_ms}
+        stream_gen = self._conn._transport.stream_request(
+            "POST", "/v1/files/watch", headers=headers, body=body
+        )
+
+        async def _lines() -> AsyncIterator[str]:
+            async for line in stream_gen:
+                yield line
+
+        async for event in _aiter_watch_events(_lines()):
+            yield event
 
 
 class AsyncSandboxConnection:

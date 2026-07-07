@@ -796,6 +796,50 @@ for entry in entries:
 **Examples:** [`files_api.py`](../examples/files_api.py),
 [`workflow_examples/repo_analyzer.py`](../examples/workflow_examples/repo_analyzer.py)
 
+### `sandbox.files.stat(path, cwd=None)`
+
+**Returns:** a single `FileEntry` for `path`.
+
+```python
+entry = sandbox.files.stat("README.md")
+print(entry.type, entry.size, entry.modified_time)
+```
+
+### `sandbox.files.exists(path, cwd=None)`
+
+**Returns:** `bool` — whether `path` exists.
+
+```python
+if not sandbox.files.exists("out"):
+    sandbox.files.mkdir("out")
+```
+
+### `sandbox.files.mkdir(path, cwd=None)`
+
+Creates a directory (and any missing parents). **Returns:** the `FileEntry` for the new directory.
+
+### `sandbox.files.move(source, destination, cwd=None)`
+
+Moves or renames a path. **Returns:** the `FileEntry` for the destination.
+
+### `sandbox.files.remove(path, cwd=None, recursive=False)`
+
+Removes a file, or a directory when `recursive=True`. **Returns:** `None`.
+
+### `sandbox.files.watch(path, cwd=None, recursive=False, timeout_ms=None)`
+
+Streams filesystem changes under `path`. **Returns:** an iterator (async iterator on the
+async client) of `WatchEvent` — `type` (`create` / `write` / `remove` / `rename` / `chmod`),
+`path`, and `entry` (a `FileEntry`, absent on removal). The stream ends on timeout,
+cancellation, or disconnect.
+
+```python
+for event in sandbox.files.watch(".", recursive=True):
+    print(event.type, event.path)
+```
+
+**Examples:** [`files_api.py`](../examples/files_api.py)
+
 ---
 
 ## Processes API
