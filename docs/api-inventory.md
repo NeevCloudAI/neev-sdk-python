@@ -656,6 +656,34 @@ sandbox.revoke_port(8080)
 
 **Example:** [`preview_ports.py`](../examples/preview_ports.py)
 
+### Interactive PTY — `sandbox.pty`
+
+`sandbox.pty.create(program=None, args=None, cols=0, rows=0, id=None, on_data=None)`
+opens a pseudo-terminal over a WebSocket and returns a `PtyHandle` (`AsyncPtyHandle`
+on the async client). Pass `id=<handle.id>` to reattach to an earlier terminal
+instead of starting a new one.
+
+Handle:
+
+- `on_data(chunk: bytes)` — called with each chunk of terminal output.
+- `send_input(data: str | bytes)` — send keystrokes/bytes to stdin.
+- `resize(cols, rows)` — tell the terminal its window changed size.
+- `kill(signal="SIGTERM")` — signal the process group (SIGINT/SIGTERM/SIGHUP/SIGQUIT/SIGKILL).
+- `wait()` — block until the session ends, returning the exit code.
+- `disconnect()` — close the socket; the sandbox reaps the child.
+- `id` — the terminal id, for reattaching later.
+
+```python
+pty = sandbox.pty.create(program="sh", cols=80, rows=24, on_data=lambda b: sys.stdout.buffer.write(b))
+pty.send_input("echo hi\n")
+pty.send_input("exit\n")
+print(pty.wait())
+```
+
+Requires the `websockets` package (a dependency of the SDK).
+
+**Example:** [`pty.py`](../examples/pty.py)
+
 ### `sandbox.snapshot(params=None)` / `sandbox.snapshots()`
 
 Convenience wrappers for `create_snapshot` and `list_snapshots` on this sandbox.
