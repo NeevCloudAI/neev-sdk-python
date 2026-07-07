@@ -50,6 +50,19 @@ class SandboxResources(BaseModel):
     )
 
 
+class ExposePortRequest(BaseModel):
+    port: conint(ge=1, le=65535) = Field(..., description="User port to expose for preview URLs.")
+
+
+class SandboxPort(BaseModel):
+    port: int = Field(..., description="The exposed user port.")
+    preview_url: str = Field(..., description="Public credential-free preview URL for this port.")
+
+
+class SandboxPortList(BaseModel):
+    ports: list[SandboxPort]
+
+
 class PauseSandboxRequest(BaseModel):
     preserve_memory: bool | None = Field(
         True,
@@ -343,6 +356,10 @@ class Sandbox(BaseModel):
     connect_url: str | None = Field(
         None,
         description="Public URL the SDK calls (API key + X-Sandbox-Id). null when not configured.",
+    )
+    preview_url_template: str | None = Field(
+        None,
+        description="Template for a public preview URL with {port} left for get_url(port=...) to fill client-side. null when not configured.",
     )
     replicas: conint(ge=0, le=1) = Field(..., description="0 = paused, 1 = running.")
     egress: SandboxEgressConfig | None = None

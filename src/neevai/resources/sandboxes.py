@@ -1,20 +1,93 @@
 from __future__ import annotations
 
+import asyncio
 import builtins
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+import httpx
+
 from neevai._parse import coerce_model, coerce_params
+from neevai.errors import NeevAIError
+from neevai.generated.aiagent import SandboxPortList
 from neevai.types import (
     CreateSandboxParams,
     CreateSnapshotParams,
     SandboxData,
     SandboxListResponse,
     SandboxMetricsResponse,
+    SandboxPort,
     Snapshot,
     SnapshotListResponse,
 )
+
+# Defaults for get_url's wait: overall budget and delay between preview-URL probes.
+DEFAULT_PORT_WAIT_TIMEOUT_MS = 60_000
+DEFAULT_PORT_POLL_INTERVAL_MS = 2_000
+
+
+def _preview_url_reachable(url: str, timeout_ms: float) -> bool:
+    """Probes a preview URL; True once the gateway routes it (stops returning a 403/404)."""
+    try:
+        resp = httpx.get(url, follow_redirects=False, timeout=timeout_ms / 1000.0)
+    except (httpx.HTTPError, httpx.InvalidURL):
+        # Connection error, DNS failure, timeout, or a malformed URL — not routable yet.
+        return False
+    return resp.status_code not in (403, 404)
+
+
+async def _apreview_url_reachable(url: str, timeout_ms: float) -> bool:
+    """Async variant of :func:`_preview_url_reachable`."""
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(url, follow_redirects=False, timeout=timeout_ms / 1000.0)
+    except (httpx.HTTPError, httpx.InvalidURL):
+        return False
+    return resp.status_code not in (403, 404)
+
+
+def _validate_wait_args(timeout_ms: int, poll_interval_ms: int) -> None:
+    """Rejects non-positive wait budgets before the polling loop starts."""
+    if timeout_ms <= 0:
+        raise NeevAIError(f"get_url: timeout_ms must be a positive number (got {timeout_ms}).")
+    if poll_interval_ms <= 0:
+        raise NeevAIError(
+            f"get_url: poll_interval_ms must be a positive number (got {poll_interval_ms})."
+        )
+
+
+def _wait_for_preview_url(url: str, timeout_ms: int, poll_interval_ms: int) -> None:
+    """Polls a preview URL until the gateway routes it; raises on timeout."""
+    _validate_wait_args(timeout_ms, poll_interval_ms)
+    deadline = (time.time() * 1000.0) + timeout_ms
+    while True:
+        remaining = deadline - (time.time() * 1000.0)
+        if remaining <= 0:
+            raise NeevAIError(f"Preview URL {url} was not routable within {timeout_ms}ms.")
+        # Bound each probe to the remaining budget so a stalled request can't outlast the deadline.
+        if _preview_url_reachable(url, remaining):
+            return
+        wait = min(poll_interval_ms, deadline - (time.time() * 1000.0))
+        if wait > 0:
+            time.sleep(wait / 1000.0)
+
+
+async def _await_for_preview_url(url: str, timeout_ms: int, poll_interval_ms: int) -> None:
+    """Async variant of :func:`_wait_for_preview_url`."""
+    _validate_wait_args(timeout_ms, poll_interval_ms)
+    deadline = (time.time() * 1000.0) + timeout_ms
+    while True:
+        remaining = deadline - (time.time() * 1000.0)
+        if remaining <= 0:
+            raise NeevAIError(f"Preview URL {url} was not routable within {timeout_ms}ms.")
+        if await _apreview_url_reachable(url, remaining):
+            return
+        wait = min(poll_interval_ms, deadline - (time.time() * 1000.0))
+        if wait > 0:
+            await asyncio.sleep(wait / 1000.0)
+
 
 if TYPE_CHECKING:
     from neevai.client import AsyncNeevAI, NeevAI
@@ -208,6 +281,52 @@ class Sandboxes:
 
         raw = self._client._transport.request("GET", path, query=query)
         return coerce_model(SandboxMetricsResponse, raw)
+
+    def expose_port(
+        self, id: str, port: int, org_id: str | None = None, project_id: str | None = None
+    ) -> SandboxPort:
+        """Exposes a port for credential-free preview URLs and returns it with its URL."""
+        scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
+        path = f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes/{id}/ports"
+        raw = self._client._transport.request("POST", path, body={"port": port})
+        return coerce_model(SandboxPort, raw)
+
+    def list_ports(
+        self, id: str, org_id: str | None = None, project_id: str | None = None
+    ) -> builtins.list[SandboxPort]:
+        """Lists the ports currently exposed for this sandbox's preview URLs."""
+        scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
+        path = f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes/{id}/ports"
+        raw = self._client._transport.request("GET", path)
+        return coerce_model(SandboxPortList, raw).ports
+
+    def revoke_port(
+        self, id: str, port: int, org_id: str | None = None, project_id: str | None = None
+    ) -> None:
+        """Revokes a previously exposed preview port (revoking an unexposed port is a no-op)."""
+        scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
+        path = (
+            f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}"
+            f"/sandboxes/{id}/ports/{port}"
+        )
+        self._client._transport.request("DELETE", path)
+
+    def get_port_url(
+        self,
+        id: str,
+        port: int,
+        wait_until_ready: bool = True,
+        timeout_ms: int = DEFAULT_PORT_WAIT_TIMEOUT_MS,
+        poll_interval_ms: int = DEFAULT_PORT_POLL_INTERVAL_MS,
+        org_id: str | None = None,
+        project_id: str | None = None,
+    ) -> str:
+        """Exposes a port and returns its preview URL, waiting until it is routable by default."""
+        exposed = self.expose_port(id, port, org_id=org_id, project_id=project_id)
+        if not wait_until_ready:
+            return exposed.preview_url
+        _wait_for_preview_url(exposed.preview_url, timeout_ms, poll_interval_ms)
+        return exposed.preview_url
 
     def create_snapshot(
         self,
@@ -459,6 +578,52 @@ class AsyncSandboxes:
 
         raw = await self._client._transport.request("GET", path, query=query)
         return coerce_model(SandboxMetricsResponse, raw)
+
+    async def expose_port(
+        self, id: str, port: int, org_id: str | None = None, project_id: str | None = None
+    ) -> SandboxPort:
+        """Exposes a port for credential-free preview URLs and returns it with its URL."""
+        scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
+        path = f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes/{id}/ports"
+        raw = await self._client._transport.request("POST", path, body={"port": port})
+        return coerce_model(SandboxPort, raw)
+
+    async def list_ports(
+        self, id: str, org_id: str | None = None, project_id: str | None = None
+    ) -> builtins.list[SandboxPort]:
+        """Lists the ports currently exposed for this sandbox's preview URLs."""
+        scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
+        path = f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes/{id}/ports"
+        raw = await self._client._transport.request("GET", path)
+        return coerce_model(SandboxPortList, raw).ports
+
+    async def revoke_port(
+        self, id: str, port: int, org_id: str | None = None, project_id: str | None = None
+    ) -> None:
+        """Revokes a previously exposed preview port (revoking an unexposed port is a no-op)."""
+        scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
+        path = (
+            f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}"
+            f"/sandboxes/{id}/ports/{port}"
+        )
+        await self._client._transport.request("DELETE", path)
+
+    async def get_port_url(
+        self,
+        id: str,
+        port: int,
+        wait_until_ready: bool = True,
+        timeout_ms: int = DEFAULT_PORT_WAIT_TIMEOUT_MS,
+        poll_interval_ms: int = DEFAULT_PORT_POLL_INTERVAL_MS,
+        org_id: str | None = None,
+        project_id: str | None = None,
+    ) -> str:
+        """Exposes a port and returns its preview URL, waiting until it is routable by default."""
+        exposed = await self.expose_port(id, port, org_id=org_id, project_id=project_id)
+        if not wait_until_ready:
+            return exposed.preview_url
+        await _await_for_preview_url(exposed.preview_url, timeout_ms, poll_interval_ms)
+        return exposed.preview_url
 
     async def create_snapshot(
         self,

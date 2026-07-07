@@ -5,12 +5,17 @@ from collections.abc import AsyncGenerator, Callable, Generator, Mapping
 from typing import TYPE_CHECKING, Any
 
 from neevai.errors import APIConnectionError, APIError, APITimeoutError, NeevAIError
+from neevai.resources.sandboxes import (
+    DEFAULT_PORT_POLL_INTERVAL_MS,
+    DEFAULT_PORT_WAIT_TIMEOUT_MS,
+)
 from neevai.types import (
     CreateSnapshotParams,
     ExecResult,
     ExecStreamEvent,
     SandboxData,
     SandboxMetricsResponse,
+    SandboxPort,
     Scope,
     Snapshot,
 )
@@ -178,6 +183,58 @@ class Sandbox:
             from_=from_,
             to=to,
             step=step,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+        )
+
+    def expose_port(self, port: int) -> SandboxPort:
+        """Exposes a port for credential-free preview URLs and returns it with its URL."""
+        if self.sandboxes is None:
+            raise NeevAIError("Cannot expose a port on a sandbox handle with no client context.")
+        return self.sandboxes.expose_port(
+            self.id,
+            port,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+        )
+
+    def list_ports(self) -> list[SandboxPort]:
+        """Lists the ports currently exposed for this sandbox's preview URLs."""
+        if self.sandboxes is None:
+            raise NeevAIError("Cannot list ports on a sandbox handle with no client context.")
+        return self.sandboxes.list_ports(
+            self.id,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+        )
+
+    def revoke_port(self, port: int) -> None:
+        """Revokes a previously exposed preview port."""
+        if self.sandboxes is None:
+            raise NeevAIError("Cannot revoke a port on a sandbox handle with no client context.")
+        self.sandboxes.revoke_port(
+            self.id,
+            port,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+        )
+
+    def get_url(
+        self,
+        port: int,
+        wait_until_ready: bool = True,
+        timeout_ms: int = DEFAULT_PORT_WAIT_TIMEOUT_MS,
+        poll_interval_ms: int = DEFAULT_PORT_POLL_INTERVAL_MS,
+    ) -> str:
+        """Exposes a port and returns its preview URL, waiting until it is routable by default."""
+        if self.sandboxes is None:
+            raise NeevAIError("Cannot get a URL on a sandbox handle with no client context.")
+        return self.sandboxes.get_port_url(
+            self.id,
+            port,
+            wait_until_ready=wait_until_ready,
+            timeout_ms=timeout_ms,
+            poll_interval_ms=poll_interval_ms,
             org_id=self.scope.org_id if self.scope else None,
             project_id=self.scope.project_id if self.scope else None,
         )
@@ -496,6 +553,58 @@ class AsyncSandbox:
             from_=from_,
             to=to,
             step=step,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+        )
+
+    async def expose_port(self, port: int) -> SandboxPort:
+        """Exposes a port for credential-free preview URLs and returns it with its URL."""
+        if self.sandboxes is None:
+            raise NeevAIError("Cannot expose a port on a sandbox handle with no client context.")
+        return await self.sandboxes.expose_port(
+            self.id,
+            port,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+        )
+
+    async def list_ports(self) -> list[SandboxPort]:
+        """Lists the ports currently exposed for this sandbox's preview URLs."""
+        if self.sandboxes is None:
+            raise NeevAIError("Cannot list ports on a sandbox handle with no client context.")
+        return await self.sandboxes.list_ports(
+            self.id,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+        )
+
+    async def revoke_port(self, port: int) -> None:
+        """Revokes a previously exposed preview port."""
+        if self.sandboxes is None:
+            raise NeevAIError("Cannot revoke a port on a sandbox handle with no client context.")
+        await self.sandboxes.revoke_port(
+            self.id,
+            port,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+        )
+
+    async def get_url(
+        self,
+        port: int,
+        wait_until_ready: bool = True,
+        timeout_ms: int = DEFAULT_PORT_WAIT_TIMEOUT_MS,
+        poll_interval_ms: int = DEFAULT_PORT_POLL_INTERVAL_MS,
+    ) -> str:
+        """Exposes a port and returns its preview URL, waiting until it is routable by default."""
+        if self.sandboxes is None:
+            raise NeevAIError("Cannot get a URL on a sandbox handle with no client context.")
+        return await self.sandboxes.get_port_url(
+            self.id,
+            port,
+            wait_until_ready=wait_until_ready,
+            timeout_ms=timeout_ms,
+            poll_interval_ms=poll_interval_ms,
             org_id=self.scope.org_id if self.scope else None,
             project_id=self.scope.project_id if self.scope else None,
         )
