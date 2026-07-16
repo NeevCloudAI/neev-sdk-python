@@ -684,6 +684,32 @@ Requires the `websockets` package (a dependency of the SDK).
 
 **Example:** [`pty.py`](../examples/pty.py)
 
+### SSH tunnel — `sandbox.ssh`
+
+`sandbox.ssh(port=None, host="127.0.0.1")` binds a local loopback TCP listener and
+forwards each connection to the sandbox's SSH endpoint over an authenticated
+WebSocket, so any ssh client, `scp`/`rsync`, or IDE remote-dev reaches it with no
+keys to manage and no public port. `port` of `None`/`0` picks a free ephemeral port.
+Returns a running tunnel (`AsyncSshTunnel` on the async client). Host-side only: it
+opens a local listener, so it is not available in the browser.
+
+Tunnel:
+
+- `host` / `port` — the loopback address the listener is bound to.
+- `close()` — stop the listener and drop in-flight connections (idempotent; `await`
+  it on the async tunnel). Also a context manager (`with sandbox.ssh() as tunnel:`,
+  or `async with await sandbox.ssh() as tunnel:`).
+
+```python
+with sandbox.ssh() as tunnel:
+    print(f"ssh -p {tunnel.port} neev@localhost")
+    # point scp / rsync / ssh at 127.0.0.1:tunnel.port …
+```
+
+Requires the `websockets` package (a dependency of the SDK).
+
+**Example:** [`ssh_tunnel.py`](../examples/ssh_tunnel.py)
+
 ### `sandbox.snapshot(params=None)` / `sandbox.snapshots()`
 
 Convenience wrappers for `create_snapshot` and `list_snapshots` on this sandbox.

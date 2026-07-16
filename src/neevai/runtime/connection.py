@@ -192,9 +192,11 @@ class SandboxConnection:
         self.files = SandboxFiles(self)
         from neevai.runtime.processes import SandboxProcesses
         from neevai.runtime.pty import SandboxPty
+        from neevai.runtime.ssh import SandboxSsh
 
         self.processes = SandboxProcesses(self)
         self.pty = SandboxPty(self)
+        self.ssh = SandboxSsh(self)
 
     def close(self) -> None:
         """Closes the underlying transport connection."""
@@ -404,9 +406,11 @@ class AsyncSandboxConnection:
         self.files = AsyncSandboxFiles(self)
         from neevai.runtime.processes import AsyncSandboxProcesses
         from neevai.runtime.pty import AsyncSandboxPty
+        from neevai.runtime.ssh import AsyncSandboxSsh
 
         self.processes = AsyncSandboxProcesses(self)
         self.pty = AsyncSandboxPty(self)
+        self.ssh = AsyncSandboxSsh(self)
 
     async def aclose(self) -> None:
         """Closes the underlying async transport connection."""

@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     )
     from neevai.runtime.processes import AsyncSandboxProcesses, SandboxProcesses
     from neevai.runtime.pty import AsyncSandboxPty, SandboxPty
+    from neevai.runtime.ssh import AsyncSshTunnel, SshTunnel
 
 DEFAULT_WAIT_TIMEOUT_MS = 120_000
 DEFAULT_POLL_INTERVAL_MS = 2_000
@@ -331,6 +332,13 @@ class Sandbox:
     def pty(self) -> SandboxPty:
         """Exposes interactive PTY sessions on the sandbox runtime."""
         return self._connection().pty
+
+    def ssh(self, port: int | None = None, host: str = "127.0.0.1") -> SshTunnel:
+        """Opens an SSH tunnel to the sandbox: a loopback listener that forwards each
+        connection over an authenticated WebSocket, so any ssh client, ``scp``/``rsync``,
+        or IDE remote-dev points at ``{host, port}`` with no keys and no public port.
+        Waits for the sandbox to be Ready on first use. Close the tunnel when done."""
+        return self._connection().ssh.open(port=port, host=host)
 
     def exec(
         self,
@@ -699,6 +707,10 @@ class AsyncSandbox:
     def pty(self) -> AsyncSandboxPty:
         """Exposes interactive PTY sessions on the sandbox runtime."""
         return self._connection().pty
+
+    async def ssh(self, port: int | None = None, host: str = "127.0.0.1") -> AsyncSshTunnel:
+        """Opens an SSH tunnel to the sandbox. See :meth:`Sandbox.ssh`."""
+        return await self._connection().ssh.open(port=port, host=host)
 
     async def exec(
         self,
