@@ -122,9 +122,11 @@ def _make_agent_record(
         "project_id": project_id,
         "name": req.get("name", "test-agent"),
         "agent_template_id": agent_template_id,
+        "drive_mode": "http",
         "sandbox_id": sandbox_id,
         "config": req.get("config"),
         "status": "Provisioning",
+        "metrics_url": f"https://metrics.example/agents/{aid}",
         "created_at": now,
         "updated_at": now,
     }

@@ -12,6 +12,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    RootModel,
     confloat,
     conint,
     constr,
@@ -34,6 +35,7 @@ class SandboxPhase(Enum):
     NotReady = "NotReady"
     Unknown = "Unknown"
     Paused = "Paused"
+    RestoreFailed = "RestoreFailed"
 
 
 class SandboxResources(BaseModel):
@@ -85,15 +87,20 @@ class Snapshot(BaseModel):
     name: str | None = Field(None, description="Optional customer-supplied name.")
     status: SnapshotStatus
     include_memory: bool = Field(..., description="True = FS+memory captured; false = FS only.")
-    source_region: str = Field(..., description="DP cluster slug where the blob lives.")
+    source_region: str = Field(..., description="Region where the snapshot is stored.")
     size_bytes: int | None = Field(
-        None, description="Uncompressed blob size. Null until status=Ready."
+        None,
+        description="Uncompressed snapshot size in bytes. Null until status=Ready.",
     )
     error_message: str | None = Field(
         None, description="Failure detail. Null unless status=Failed."
     )
     expires_at: AwareDatetime | None = Field(
         None, description="When the platform will GC this snapshot. Null = no expiry."
+    )
+    created_by: str | None = Field(
+        None,
+        description='Identity that created the snapshot (user email, or "system" for system-initiated snapshots like pause/fork).',
     )
     created_at: AwareDatetime
     updated_at: AwareDatetime
@@ -107,7 +114,10 @@ class SnapshotListResponse(BaseModel):
 
 
 class CreateSnapshotRequest(BaseModel):
-    name: str | None = Field(None, description="Optional human-readable name for this snapshot.")
+    name: constr(pattern=r"^[a-z]([-a-z0-9]*[a-z0-9])?$", max_length=63) | None = Field(
+        None,
+        description="Optional name for this snapshot. Must be a valid DNS name (lowercase\nalphanumeric or '-', starting with a letter, max 63 characters) so it\ncan name sandboxes created on fork and restore. Omit to leave unnamed.\n",
+    )
     include_memory: bool | None = Field(
         False,
         description="Capture process memory in addition to filesystem. Currently forced to false (RootFS only); memory capture is not yet supported.",
@@ -126,9 +136,9 @@ class RestoreSandboxRequest(BaseModel):
 
 
 class ForkSandboxRequest(BaseModel):
-    name: constr(pattern=r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", min_length=1, max_length=63) = Field(
+    name: constr(pattern=r"^[a-z]([-a-z0-9]*[a-z0-9])?$", min_length=1, max_length=63) = Field(
         ...,
-        description="Name for the new forked sandbox. Must be unique within the project.",
+        description="Name for the new forked sandbox. Must be unique within the project,\nand a valid DNS name: lowercase alphanumeric characters or '-',\nstarting with a letter, ending with an alphanumeric, max 63 characters.\n",
     )
 
 
@@ -197,7 +207,7 @@ class MetricSeries(BaseModel):
 class ConnectTokenResponse(BaseModel):
     token: str = Field(
         ...,
-        description="Signed JWT connect-token, presented as a bearer credential to the sandbox runtime.",
+        description="Signed connect token, presented as a bearer credential when calling the sandbox directly.",
     )
     expires_in: int = Field(..., description="Token lifetime in seconds.")
 
@@ -218,30 +228,19 @@ class AgentStatus(Enum):
     Deleting = "Deleting"
 
 
-class Agent(BaseModel):
-    id: UUID
-    org_id: str
-    project_id: str
-    name: str
-    agent_template_id: str = Field(
+class DriveMode(Enum):
+    http = "http"
+    exec = "exec"
+    pty = "pty"
+
+
+class AgentConnectResponse(BaseModel):
+    connect_url: str = Field(..., description="Direct address the client calls to reach the agent.")
+    token: str = Field(
         ...,
-        description="Catalogue template id the agent was created from (e.g. ag-claude-code).",
+        description="Short-lived connect token, bound to this project and agent, presented\nas a bearer credential when calling the agent directly.\n",
     )
-    sandbox_id: UUID = Field(..., description="UUID of the backing sandbox that runs this agent.")
-    config: dict[str, Any] | None = Field(
-        None,
-        description="Effective agent configuration (template defaults merged with create-time overrides).",
-    )
-    status: AgentStatus
-    created_at: AwareDatetime
-    updated_at: AwareDatetime
-
-
-class AgentListResponse(BaseModel):
-    items: list[Agent]
-    total: int
-    page: int
-    limit: int
+    expires_at: AwareDatetime = Field(..., description="Absolute expiry of the ticket.")
 
 
 class Status(Enum):
@@ -267,10 +266,42 @@ class SandboxEgressConfig(BaseModel):
     )
 
 
-class CreateAgentRequest(BaseModel):
-    name: constr(pattern=r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", min_length=1, max_length=63) = Field(
+class Agent(BaseModel):
+    id: UUID
+    org_id: str
+    project_id: str
+    name: str
+    agent_template_id: str = Field(
         ...,
-        description="Agent name. Used verbatim as the backing sandbox name, so it must\nbe a valid DNS-1123 label: lowercase alphanumeric characters or '-',\nstarting and ending with an alphanumeric, max 63 characters.\n",
+        description="Catalogue template id the agent was created from (e.g. ag-claude-code).",
+    )
+    drive_mode: DriveMode
+    sandbox_id: UUID = Field(..., description="UUID of the backing sandbox that runs this agent.")
+    config: dict[str, Any] | None = Field(
+        None,
+        description="Effective agent configuration (template defaults merged with create-time overrides).",
+    )
+    status: AgentStatus
+    web_ui_url: str | None = Field(
+        None,
+        description="Public URL of the agent's own web UI, reached directly. Present only\nfor web agents (drive_mode http with a declared UI port); null\notherwise.\n",
+    )
+    metrics_url: str = Field(
+        ...,
+        description="API path for the sandbox's live health metrics (the getSandboxMetrics\nendpoint), relative to this API's base URL.\n",
+    )
+    gateway_token: str | None = Field(
+        None,
+        description="Token the agent's web UI uses to authenticate. Present only for web\nagents that gate the UI on a token; null otherwise.\n",
+    )
+    created_at: AwareDatetime
+    updated_at: AwareDatetime
+
+
+class CreateAgentRequest(BaseModel):
+    name: constr(pattern=r"^[a-z]([-a-z0-9]*[a-z0-9])?$", min_length=1, max_length=63) = Field(
+        ...,
+        description="Agent name. Must be a valid DNS name: lowercase alphanumeric\ncharacters or '-', starting with a letter, ending with an\nalphanumeric, max 63 characters.\n",
         examples=["my-agent"],
     )
     agent_template: constr(min_length=1) = Field(
@@ -308,10 +339,21 @@ class UpdateAgentRequest(BaseModel):
     )
 
 
+class AgentListResponse(BaseModel):
+    items: list[Agent]
+    total: int
+    page: int
+    limit: int
+
+
 class AgentTemplate(BaseModel):
     id: constr(pattern=r"^ag-[a-zA-Z0-9-]+$")
     name: str
     description: str
+    icon: str | None = Field(
+        None,
+        description="Display icon for the template (e.g. an SVG document) served as a string; null when the template has no icon.",
+    )
     category: str = Field(..., description="Template category (e.g. coding).")
     status: Status
     agent_version: str | None = Field(None, description="Version of the packaged agent binary.")
@@ -359,7 +401,7 @@ class Sandbox(BaseModel):
     )
     preview_url_template: str | None = Field(
         None,
-        description="Template for a public preview URL with {port} left for get_url(port=...) to fill client-side. null when not configured.",
+        description="Template for a public preview URL with {port} left for getUrl({port}) to fill client-side. null when not configured.",
     )
     replicas: conint(ge=0, le=1) = Field(..., description="0 = paused, 1 = running.")
     egress: SandboxEgressConfig | None = None
@@ -375,11 +417,55 @@ class Sandbox(BaseModel):
     updated_at: AwareDatetime
 
 
-class CreateSandboxRequest(BaseModel):
-    name: constr(pattern=r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", min_length=1, max_length=63) = Field(
-        ...,
-        description="Sandbox name. Used verbatim as the sandbox name and as a routing\nlabel, so it must be a valid DNS-1123 label: lowercase alphanumeric\ncharacters or '-', starting and ending with an alphanumeric, max 63\ncharacters.\n",
-        examples=["my-sandbox"],
+class CreateSandboxRequest1(BaseModel):
+    name: constr(pattern=r"^[a-z]([-a-z0-9]*[a-z0-9])?$", min_length=1, max_length=63) | None = (
+        Field(
+            None,
+            description="Sandbox name. Optional — when omitted, the server generates one (a\n\"sandbox-\" prefix plus a short random suffix). When provided, must be\na valid DNS name: lowercase alphanumeric characters or '-', starting\nwith a letter, ending with an alphanumeric, max 63 characters.\n",
+            examples=["my-sandbox"],
+        )
+    )
+    region: str | None = Field(
+        None,
+        description="Region to provision in; omit to use the platform default.",
+        examples=["dev"],
+    )
+    env: list[EnvVar] | None = None
+    resources: SandboxResources | None = None
+    egress: SandboxEgressConfig | None = None
+    sandbox_template_id: constr(pattern=r"^sb-[a-zA-Z0-9-]+$", min_length=1) = Field(
+        ..., description="Catalogue template id. Mutually exclusive with `image`."
+    )
+    image: (
+        constr(
+            pattern=r"^[^/@\s]+(/[^/@\s]+)+(:[^/@\s]+|@sha256:[a-fA-F0-9]+)$",
+            min_length=1,
+            max_length=512,
+        )
+        | None
+    ) = Field(
+        None,
+        description="Public OCI image reference with an explicit tag or digest. Mutually exclusive with `sandbox_template_id`.",
+        examples=["docker.io/library/python:3.12"],
+    )
+    command: list[str] | None = Field(
+        None,
+        description="Optional container command for BYOI creates; defaults to sleep infinity when omitted.",
+        examples=[["sleep", "infinity"]],
+    )
+    from_snapshot: UUID | None = Field(
+        None,
+        description="When set, the new sandbox is restored from this snapshot instead of\ncold-starting from the image. Snapshot must belong to the same\nproject. Sizing and region must match the snapshot's origin. Must not\nbe combined with `image`.\n",
+    )
+
+
+class CreateSandboxRequest2(BaseModel):
+    name: constr(pattern=r"^[a-z]([-a-z0-9]*[a-z0-9])?$", min_length=1, max_length=63) | None = (
+        Field(
+            None,
+            description="Sandbox name. Optional — when omitted, the server generates one (a\n\"sandbox-\" prefix plus a short random suffix). When provided, must be\na valid DNS name: lowercase alphanumeric characters or '-', starting\nwith a letter, ending with an alphanumeric, max 63 characters.\n",
+            examples=["my-sandbox"],
+        )
     )
     region: str | None = Field(
         None,
@@ -390,12 +476,125 @@ class CreateSandboxRequest(BaseModel):
     resources: SandboxResources | None = None
     egress: SandboxEgressConfig | None = None
     sandbox_template_id: constr(pattern=r"^sb-[a-zA-Z0-9-]+$", min_length=1) | None = Field(
+        None, description="Catalogue template id. Mutually exclusive with `image`."
+    )
+    image: constr(
+        pattern=r"^[^/@\s]+(/[^/@\s]+)+(:[^/@\s]+|@sha256:[a-fA-F0-9]+)$",
+        min_length=1,
+        max_length=512,
+    ) = Field(
+        ...,
+        description="Public OCI image reference with an explicit tag or digest. Mutually exclusive with `sandbox_template_id`.",
+        examples=["docker.io/library/python:3.12"],
+    )
+    command: list[str] | None = Field(
         None,
-        description="Catalogue template id (e.g. sb-ubuntu-26-04-minimal). The server\nvalidates the template exists and is active, then provisions the\nsandbox image and command from that template.\n",
+        description="Optional container command for BYOI creates; defaults to sleep infinity when omitted.",
+        examples=[["sleep", "infinity"]],
     )
     from_snapshot: UUID | None = Field(
         None,
-        description="When set, the new sandbox is restored from this snapshot instead of\ncold-starting from the image. Snapshot must belong to the same\nproject. Sizing and region must match the snapshot's origin.\n",
+        description="When set, the new sandbox is restored from this snapshot instead of\ncold-starting from the image. Snapshot must belong to the same\nproject. Sizing and region must match the snapshot's origin. Must not\nbe combined with `image`.\n",
+    )
+
+
+class CreateSandboxRequest3(BaseModel):
+    name: constr(pattern=r"^[a-z]([-a-z0-9]*[a-z0-9])?$", min_length=1, max_length=63) | None = (
+        Field(
+            None,
+            description="Sandbox name. Optional — when omitted, the server generates one (a\n\"sandbox-\" prefix plus a short random suffix). When provided, must be\na valid DNS name: lowercase alphanumeric characters or '-', starting\nwith a letter, ending with an alphanumeric, max 63 characters.\n",
+            examples=["my-sandbox"],
+        )
+    )
+    region: str | None = Field(
+        None,
+        description="Region to provision in; omit to use the platform default.",
+        examples=["dev"],
+    )
+    env: list[EnvVar] | None = None
+    resources: SandboxResources | None = None
+    egress: SandboxEgressConfig | None = None
+    sandbox_template_id: constr(pattern=r"^sb-[a-zA-Z0-9-]+$", min_length=1) | None = Field(
+        None, description="Catalogue template id. Mutually exclusive with `image`."
+    )
+    image: (
+        constr(
+            pattern=r"^[^/@\s]+(/[^/@\s]+)+(:[^/@\s]+|@sha256:[a-fA-F0-9]+)$",
+            min_length=1,
+            max_length=512,
+        )
+        | None
+    ) = Field(
+        None,
+        description="Public OCI image reference with an explicit tag or digest. Mutually exclusive with `sandbox_template_id`.",
+        examples=["docker.io/library/python:3.12"],
+    )
+    command: list[str] | None = Field(
+        None,
+        description="Optional container command for BYOI creates; defaults to sleep infinity when omitted.",
+        examples=[["sleep", "infinity"]],
+    )
+    from_snapshot: UUID = Field(
+        ...,
+        description="When set, the new sandbox is restored from this snapshot instead of\ncold-starting from the image. Snapshot must belong to the same\nproject. Sizing and region must match the snapshot's origin. Must not\nbe combined with `image`.\n",
+    )
+
+
+class CreateSandboxRequest4(BaseModel):
+    name: constr(pattern=r"^[a-z]([-a-z0-9]*[a-z0-9])?$", min_length=1, max_length=63) | None = (
+        Field(
+            None,
+            description="Sandbox name. Optional — when omitted, the server generates one (a\n\"sandbox-\" prefix plus a short random suffix). When provided, must be\na valid DNS name: lowercase alphanumeric characters or '-', starting\nwith a letter, ending with an alphanumeric, max 63 characters.\n",
+            examples=["my-sandbox"],
+        )
+    )
+    region: str | None = Field(
+        None,
+        description="Region to provision in; omit to use the platform default.",
+        examples=["dev"],
+    )
+    env: list[EnvVar] | None = None
+    resources: SandboxResources | None = None
+    egress: SandboxEgressConfig | None = None
+    sandbox_template_id: constr(pattern=r"^sb-[a-zA-Z0-9-]+$", min_length=1) | None = Field(
+        None, description="Catalogue template id. Mutually exclusive with `image`."
+    )
+    image: (
+        constr(
+            pattern=r"^[^/@\s]+(/[^/@\s]+)+(:[^/@\s]+|@sha256:[a-fA-F0-9]+)$",
+            min_length=1,
+            max_length=512,
+        )
+        | None
+    ) = Field(
+        None,
+        description="Public OCI image reference with an explicit tag or digest. Mutually exclusive with `sandbox_template_id`.",
+        examples=["docker.io/library/python:3.12"],
+    )
+    command: list[str] | None = Field(
+        None,
+        description="Optional container command for BYOI creates; defaults to sleep infinity when omitted.",
+        examples=[["sleep", "infinity"]],
+    )
+    from_snapshot: UUID | None = Field(
+        None,
+        description="When set, the new sandbox is restored from this snapshot instead of\ncold-starting from the image. Snapshot must belong to the same\nproject. Sizing and region must match the snapshot's origin. Must not\nbe combined with `image`.\n",
+    )
+
+
+class CreateSandboxRequest(
+    RootModel[
+        CreateSandboxRequest1
+        | CreateSandboxRequest2
+        | CreateSandboxRequest3
+        | CreateSandboxRequest4
+    ]
+):
+    root: (
+        CreateSandboxRequest1
+        | CreateSandboxRequest2
+        | CreateSandboxRequest3
+        | CreateSandboxRequest4
     )
 
 
