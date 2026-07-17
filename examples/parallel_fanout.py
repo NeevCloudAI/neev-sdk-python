@@ -68,8 +68,6 @@ Run::
 from __future__ import annotations
 
 import os
-import random
-import string
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import TypedDict
@@ -124,10 +122,6 @@ SHARDS = len(JOBS)
 def log(message: str) -> None:
     """Print a ``[fanout]`` progress line to stderr."""
     print(f"[fanout] {message}", file=sys.stderr)
-
-
-def _rand_suffix() -> str:
-    return "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
 
 
 def _find_expr(extensions: list[str]) -> str:
@@ -187,7 +181,6 @@ def main() -> None:
         sandboxes = [
             client.sandboxes.create(
                 {
-                    "name": f"fanout-{job['id']}-{_rand_suffix()}",
                     "sandbox_template_id": TEMPLATE,
                 }
             )

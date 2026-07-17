@@ -107,8 +107,6 @@ from __future__ import annotations
 
 import json
 import os
-import random
-import string
 import sys
 from pathlib import Path
 from typing import Any
@@ -192,10 +190,6 @@ def chat(messages: list[dict[str, Any]]) -> tuple[dict[str, Any], dict[str, Any]
     return message, data.get("usage")
 
 
-def _rand_suffix() -> str:
-    return "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
-
-
 def main() -> None:
     line(_bold("AI code-interpreter (gpt-oss-120b -> Neev sandbox)"))
     line(_dim(f"task: {TASK}"))
@@ -205,7 +199,6 @@ def main() -> None:
         line(_dim(f"\n[sandbox] creating (template={TEMPLATE})…"))
         sandbox = client.sandboxes.create(
             {
-                "name": f"ai-{_rand_suffix()}",
                 "sandbox_template_id": TEMPLATE,
             }
         )

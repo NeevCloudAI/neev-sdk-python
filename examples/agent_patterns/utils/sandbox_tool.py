@@ -8,8 +8,6 @@ tools backed by an isolated Neev sandbox.
 from __future__ import annotations
 
 import os
-import random
-import string
 import sys
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -34,22 +32,18 @@ class SandboxCodeExecutor:
     def __init__(
         self,
         template_id: str | None = None,
-        name_prefix: str = "agent-demo",
     ):
         self._client = NeevAI()
         self._template_id = template_id or os.environ.get(
             "NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-minimal"
         )
-        self._name_prefix = name_prefix
         self._sandbox: Sandbox | None = None
 
     def _ensure(self) -> Sandbox:
         if self._sandbox is None:
-            suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
             log(f"creating sandbox (template={self._template_id})…")
             self._sandbox = self._client.sandboxes.create(
                 {
-                    "name": f"{self._name_prefix}-{suffix}",
                     "sandbox_template_id": self._template_id,
                 }
             )

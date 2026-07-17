@@ -71,8 +71,6 @@ Run::
 from __future__ import annotations
 
 import os
-import random
-import string
 import sys
 import time
 
@@ -90,18 +88,12 @@ def log(message: str) -> None:
     print(f"[+{elapsed:5d}ms] {message}", file=sys.stderr)
 
 
-def _rand_suffix() -> str:
-    """Return a short random suffix for unique sandbox names."""
-    return "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
-
-
 def main() -> None:
     with NeevAI() as client:
         # --- Create ---
         log("creating sandbox…")
         sandbox = client.sandboxes.create(
             {
-                "name": f"stream-{_rand_suffix()}",
                 "sandbox_template_id": TEMPLATE,
             }
         )

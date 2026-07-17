@@ -43,8 +43,6 @@ Run::
 from __future__ import annotations
 
 import os
-import random
-import string
 import sys
 import time
 
@@ -61,10 +59,6 @@ WORKER_COUNT = 3
 
 def log(message: str) -> None:
     print(f"[process-pool] {message}", file=sys.stderr)
-
-
-def _rand_suffix() -> str:
-    return "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
 
 
 def _remaining_ms(deadline_ms: float) -> int:
@@ -139,7 +133,6 @@ def main() -> None:
             log(f"creating sandbox ({TEMPLATE})…")
             sandbox = client.sandboxes.create(
                 {
-                    "name": f"process-pool-{_rand_suffix()}",
                     "sandbox_template_id": TEMPLATE,
                 }
             )

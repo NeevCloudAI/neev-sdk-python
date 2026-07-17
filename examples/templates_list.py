@@ -58,8 +58,6 @@ Run::
 from __future__ import annotations
 
 import os
-import random
-import string
 import sys
 from typing import cast
 
@@ -73,11 +71,6 @@ DEFAULT_TEMPLATE = os.environ.get("NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-m
 def log(message: str) -> None:
     """Print a ``[templates]`` progress line to stderr."""
     print(f"[templates] {message}", file=sys.stderr)
-
-
-def _rand_suffix() -> str:
-    """Return a short random suffix for unique sandbox names."""
-    return "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
 
 
 def main() -> None:
@@ -102,7 +95,6 @@ def main() -> None:
             log(f"creating sandbox ({template_id})…")
             sandbox = client.sandboxes.create(
                 {
-                    "name": f"templates-demo-{_rand_suffix()}",
                     "sandbox_template_id": template_id,
                 }
             )

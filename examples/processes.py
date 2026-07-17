@@ -44,8 +44,6 @@ Run::
 from __future__ import annotations
 
 import os
-import random
-import string
 import sys
 import time
 
@@ -61,10 +59,6 @@ POLL_INTERVAL_MS = int(os.environ.get("NEEVAI_POLL_INTERVAL_MS", "2000"))
 
 def log(message: str) -> None:
     print(f"[processes] {message}", file=sys.stderr)
-
-
-def _rand_suffix() -> str:
-    return "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
 
 
 def _remaining_ms(deadline_ms: float) -> int:
@@ -139,7 +133,6 @@ def main() -> None:
             log(f"creating sandbox ({TEMPLATE})…")
             sandbox = client.sandboxes.create(
                 {
-                    "name": f"processes-demo-{_rand_suffix()}",
                     "sandbox_template_id": TEMPLATE,
                 }
             )
