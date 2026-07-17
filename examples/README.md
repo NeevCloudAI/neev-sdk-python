@@ -111,7 +111,7 @@ uses the **platform agents API** — not the model-driven patterns in Tier 2.
 | [`files_api.py`](./files_api.py) | `files.write`, `read_text`, `list(recursive=True)` | `uv run python examples/files_api.py` |
 | [`preview_ports.py`](./preview_ports.py) | `get_url(port)` — serve on a port, get its preview URL, `list_ports`, `revoke_port` | `uv run python examples/preview_ports.py` |
 | [`pty.py`](./pty.py) | `pty.create(...)` — interactive PTY over WebSocket: `on_data`, `send_input`, `wait` | `uv run python examples/pty.py` |
-| [`ssh_tunnel.py`](./ssh_tunnel.py) | `sandbox.ssh()` — open a local SSH tunnel and run a command over it with the system `ssh` | `uv run python examples/ssh_tunnel.py` |
+| [`ssh_tunnel.py`](./ssh_tunnel.py) | `sandbox.ssh()` over a BYOI image — exec, `rsync` upload, and `ssh -L` port-forward through one tunnel | `uv run python examples/ssh_tunnel.py` |
 | [`streaming_exec.py`](./streaming_exec.py) | `exec_stream` — stdout/stderr streamed line-by-line | `uv run python examples/streaming_exec.py` |
 | [`processes.py`](./processes.py) | `refresh` (connect_url poll), `wait_until_ready`, `processes.list` (runtime probe), `start`, `follow`, `logs`, `kill`, `wait` | `uv run python examples/processes.py` |
 | [`process_pool.py`](./process_pool.py) | Same wait pattern as `processes.py`, parallel `start`, `list`, `kill_all`, `wait` | `uv run python examples/process_pool.py` |
