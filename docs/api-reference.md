@@ -258,6 +258,7 @@ Minimal one-liners for each public API. Runnable examples link to repo paths.
 | `sandbox.revoke_port(port)` | `sandbox.revoke_port(8080)` | `await sandbox.revoke_port(8080)` | [preview_ports.py](../examples/preview_ports.py) |
 | `sandbox.get_url(port, ...)` | `url = sandbox.get_url(8080)` | `url = await sandbox.get_url(8080)` | [preview_ports.py](../examples/preview_ports.py) |
 | `sandbox.pty.create(...)` | `pty = sandbox.pty.create(program="sh", on_data=cb)` | `pty = await sandbox.pty.create(program="sh", on_data=cb)` | [pty.py](../examples/pty.py) |
+| `sandbox.ssh(...)` | `t = sandbox.ssh()` | `t = await sandbox.ssh()` | [ssh_tunnel.py](../examples/ssh_tunnel.py) |
 | `sandbox.to_json()` | `sandbox.to_json()` | `sandbox.to_json()` | [sandbox_lifecycle_controller.py](../examples/sandbox_lifecycle_controller.py) |
 | `agent.id` / `.status` / `.sandbox_id` | `print(agent.status, agent.sandbox_id)` | same after `await create` | [create_agent.py](../examples/create_agent.py) |
 | `agent.wait_until_ready(...)` | `agent.wait_until_ready(timeout_ms=120_000)` | `await agent.wait_until_ready()` | [create_agent.py](../examples/create_agent.py) |
