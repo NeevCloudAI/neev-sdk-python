@@ -81,12 +81,16 @@ class SshTunnel:
         self._accept.start()
 
     def _accept_loop(self) -> None:
-        """Accepts local connections until the listener is closed, bridging each."""
+        """Accepts local connections until the tunnel is closed, bridging each."""
         while not self._closed.is_set():
             try:
                 client, _ = self._listener.accept()
             except OSError:
                 break  # listener closed by close()
+            if self._closed.is_set():
+                # A wakeup connection from close() (see below); do not bridge it.
+                client.close()
+                break
             threading.Thread(target=self._bridge, args=(client,), daemon=True).start()
 
     def _bridge(self, client: socket.socket) -> None:
@@ -138,6 +142,16 @@ class SshTunnel:
         if self._closed.is_set():
             return
         self._closed.set()
+        # Unblock the accept loop before closing the listener: on Linux, closing a
+        # socket from another thread does not interrupt a blocked accept(), so the
+        # kernel keeps the port listening until a connection arrives. A throwaway
+        # loopback connection wakes accept(); the loop then observes _closed and exits.
+        try:
+            with socket.create_connection((self.host, self.port), timeout=1):
+                pass
+        except OSError:
+            pass
+        self._accept.join(timeout=2)
         _close_quietly(self._listener)
         with self._lock:
             live = list(self._live)
