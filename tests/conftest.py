@@ -154,7 +154,7 @@ def _make_sandbox_record(
         "phase": "Pending",
         "connect_url": None,
         "replicas": 0,
-        "egress": None,
+        "egress": req.get("egress"),
         "sandbox_template_id": req.get("sandbox_template_id"),
         "created_by": None,
         "created_at": now,

@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from neevai._egress import build_egress
 from neevai._parse import coerce_model, coerce_params
 from neevai.errors import NeevAIError
 from neevai.types import (
@@ -52,11 +53,19 @@ def _agents_path(scope: Scope) -> str:
 def _prepare_create_params(
     client: NeevAI | AsyncNeevAI,
     params: CreateAgentParams | Mapping[str, Any],
+    allow_internet: bool | None = None,
+    allow_egress: list[str] | None = None,
 ) -> CreateAgentParams:
     if isinstance(params, Mapping):
         raw: dict[str, Any] = dict(params)
     else:
         raw = params.model_dump(exclude_unset=True)
+    # Translate the allow_internet/allow_egress convenience into the egress policy,
+    # unless the caller already set an explicit egress (which takes precedence).
+    if raw.get("egress") is None:
+        egress = build_egress(allow_internet, allow_egress)
+        if egress is not None:
+            raw["egress"] = egress
     return coerce_params(CreateAgentParams, raw)
 
 
@@ -99,12 +108,22 @@ class Agents:
         params: CreateAgentParams | Mapping[str, Any],
         org_id: str | None = None,
         project_id: str | None = None,
+        *,
+        allow_internet: bool | None = None,
+        allow_egress: list[str] | None = None,
     ) -> Agent:
-        """Creates a new agent from a catalogue template in the resolved project context."""
+        """Creates a new agent from a catalogue template in the resolved project context.
+
+        Egress is deny-all by default. ``allow_internet=True`` opens all egress
+        (0.0.0.0/0 and ::/0); ``allow_egress`` allows specific hosts (FQDN or CIDR). An
+        explicit ``egress`` in ``params`` takes precedence over both.
+        """
         from neevai.handles.agent import Agent
 
         scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
-        body = _prepare_create_params(self._client, params)
+        body = _prepare_create_params(
+            self._client, params, allow_internet=allow_internet, allow_egress=allow_egress
+        )
         raw = self._client._transport.request(
             "POST",
             _agents_path(scope),
@@ -237,12 +256,22 @@ class AsyncAgents:
         params: CreateAgentParams | Mapping[str, Any],
         org_id: str | None = None,
         project_id: str | None = None,
+        *,
+        allow_internet: bool | None = None,
+        allow_egress: list[str] | None = None,
     ) -> AsyncAgent:
-        """Creates a new agent asynchronously."""
+        """Creates a new agent asynchronously.
+
+        Egress is deny-all by default. ``allow_internet=True`` opens all egress
+        (0.0.0.0/0 and ::/0); ``allow_egress`` allows specific hosts (FQDN or CIDR). An
+        explicit ``egress`` in ``params`` takes precedence over both.
+        """
         from neevai.handles.agent import AsyncAgent
 
         scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
-        body = _prepare_create_params(self._client, params)
+        body = _prepare_create_params(
+            self._client, params, allow_internet=allow_internet, allow_egress=allow_egress
+        )
         raw = await self._client._transport.request(
             "POST",
             _agents_path(scope),

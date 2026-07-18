@@ -40,6 +40,8 @@ def main() -> None:
                 "agent_template": AGENT_TEMPLATE,
             }
 
+            # The agent's backing sandbox is deny-all egress by default — pass
+            # allow_internet=True, or allow_egress=["api.anthropic.com"], to open it.
             agent = client.agents.create(create_params)
             print(f"created {agent.id} (status: {agent.status}, sandbox: {agent.sandbox_id})")
 

@@ -180,7 +180,7 @@ of their sync counterparts.
 All sandbox resource methods require a resolved org/project scope. Missing scope
 raises `NeevAIError` before any HTTP request is sent.
 
-### `client.sandboxes.create(params, org_id=None, project_id=None)`
+### `client.sandboxes.create(params, org_id=None, project_id=None, *, allow_internet=None, allow_egress=None)`
 
 Creates a new sandbox in the resolved project context.
 
@@ -191,6 +191,11 @@ Creates a new sandbox in the resolved project context.
 | `params` | `CreateSandboxParams \| Mapping[str, Any]` | Create body |
 | `org_id` | `str \| None` | Override org (else client default) |
 | `project_id` | `str \| None` | Override project (else client default) |
+| `allow_internet` | `bool \| None` | Convenience: open all egress (`0.0.0.0/0` + `::/0`). Egress is deny-all by default. |
+| `allow_egress` | `list[str] \| None` | Convenience: allow egress to specific hosts (FQDN or CIDR). |
+
+`allow_internet` / `allow_egress` translate into the `egress` policy; an explicit `egress`
+in `params` takes precedence over both.
 
 **Returns:** `Sandbox` handle with initial API state (`phase` is typically
 `Pending` immediately after create).
@@ -438,10 +443,14 @@ restored.wait_until_ready()
 
 Access via `client.agents` (`Agents`). Requires org/project scope.
 
-### `client.agents.create(params, org_id=None, project_id=None)`
+### `client.agents.create(params, org_id=None, project_id=None, *, allow_internet=None, allow_egress=None)`
 
 **Params:** `CreateAgentParams` or dict. Required: `name`, `agent_template` (template
 **name**, e.g. `"claude-code"`). Optional: `region`, `config`, `env`, `resources`, `egress`.
+
+**Egress convenience:** `allow_internet=True` opens all egress (`0.0.0.0/0` + `::/0`);
+`allow_egress=[...]` allows specific hosts (FQDN or CIDR). Egress is deny-all by default;
+an explicit `egress` in `params` takes precedence over these.
 
 **Returns:** `Agent` handle with `status` typically `Provisioning`.
 
@@ -449,7 +458,7 @@ Access via `client.agents` (`Agents`). Requires org/project scope.
 agent = client.agents.create({
     "name": "my-agent",
     "agent_template": "claude-code",
-})
+}, allow_internet=True)
 ```
 
 **Example:** [`create_agent.py`](../examples/create_agent.py)

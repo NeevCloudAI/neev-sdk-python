@@ -66,6 +66,43 @@ def test_sandboxes_create_with_model_instance(mock_transport):
     client.close()
 
 
+def test_sandboxes_create_allow_internet(mock_transport):
+    client = _make_client(mock_transport)
+    sb = client.sandboxes.create(
+        {"name": "web", "sandbox_template_id": "sb-x"}, allow_internet=True
+    )
+    egress = sb.data["egress"]
+    assert egress["mode"] == "allow_list"
+    assert egress["allow_internet"] is True
+    # The gate alone is a no-op server-side; the 0.0.0.0/0 + ::/0 routes must ride along.
+    assert [r["host"] for r in egress["allow"]] == ["0.0.0.0/0", "::/0"]
+    client.close()
+
+
+def test_sandboxes_create_allow_egress_hosts(mock_transport):
+    client = _make_client(mock_transport)
+    sb = client.sandboxes.create(
+        {"name": "ci", "sandbox_template_id": "sb-x"},
+        allow_egress=["github.com", "*.npmjs.org"],
+    )
+    egress = sb.data["egress"]
+    assert egress["allow_internet"] is False
+    assert [r["host"] for r in egress["allow"]] == ["github.com", "*.npmjs.org"]
+    client.close()
+
+
+def test_sandboxes_create_explicit_egress_wins(mock_transport):
+    client = _make_client(mock_transport)
+    sb = client.sandboxes.create(
+        {"name": "adv", "sandbox_template_id": "sb-x", "egress": {"mode": "deny_all"}},
+        allow_internet=True,
+    )
+    # An explicit egress is kept as-is; the convenience routes are not added.
+    assert sb.data["egress"]["mode"] == "deny_all"
+    assert sb.data["egress"]["allow"] is None
+    client.close()
+
+
 def test_sandboxes_create_uses_explicit_region(mock_transport):
     client = NeevAI(
         api_key="test",
