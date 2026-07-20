@@ -143,7 +143,6 @@ def main() -> None:
         # --- Create source sandbox ---
         sandbox = client.sandboxes.create(
             {
-                "name": "snapshot-demo",
                 "sandbox_template_id": TEMPLATE,
             }
         )
@@ -175,7 +174,6 @@ def main() -> None:
             # --- Roll back by creating a new sandbox from the snapshot ---
             restored = client.sandboxes.create(
                 {
-                    "name": "snapshot-restored",
                     "sandbox_template_id": TEMPLATE,
                     "from_snapshot": str(snapshot.id),
                 }

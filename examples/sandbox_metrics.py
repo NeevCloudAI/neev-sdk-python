@@ -85,8 +85,6 @@ Run::
 from __future__ import annotations
 
 import os
-import random
-import string
 import sys
 
 from neevai import NeevAI
@@ -103,10 +101,6 @@ BATCH_SECONDS = 15
 def log(message: str) -> None:
     """Print a ``[metrics]`` progress line to stderr."""
     print(f"[metrics] {message}", file=sys.stderr)
-
-
-def _rand_suffix() -> str:
-    return "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
 
 
 def run_processing_batch(sandbox: Sandbox, batch: int, total: int, seconds: int) -> None:
@@ -135,7 +129,6 @@ def main() -> None:
         log(f"creating sandbox ({TEMPLATE})…")
         sandbox = client.sandboxes.create(
             {
-                "name": f"metrics-{_rand_suffix()}",
                 "sandbox_template_id": TEMPLATE,
             }
         )

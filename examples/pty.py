@@ -33,8 +33,6 @@ Run::
 from __future__ import annotations
 
 import os
-import random
-import string
 import sys
 
 from neevai import NeevAI
@@ -48,11 +46,6 @@ def log(message: str) -> None:
     print(f"[pty] {message}", file=sys.stderr)
 
 
-def _rand_suffix() -> str:
-    """Return a short random suffix for unique sandbox names."""
-    return "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
-
-
 def _write_stdout(chunk: bytes) -> None:
     """Stream terminal output straight to this process's stdout."""
     sys.stdout.buffer.write(chunk)
@@ -64,9 +57,7 @@ def main() -> None:
         sandbox = None
         try:
             log(f"creating sandbox ({TEMPLATE})…")
-            sandbox = client.sandboxes.create(
-                {"name": f"pty-{_rand_suffix()}", "sandbox_template_id": TEMPLATE}
-            )
+            sandbox = client.sandboxes.create({"sandbox_template_id": TEMPLATE})
             sandbox.wait_until_ready()
             log(f"ready: {sandbox.id}")
 

@@ -1326,7 +1326,7 @@ Alias for generated `CreateSandboxRequest`.
 
 | Field | Type | Required |
 | ----- | ---- | -------- |
-| `name` | `str` (DNS-1123 label, max 63) | yes |
+| `name` | `str` (DNS-1123 label, max 63) | no (server-generated) |
 | `sandbox_template_id` | `str` (`sb-…` pattern) | no |
 | `region` | `str \| None` | no (set it in the create body) |
 | `env` | `list[EnvVar] \| None` | no |

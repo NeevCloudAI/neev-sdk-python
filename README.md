@@ -102,10 +102,7 @@ If you just cloned the repo, follow these steps to reach your first successful r
 from neevai import NeevAI
 
 with NeevAI(api_key="...", org_id="...", project_id="...", region="...") as client:
-    sandbox = client.sandboxes.create({
-        "name": "my-sandbox",
-        "sandbox_template_id": "<your-sandbox-template-id>",
-    })
+    sandbox = client.sandboxes.create({})
     sandbox.wait_until_ready()
     result = sandbox.exec("echo Hello World")
     print(result.stdout)

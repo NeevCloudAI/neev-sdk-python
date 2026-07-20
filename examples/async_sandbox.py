@@ -65,8 +65,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-import random
-import string
 import sys
 
 from neevai import AsyncNeevAI
@@ -81,11 +79,6 @@ def log(message: str) -> None:
     print(f"[async] {message}", file=sys.stderr)
 
 
-def _rand_suffix() -> str:
-    """Return a short random suffix for unique sandbox names."""
-    return "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
-
-
 async def main() -> None:
     async with AsyncNeevAI() as client:
         sandbox = None
@@ -94,7 +87,6 @@ async def main() -> None:
             log(f"creating sandbox ({TEMPLATE})…")
             sandbox = await client.sandboxes.create(
                 {
-                    "name": f"async-demo-{_rand_suffix()}",
                     "sandbox_template_id": TEMPLATE,
                 }
             )

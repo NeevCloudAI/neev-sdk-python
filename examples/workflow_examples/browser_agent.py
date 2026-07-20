@@ -18,7 +18,6 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "agent_patterns"))
@@ -55,14 +54,12 @@ OUTPUT_DIR = HERE / "output"
 
 def create_browser_sandbox(client: NeevAI, region: str | None = None) -> Sandbox:
     template_id = os.environ.get("NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-minimal")
-    suffix = hex(int(time.time() * 1e6))[-6:]
     print(
         f"[sandbox] creating browser sandbox (template={template_id})…",
         file=sys.stderr,
     )
     sandbox = client.sandboxes.create(
         {
-            "name": f"browser-agent-{suffix}",
             "sandbox_template_id": template_id,
         }
     )

@@ -231,7 +231,6 @@ with NeevAI() as client:
     print(f"Using template: {templates.items[0].name} ({template_id})")
 
     sandbox = client.sandboxes.create({
-        "name": "quickstart-demo",
         "sandbox_template_id": template_id,
     })
     print(f"Created sandbox {sandbox.id}, phase={sandbox.phase}")
@@ -390,7 +389,6 @@ async def main() -> None:
         template_id = (await client.templates.list(limit=1)).items[0].id
 
         sandbox = await client.sandboxes.create({
-            "name": "async-demo",
             "sandbox_template_id": template_id,
         })
         await sandbox.wait_until_ready()

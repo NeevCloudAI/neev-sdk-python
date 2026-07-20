@@ -23,7 +23,6 @@ import re
 import shlex
 import sys
 import tarfile
-import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -176,11 +175,9 @@ def _bootstrap_failure_message(tool: str, details: str, *, required: bool) -> st
 
 def create_standard_sandbox(client: NeevAI, region: str | None = None) -> Sandbox:
     template_id = os.environ.get("NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-minimal")
-    suffix = hex(int(time.time() * 1e6))[-6:]
     print(f"[sandbox] creating (template={template_id})…", file=sys.stderr)
     sandbox = client.sandboxes.create(
         {
-            "name": f"repo-analyzer-{suffix}",
             "sandbox_template_id": template_id,
         }
     )

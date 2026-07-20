@@ -64,8 +64,6 @@ Run::
 from __future__ import annotations
 
 import os
-import random
-import string
 import sys
 
 from neevai import NeevAI
@@ -80,11 +78,6 @@ def log(message: str) -> None:
     print(f"[files] {message}", file=sys.stderr)
 
 
-def _rand_suffix() -> str:
-    """Return a short random suffix for unique sandbox names."""
-    return "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
-
-
 def main() -> None:
     with NeevAI() as client:
         sandbox = None
@@ -93,7 +86,6 @@ def main() -> None:
             log(f"creating sandbox ({TEMPLATE})…")
             sandbox = client.sandboxes.create(
                 {
-                    "name": f"files-demo-{_rand_suffix()}",
                     "sandbox_template_id": TEMPLATE,
                 }
             )

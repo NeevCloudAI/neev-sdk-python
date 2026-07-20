@@ -82,7 +82,6 @@ def main() -> None:
             # --- Create ---
             sandbox = client.sandboxes.create(
                 {
-                    "name": "example-agent",
                     "sandbox_template_id": SANDBOX_TEMPLATE_ID,
                 }
             )
