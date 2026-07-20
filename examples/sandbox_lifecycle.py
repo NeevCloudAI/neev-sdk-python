@@ -80,6 +80,8 @@ def main() -> None:
     ) as client:
         try:
             # --- Create ---
+            # Egress is deny-all by default. Pass allow_internet=True, or
+            # allow_egress=["github.com"], to open outbound network at create time.
             sandbox = client.sandboxes.create(
                 {
                     "sandbox_template_id": SANDBOX_TEMPLATE_ID,

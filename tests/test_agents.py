@@ -1,12 +1,52 @@
 """Tests for the Agents resource (the API, sync)."""
 
+import json
 import uuid
 from unittest.mock import MagicMock
 
+import httpx
 import pytest
 
 from neevai.client import NeevAI
 from neevai.errors import NeevAIError, NotFoundError
+
+
+def _agent_response(request: httpx.Request, captured: dict) -> httpx.Response:
+    """Captures the POST body and returns a minimal valid agent record."""
+    captured["body"] = json.loads(request.content) if request.content else None
+    return httpx.Response(
+        201,
+        json={
+            "id": "11111111-1111-1111-1111-111111111111",
+            "org_id": "org1",
+            "project_id": "proj1",
+            "name": "web",
+            "agent_template_id": "ag-claude-code",
+            "drive_mode": "http",
+            "sandbox_id": "22222222-2222-2222-2222-222222222222",
+            "config": None,
+            "status": "Provisioning",
+            "metrics_url": "https://metrics.example/agents/1",
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z",
+        },
+    )
+
+
+def test_agents_create_allow_internet_sends_egress():
+    # The Agent record carries no egress, so assert the request body directly.
+    captured: dict = {}
+    transport = httpx.MockTransport(lambda req: _agent_response(req, captured))
+    client = NeevAI(
+        api_key="test", org_id="org1", project_id="proj1", client=httpx.Client(transport=transport)
+    )
+    client.agents.create({"name": "web", "agent_template": "claude-code"}, allow_internet=True)
+    assert captured["body"]["egress"] == {
+        "mode": "allow_list",
+        "allow_internet": True,
+        "allow": [{"host": "0.0.0.0/0"}, {"host": "::/0"}],
+    }
+    client.close()
 
 
 def _make_client(mock_transport) -> NeevAI:

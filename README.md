@@ -109,6 +109,27 @@ with NeevAI(api_key="...", org_id="...", project_id="...", region="...") as clie
     client.sandboxes.delete(sandbox.id)
 ```
 
+## Network egress
+
+Sandboxes (and agents) are **deny-all by default** — no outbound network. Open egress at
+create time with the convenience keyword args, on either `sandboxes.create` or
+`agents.create`:
+
+```python
+# allow the whole internet
+client.sandboxes.create({"name": "web", "sandbox_template_id": "..."}, allow_internet=True)
+
+# allow only specific hosts (FQDN or CIDR; wildcards supported)
+client.sandboxes.create({"name": "ci", "sandbox_template_id": "..."}, allow_egress=["github.com", "*.npmjs.org"])
+
+# same on agents
+client.agents.create({"name": "coder", "agent_template": "claude-code"}, allow_internet=True)
+```
+
+`allow_internet=True` opens `0.0.0.0/0` and `::/0`. For finer control (ports, protocols, a
+mix of rules) pass a full `egress` object in `params` instead — it takes precedence over
+the convenience args.
+
 ## Long-running processes
 
 For detached workloads that outlive a single HTTP request, use `sandbox.processes`

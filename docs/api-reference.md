@@ -36,7 +36,7 @@ Details: [`api-inventory.md` → Client](./api-inventory.md#client)
 
 | Method | Returns | Summary |
 | ------ | ------- | ------- |
-| `create(params, org_id=None, project_id=None)` | `Sandbox` | Creates a new sandbox in the resolved org/project scope. Optional `from_snapshot` in params provisions from a snapshot. |
+| `create(params, org_id=None, project_id=None, *, allow_internet=None, allow_egress=None)` | `Sandbox` | Creates a new sandbox. `allow_internet=True` / `allow_egress=[...]` open egress (deny-all by default; explicit `egress` wins). Optional `from_snapshot` in params provisions from a snapshot. |
 | `list(page=None, limit=None, org_id=None, project_id=None)` | `SandboxPage` | Lists sandboxes with pagination in the resolved org/project scope. |
 | `get(id, org_id=None, project_id=None)` | `Sandbox` | Fetches the current record for a sandbox by ID. |
 | `pause(id, preserve_memory=None, org_id=None, project_id=None)` | `Sandbox` | Scales a sandbox to 0 replicas (Paused state). Optional `preserve_memory` request body (server default `true`). |
@@ -85,7 +85,7 @@ workspace on some backends. See
 
 | Method | Returns | Summary |
 | ------ | ------- | ------- |
-| `create(params, org_id=None, project_id=None)` | `Agent` | Creates an agent from a catalogue template name (`agent_template`). |
+| `create(params, org_id=None, project_id=None, *, allow_internet=None, allow_egress=None)` | `Agent` | Creates an agent from a catalogue template name (`agent_template`). `allow_internet=True` / `allow_egress=[...]` open egress (deny-all by default; explicit `egress` wins). |
 | `list(page=None, limit=None, org_id=None, project_id=None)` | `AgentPage` | Lists agents with pagination in the resolved org/project scope. |
 | `get(id, org_id=None, project_id=None)` | `Agent` | Fetches the current record for an agent by ID. |
 | `update(id, params, org_id=None, project_id=None)` | `Agent` | In-place update of egress and/or cpu/memory (`resources`). Rejects `{}` locally. |
