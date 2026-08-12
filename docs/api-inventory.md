@@ -1332,7 +1332,8 @@ Catalogue entry for packaged agents (`id` pattern `ag-…`).
 ### `SandboxResources`
 
 Compute sizing for a sandbox (also used by agents and template `default_resources`).
-All fields are optional; **omitted fields fall back to the platform default**.
+All fields are optional; **omitted fields fall back to the template
+`default_resources`, then the platform default** (see resolution order below).
 
 | Field | Type | Default | Range |
 | ----- | ---- | ------- | ----- |
