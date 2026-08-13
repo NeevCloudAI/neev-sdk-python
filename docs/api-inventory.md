@@ -1345,6 +1345,17 @@ Resolution order for each field: caller-supplied value → template `default_res
 → platform default (the numbers above). `disk_gb` is fixed at creation and is **not**
 resizable in place; `cpu` and `memory_gb` can be changed via `update`.
 
+### Agent resources
+
+An agent runs on a backing sandbox, so **agent resources use the same
+`SandboxResources` shape, defaults, and bounds** as sandboxes (above). On
+`client.agents.create`, the `resources` field sizes that backing sandbox; the
+resolution order is caller value → the **agent template's** `default_resources`
+(`AgentTemplate.default_resources`) → platform default (1 vCPU / 2 GB / 10 GB).
+
+`client.agents.update` resizes `cpu` / `memory_gb` in place on the running
+sandbox. `disk_gb` cannot be changed after creation.
+
 ### `CreateSandboxParams`
 
 Alias for generated `CreateSandboxRequest`.
