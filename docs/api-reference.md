@@ -88,7 +88,7 @@ workspace on some backends. See
 | `create(params, org_id=None, project_id=None, *, allow_internet=None, allow_egress=None)` | `Agent` | Creates an agent from a catalogue template name (`agent_template`). `allow_internet=True` / `allow_egress=[...]` open egress (deny-all by default; explicit `egress` wins). |
 | `list(page=None, limit=None, org_id=None, project_id=None)` | `AgentPage` | Lists agents with pagination in the resolved org/project scope. |
 | `get(id, org_id=None, project_id=None)` | `Agent` | Fetches the current record for an agent by ID. |
-| `update(id, params, org_id=None, project_id=None)` | `Agent` | In-place update of egress and/or cpu/memory (`resources`). Rejects `{}` locally. |
+| `update(id, params, org_id=None, project_id=None)` | `Agent` | In-place update of egress and/or cpu/memory (`resources`; defaults & bounds in [Agent resources](./api-inventory.md#agent-resources)). Rejects `{}` locally. |
 | `pause(id, org_id=None, project_id=None)` | `Agent` | Pauses the agent and its backing sandbox. |
 | `resume(id, org_id=None, project_id=None)` | `Agent` | Resumes a paused agent. |
 | `delete(id, org_id=None, project_id=None)` | `None` | Permanently deletes an agent (HTTP 204, no body). |

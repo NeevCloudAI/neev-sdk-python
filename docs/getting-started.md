@@ -258,6 +258,12 @@ Key points:
 - Use `sandbox_template_id` in create params (not `template_id`). See
   [`api-inventory.md`](./api-inventory.md#clientsandboxescreateparams-org_idnone-project_idnone)
   for the full parameter table.
+- When both the request and the selected template omit `resources`
+  (`cpu` / `memory_gb` / `disk_gb`), the platform assigns defaults of
+  **1 vCPU, 2 GB memory, 10 GB disk**; a template's `default_resources` takes
+  precedence over these. Values must fall within: vCPU
+  0.5–8 (steps of 0.5), memory 1–16 GB, disk 10–100 GB (steps of 10). See
+  [`SandboxResources`](./api-inventory.md#sandboxresources).
 - `connect_url` is a property on the handle; it may appear while `phase` is still
   `Pending` or `NotReady`. Wait until `phase == "Ready"` **and** the sandbox runtime
   accepts requests before `exec`, `files`, or `processes`.
