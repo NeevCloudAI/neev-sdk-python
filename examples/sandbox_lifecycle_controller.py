@@ -27,7 +27,7 @@ Subcommands
 | Command | Description | Notable flags |
 |---------|-------------|---------------|
 | ``create`` | Provision a new sandbox | ``--name``, ``--template-id``, ``--wait`` |
-| ``list`` | Paginated sandbox list | ``--page``, ``--limit`` |
+| ``list`` | Paginated sandbox list | ``--page``, ``--limit``, ``--name``, ``--status`` |
 | ``get`` | Fetch one sandbox by ID | — |
 | ``pause`` | Scale to 0 replicas | ``--preserve-memory`` / ``--no-preserve-memory`` |
 | ``resume`` | Scale back to 1 replica | — |
@@ -124,7 +124,9 @@ def _cmd_create(client: NeevAI, args: argparse.Namespace) -> None:
 
 def _cmd_list(client: NeevAI, args: argparse.Namespace) -> None:
     """List sandboxes with pagination."""
-    page = client.sandboxes.list(page=args.page, limit=args.limit)
+    page = client.sandboxes.list(
+        page=args.page, limit=args.limit, name=args.name, status=args.status
+    )
     if args.json:
         _print_json(
             {
@@ -212,6 +214,8 @@ def _build_parser() -> argparse.ArgumentParser:
     list_cmd = subparsers.add_parser("list", help="List sandboxes with pagination.")
     list_cmd.add_argument("--page", type=int, default=1, help="Page number (default: 1).")
     list_cmd.add_argument("--limit", type=int, default=20, help="Page size (default: 20).")
+    list_cmd.add_argument("--name", help="Filter by a case-insensitive substring of the name.")
+    list_cmd.add_argument("--status", help="Filter by lifecycle phase (e.g. Ready, Paused).")
 
     get = subparsers.add_parser("get", help="Get sandbox details.")
     get.add_argument("sandbox_id", help="Sandbox UUID.")

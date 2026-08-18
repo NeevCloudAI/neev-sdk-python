@@ -127,7 +127,9 @@ from neevai.generated.aiagent import (  # noqa: F401
 
 # Steady-state phases from the OpenAPI spec, plus transitional values the API may
 # return during pause/resume reconciliation (not listed in the spec enum).
-SandboxPhase = Literal["Pending", "Ready", "NotReady", "Unknown", "Paused", "Pausing", "Resuming"]
+SandboxPhase = Literal[
+    "Pending", "Ready", "NotReady", "Unknown", "Pausing", "Paused", "RestoreFailed", "Resuming"
+]
 
 
 class AgentData(_GeneratedAgent):

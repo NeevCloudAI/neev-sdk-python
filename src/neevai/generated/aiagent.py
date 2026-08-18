@@ -34,6 +34,7 @@ class SandboxPhase(Enum):
     Ready = "Ready"
     NotReady = "NotReady"
     Unknown = "Unknown"
+    Pausing = "Pausing"
     Paused = "Paused"
     RestoreFailed = "RestoreFailed"
 

@@ -162,6 +162,34 @@ def test_sandboxes_list(mock_transport):
     client.close()
 
 
+def test_sandboxes_list_filters(mock_transport):
+    client = _make_client(mock_transport)
+    web = client.sandboxes.create(
+        {"name": "web-server", "sandbox_template_id": "sb-ubuntu-24-04-minimal"}
+    )
+    client.sandboxes.create(
+        {"name": "db-primary", "sandbox_template_id": "sb-ubuntu-24-04-minimal"}
+    )
+
+    # name is a case-insensitive substring match.
+    by_name = client.sandboxes.list(name="WEB")
+    assert [s.name for s in by_name.items] == ["web-server"]
+    assert by_name.total == 1
+
+    # sandbox_id narrows to a single sandbox.
+    by_id = client.sandboxes.list(sandbox_id=web.id)
+    assert [s.id for s in by_id.items] == [web.id]
+
+    # status is an exact lifecycle-phase match.
+    client.sandboxes.pause(web.id)
+    paused = client.sandboxes.list(status="Paused")
+    assert [s.id for s in paused.items] == [web.id]
+    pending = client.sandboxes.list(status="Pending")
+    assert {s.name for s in pending.items} == {"db-primary"}
+
+    client.close()
+
+
 def test_sandboxes_delete(mock_transport):
     client = _make_client(mock_transport)
     sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
