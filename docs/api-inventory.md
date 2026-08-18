@@ -225,9 +225,12 @@ restored = client.sandboxes.create({
 **Examples:** [`sandbox_lifecycle.py`](../examples/sandbox_lifecycle.py),
 [`snapshot_fork_restore.py`](../examples/snapshot_fork_restore.py) (`from_snapshot`)
 
-### `client.sandboxes.list(page=None, limit=None, org_id=None, project_id=None)`
+### `client.sandboxes.list(page=None, limit=None, name=None, status=None, sandbox_id=None, org_id=None, project_id=None)`
 
-Lists sandboxes with server-side pagination.
+Lists sandboxes with server-side pagination and optional filters. The filters
+combine with AND: `name` is a case-insensitive substring match on the sandbox
+name, `status` is an exact lifecycle-phase match (a `SandboxPhase`), and
+`sandbox_id` narrows to a single sandbox. Each is omitted when unset.
 
 **Returns:** `SandboxPage` with fields `items`, `total`, `page`, `limit`. Each item
 is a `Sandbox` handle bound to the client.
@@ -237,6 +240,9 @@ page = client.sandboxes.list(page=1, limit=20)
 for sb in page.items:
     print(sb.id, sb.name, sb.phase, sb.replicas)
 print(f"Showing {len(page.items)} of {page.total}")
+
+# Filter by name substring and lifecycle phase.
+paused_web = client.sandboxes.list(name="web", status="Paused")
 ```
 
 **Example:** [`sandbox_lifecycle_controller.py`](../examples/sandbox_lifecycle_controller.py)

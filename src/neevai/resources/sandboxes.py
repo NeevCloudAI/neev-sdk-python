@@ -19,6 +19,7 @@ from neevai.types import (
     SandboxData,
     SandboxListResponse,
     SandboxMetricsResponse,
+    SandboxPhase,
     SandboxPort,
     Snapshot,
     SnapshotListResponse,
@@ -144,6 +145,28 @@ def _prepare_create_snapshot_body(
     return body
 
 
+def _list_query(
+    page: int | None,
+    limit: int | None,
+    name: str | None,
+    status: SandboxPhase | None,
+    sandbox_id: str | None,
+) -> dict[str, Any]:
+    """Build the listSandboxes query, omitting any pagination arg or filter left unset."""
+    query: dict[str, Any] = {}
+    if page is not None:
+        query["page"] = page
+    if limit is not None:
+        query["limit"] = limit
+    if name is not None:
+        query["name"] = name
+    if status is not None:
+        query["status"] = status
+    if sandbox_id is not None:
+        query["sandbox_id"] = sandbox_id
+    return query
+
+
 class Sandboxes:
     """Operations on the /sandboxes API endpoint (synchronous)."""
 
@@ -185,20 +208,24 @@ class Sandboxes:
         self,
         page: int | None = None,
         limit: int | None = None,
+        name: str | None = None,
+        status: SandboxPhase | None = None,
+        sandbox_id: str | None = None,
         org_id: str | None = None,
         project_id: str | None = None,
     ) -> SandboxPage:
-        """Lists all sandboxes in the resolved project context with pagination."""
+        """Lists sandboxes in the resolved project context with pagination.
+
+        The optional filters combine with AND: ``name`` is a case-insensitive
+        substring match, ``status`` is an exact lifecycle-phase match, and
+        ``sandbox_id`` narrows to a single sandbox. Each is omitted when unset.
+        """
         from neevai.handles.sandbox import Sandbox
 
         scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
         path = f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes"
 
-        query: dict[str, Any] = {}
-        if page is not None:
-            query["page"] = page
-        if limit is not None:
-            query["limit"] = limit
+        query = _list_query(page, limit, name, status, sandbox_id)
 
         raw = self._client._transport.request("GET", path, query=query)
         page_data = coerce_model(SandboxListResponse, raw)
@@ -492,20 +519,24 @@ class AsyncSandboxes:
         self,
         page: int | None = None,
         limit: int | None = None,
+        name: str | None = None,
+        status: SandboxPhase | None = None,
+        sandbox_id: str | None = None,
         org_id: str | None = None,
         project_id: str | None = None,
     ) -> AsyncSandboxPage:
-        """Lists all sandboxes asynchronously with pagination."""
+        """Lists sandboxes asynchronously with pagination.
+
+        The optional filters combine with AND: ``name`` is a case-insensitive
+        substring match, ``status`` is an exact lifecycle-phase match, and
+        ``sandbox_id`` narrows to a single sandbox. Each is omitted when unset.
+        """
         from neevai.handles.sandbox import AsyncSandbox
 
         scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
         path = f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes"
 
-        query: dict[str, Any] = {}
-        if page is not None:
-            query["page"] = page
-        if limit is not None:
-            query["limit"] = limit
+        query = _list_query(page, limit, name, status, sandbox_id)
 
         raw = await self._client._transport.request("GET", path, query=query)
         page_data = coerce_model(SandboxListResponse, raw)

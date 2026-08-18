@@ -330,7 +330,17 @@ def _control_response(
         if sandbox_id is None:
             # ---- Collection endpoints ------------------------------------------------
             if method == "GET":
+                q = query or {}
                 items = list(_FAKE_DB["sandboxes"].values())
+                # Mirror the backend list filters: name is a case-insensitive
+                # substring match, status an exact phase match, sandbox_id an exact id.
+                if q.get("name"):
+                    needle = str(q["name"]).lower()
+                    items = [s for s in items if needle in str(s.get("name", "")).lower()]
+                if q.get("status"):
+                    items = [s for s in items if s.get("phase") == q["status"]]
+                if q.get("sandbox_id"):
+                    items = [s for s in items if s.get("id") == q["sandbox_id"]]
                 return json_resp(
                     200,
                     {
