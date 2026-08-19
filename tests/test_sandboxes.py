@@ -234,7 +234,8 @@ def test_sandboxes_pause_accepts_pausing_transitional_phase(mock_transport, monk
     client.close()
 
 
-def test_sandboxes_pause_sends_empty_json_body_when_preserve_memory_omitted(mock_transport):
+def test_sandboxes_pause_sends_a_body_with_no_fields(mock_transport):
+    """Pause takes no body fields — it always captures the full snapshot."""
     client = _make_client(mock_transport)
     sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
 
@@ -248,25 +249,8 @@ def test_sandboxes_pause_sends_empty_json_body_when_preserve_memory_omitted(mock
     client._transport.request = capturing_request  # type: ignore[method-assign]
 
     client.sandboxes.pause(sb.id)
-    assert captured_bodies == [{}]
-    client.close()
-
-
-def test_sandboxes_pause_sends_preserve_memory_when_set(mock_transport):
-    client = _make_client(mock_transport)
-    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
-
-    captured_bodies: list[dict | None] = []
-    original_request = client._transport.request
-
-    def capturing_request(method, path, query=None, body=None):
-        captured_bodies.append(body)
-        return original_request(method, path, query=query, body=body)
-
-    client._transport.request = capturing_request  # type: ignore[method-assign]
-
-    client.sandboxes.pause(sb.id, preserve_memory=True)
-    assert captured_bodies == [{"preserve_memory": True}]
+    sb.pause()
+    assert captured_bodies == [{}, {}]
     client.close()
 
 

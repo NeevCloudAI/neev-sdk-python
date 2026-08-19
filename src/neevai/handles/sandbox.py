@@ -18,6 +18,7 @@ from neevai.types import (
     SandboxPort,
     Scope,
     Snapshot,
+    UpdateSandboxParams,
 )
 
 if TYPE_CHECKING:
@@ -134,13 +135,30 @@ class Sandbox:
             self._invalidate_connection()
         return self
 
-    def pause(self, *, preserve_memory: bool | None = None) -> Sandbox:
+    def update(self, params: UpdateSandboxParams | Mapping[str, Any]) -> Sandbox:
+        """Resizes this sandbox in place and updates this handle's state."""
+        if self.sandboxes is None:
+            raise NeevAIError("Cannot update a sandbox handle with no client context.")
+        previous_connect_url = self.connect_url
+        next_state = self.sandboxes.update(
+            self.id,
+            params,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+        )
+        self._state = next_state._state
+        # A resize keeps the sandbox running, so only drop the cached connection if
+        # the server moved the runtime anyway.
+        if self.connect_url != previous_connect_url:
+            self._invalidate_connection()
+        return self
+
+    def pause(self) -> Sandbox:
         """Pauses the sandbox (scales to 0 replicas) and updates this handle in place."""
         if self.sandboxes is None:
             raise NeevAIError("Cannot pause a sandbox handle with no client context.")
         next_state = self.sandboxes.pause(
             self.id,
-            preserve_memory=preserve_memory,
             org_id=self.scope.org_id if self.scope else None,
             project_id=self.scope.project_id if self.scope else None,
         )
@@ -520,12 +538,26 @@ class AsyncSandbox:
             await self._invalidate_connection()
         return self
 
-    async def pause(self, *, preserve_memory: bool | None = None) -> AsyncSandbox:
+    async def update(self, params: UpdateSandboxParams | Mapping[str, Any]) -> AsyncSandbox:
+        if self.sandboxes is None:
+            raise NeevAIError("Cannot update a sandbox handle with no client context.")
+        previous_connect_url = self.connect_url
+        next_state = await self.sandboxes.update(
+            self.id,
+            params,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+        )
+        self._state = next_state._state
+        if self.connect_url != previous_connect_url:
+            await self._invalidate_connection()
+        return self
+
+    async def pause(self) -> AsyncSandbox:
         if self.sandboxes is None:
             raise NeevAIError("Cannot pause a sandbox handle with no client context.")
         next_state = await self.sandboxes.pause(
             self.id,
-            preserve_memory=preserve_memory,
             org_id=self.scope.org_id if self.scope else None,
             project_id=self.scope.project_id if self.scope else None,
         )

@@ -53,6 +53,16 @@ class SandboxResources(BaseModel):
     )
 
 
+class UpdateSandboxRequest(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    resources: SandboxResources = Field(
+        ...,
+        description="New cpu/memory sizing, resized in place on the running sandbox. Only the\nfields provided change. disk_gb is not resizable in place and is\nrejected if supplied with a different value.\n",
+    )
+
+
 class ExposePortRequest(BaseModel):
     port: conint(ge=1, le=65535) = Field(..., description="User port to expose for preview URLs.")
 
@@ -67,10 +77,7 @@ class SandboxPortList(BaseModel):
 
 
 class PauseSandboxRequest(BaseModel):
-    preserve_memory: bool | None = Field(
-        True,
-        description="When true, capture FS+process memory as an implicit snapshot before\nstopping the sandbox. The snapshot is auto-consumed on the next resume.\n",
-    )
+    pass
 
 
 class SnapshotStatus(Enum):

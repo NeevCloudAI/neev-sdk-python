@@ -264,6 +264,8 @@ Key points:
   [`SandboxResources`](./api-inventory.md#sandboxresources). Agents created from a
   template inherit that template's sizing instead — see
   [Agent resources](./api-inventory.md#agent-resources).
+- `cpu` and `memory_gb` can be changed later with `sandbox.update({"resources": {...}})`,
+  which resizes the running sandbox without restarting it. `disk_gb` is fixed at creation.
 - `connect_url` is a property on the handle; it may appear while `phase` is still
   `Pending` or `NotReady`. Wait until `phase == "Ready"` **and** the sandbox runtime
   accepts requests before `exec`, `files`, or `processes`.

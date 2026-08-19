@@ -118,13 +118,14 @@ uses the **platform agents API** — not the model-driven patterns in Tier 2.
 | [`parallel_fanout.py`](./parallel_fanout.py) | Multiple `sandboxes.create`, parallel `exec` via `ThreadPoolExecutor` | `uv run python examples/parallel_fanout.py` |
 | [`sandbox_metrics.py`](./sandbox_metrics.py) | `metrics()` polled under simulated CPU load | `uv run python examples/sandbox_metrics.py` |
 | [`raw_request.py`](./raw_request.py) | `client.raw.request` — untyped API access | `uv run python examples/raw_request.py` |
-| [`sandbox_lifecycle_controller.py`](./sandbox_lifecycle_controller.py) | CLI over `client.sandboxes` — create, list, get, pause, resume, delete, metrics | `uv run python examples/sandbox_lifecycle_controller.py --help` |
+| [`sandbox_lifecycle_controller.py`](./sandbox_lifecycle_controller.py) | CLI over `client.sandboxes` — create, list, get, resize, pause, resume, delete, metrics | `uv run python examples/sandbox_lifecycle_controller.py --help` |
 
 **Lifecycle controller** — useful for manual testing without writing a script:
 
 ```sh
 uv run python examples/sandbox_lifecycle_controller.py create --name my-sandbox --wait
 uv run python examples/sandbox_lifecycle_controller.py list --limit 20
+uv run python examples/sandbox_lifecycle_controller.py resize <sandbox-id> --cpu 2 --memory-gb 4
 uv run python examples/sandbox_lifecycle_controller.py metrics <sandbox-id>
 ```
 
