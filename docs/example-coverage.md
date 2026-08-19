@@ -18,6 +18,7 @@ path and run commands, see [`examples/README.md`](../examples/README.md).
 | `client.sandboxes.create` (`from_snapshot`) | `snapshot_fork_restore.py` | `restored = client.sandboxes.create({..., "from_snapshot": snapshot_id})` |
 | `client.sandboxes.list` | `sandbox_lifecycle_controller.py` | `page = client.sandboxes.list(page=1, limit=20)` |
 | `client.sandboxes.get` | `sandbox_lifecycle_controller.py` | `sandbox = client.sandboxes.get(sandbox_id)` |
+| `client.sandboxes.update` | `sandbox_lifecycle_controller.py` | `sandbox = client.sandboxes.update(sandbox_id, {"resources": {"cpu": 2, "memory_gb": 4}})` |
 | `client.sandboxes.pause` | `sandbox_lifecycle_controller.py` | `sandbox = client.sandboxes.pause(sandbox_id)` |
 | `client.sandboxes.resume` | `sandbox_lifecycle_controller.py` | `sandbox = client.sandboxes.resume(sandbox_id)` |
 | `client.sandboxes.delete` | `sandbox_lifecycle_controller.py` | `client.sandboxes.delete(sandbox_id)` |
@@ -64,6 +65,7 @@ path and run commands, see [`examples/README.md`](../examples/README.md).
 | `sandbox.files.read_text` | `files_api.py`, `snapshot_fork_restore.py` | `text = sandbox.files.read_text("demo/message.txt")` |
 | `sandbox.files.list` | `files_api.py` | `entries = sandbox.files.list("demo", recursive=True)` |
 | `sandbox.metrics` | `sandbox_lifecycle.py`, `sandbox_metrics.py` | `metrics = sandbox.metrics()` |
+| `sandbox.update` | — | `sandbox.update({"resources": {"cpu": 2, "memory_gb": 4}})` |
 | `sandbox.pause` | `sandbox_lifecycle.py` | `sandbox.pause()` |
 | `sandbox.delete` | all examples that create sandboxes | `sandbox.delete()` / `await sandbox.delete()` |
 | `sandbox.to_json` | `sandbox_lifecycle_controller.py` | `sandbox.to_json()` |
@@ -88,7 +90,7 @@ path and run commands, see [`examples/README.md`](../examples/README.md).
 | Parallel fan-out | `examples/parallel_fanout.py` | Multiple sandboxes, parallel `exec` |
 | Sandbox metrics | `examples/sandbox_metrics.py` | Poll `metrics()` under CPU load |
 | Raw request | `examples/raw_request.py` | Untyped `client.raw.request` |
-| Lifecycle CLI | `examples/sandbox_lifecycle_controller.py` | CLI over `client.sandboxes` CRUD |
+| Lifecycle CLI | `examples/sandbox_lifecycle_controller.py` | CLI over `client.sandboxes` CRUD and in-place resize |
 | Minimal agent | `examples/agent_patterns/minimal_agent.py` | Hand-rolled agent with `exec_stream` |
 | LangChain agent | `examples/agent_patterns/langchain_agent.py` | LangGraph ReAct via `SandboxCodeExecutor` |
 | Sandbox tool helper | `examples/agent_patterns/utils/sandbox_tool.py` | `SandboxCodeExecutor` wrapper |

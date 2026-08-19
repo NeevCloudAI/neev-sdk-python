@@ -19,7 +19,8 @@ which examples demonstrate which APIs, see
   - [create](#clientsandboxescreateparams-org_idnone-project_idnone)
   - [list](#clientsandboxeslistpage-none-limit-none-org_idnone-project_idnone)
   - [get](#clientsandboxesgetid-org_idnone-project_idnone)
-  - [pause](#clientsandboxespauseid-org_idnone-project_idnone)
+  - [update](#clientsandboxesupdateid-params-org_idnone-project_idnone)
+  - [pause](#clientsandboxespauseid--org_idnone-project_idnone)
   - [resume](#clientsandboxesresumeid-org_idnone-project_idnone)
   - [delete](#clientsandboxesdeleteid-org_idnone-project_idnone)
   - [metrics](#clientsandboxesmetricsid-from_none-to-none-step-none-org_idnone-project_idnone)
@@ -98,6 +99,7 @@ Types exported from `neevai.types.__all__`:
 | Symbol | Kind | Source |
 | ------ | ---- | ------ |
 | `CreateSandboxParams` | model alias | `generated/aiagent.py` → `CreateSandboxRequest` |
+| `UpdateSandboxParams` | model alias | `generated/aiagent.py` → `UpdateSandboxRequest` |
 | `EnvVar` | model | generated |
 | `SandboxData` | model | `types.py` subclass of generated `Sandbox` with `phase: str` |
 | `SandboxListResponse` | model | `types.py` (`items: list[SandboxData]`) |
@@ -260,11 +262,30 @@ sandbox = client.sandboxes.get("550e8400-e29b-41d4-a716-446655440000")
 print(sandbox.phase, sandbox.connect_url)
 ```
 
-### `client.sandboxes.pause(id, *, preserve_memory=None, org_id=None, project_id=None)`
+### `client.sandboxes.update(id, params, org_id=None, project_id=None)`
 
-Scales the sandbox to 0 replicas. Lifecycle phase becomes `Paused`. When
-`preserve_memory` is set, it is sent in the request body (`PauseSandboxRequest`);
-omit it to use the server default (`true`).
+Resizes a running sandbox in place — no restart, no new sandbox. `params` takes a
+single `resources` object (`UpdateSandboxParams` or a plain dict); only the sizes
+you provide are sent, so anything you leave out keeps its current value. `disk_gb`
+is not resizable in place and is rejected if it differs from the current disk.
+
+**Returns:** Updated `Sandbox` handle.
+
+**Raises:** `NeevAIError` when the patch would resize nothing — no `resources`, an
+empty `resources`, or only sizes the API does not define (a misspelled `memory`
+instead of `memory_gb` is caught here rather than sent as an empty resize). Also
+raises for an unknown top-level field or a size outside the allowed range.
+
+```python
+resized = client.sandboxes.update(sandbox.id, {"resources": {"cpu": 2, "memory_gb": 4}})
+print(resized.data["resources"])
+```
+
+### `client.sandboxes.pause(id, *, org_id=None, project_id=None)`
+
+Scales the sandbox to 0 replicas. Lifecycle phase becomes `Paused`. A pause always
+captures the full snapshot — root filesystem, process memory, and workspace — which
+`resume` consumes; the endpoint takes no body fields, so there is nothing to opt out of.
 
 **Returns:** Updated `Sandbox` handle (not `None`).
 
@@ -279,7 +300,8 @@ A paused sandbox will not become `Ready` until `resume()` is called. Calling
 
 ### `client.sandboxes.resume(id, org_id=None, project_id=None)`
 
-Scales the sandbox back to 1 replica, moving it toward `Ready`.
+Scales the sandbox back to 1 replica, moving it toward `Ready`, restoring the
+filesystem and process memory from the snapshot the pause captured.
 
 **Returns:** Updated `Sandbox` handle (not `None`).
 
@@ -629,17 +651,28 @@ def log_progress(sb: Sandbox) -> None:
 sandbox.wait_until_ready(on_poll=log_progress)
 ```
 
-### `sandbox.pause(preserve_memory=None)` / `sandbox.resume()` / `sandbox.delete()`
+### `sandbox.update(params)`
+
+Same as `client.sandboxes.update(self.id, params)` using the handle's scope, and
+folds the resized record back into the handle:
+
+```python
+sandbox = sandbox.update({"resources": {"cpu": 2, "memory_gb": 4}})
+```
+
+The resize keeps the sandbox running, so a connection opened earlier normally stays
+usable; the handle re-establishes it if the connect URL ever does change.
+
+### `sandbox.pause()` / `sandbox.resume()` / `sandbox.delete()`
 
 Convenience wrappers that delegate to `client.sandboxes` and update handle state in
 place (except `delete`, which removes the remote resource).
 
-Both `pause()` and `resume()` return the updated `Sandbox` handle. `pause()` accepts
-optional `preserve_memory` (forwarded to `PauseSandboxRequest`; omit to use the
-server default `true`):
+Both `pause()` and `resume()` return the updated `Sandbox` handle. `pause()` takes no
+arguments — it always captures the full snapshot, which `resume()` restores from:
 
 ```python
-sandbox = sandbox.pause(preserve_memory=True)   # phase → Paused, replicas → 0
+sandbox = sandbox.pause()   # phase → Paused, replicas → 0
 sandbox = sandbox.resume()  # scales back, then wait for Ready
 sandbox.wait_until_ready()
 ```
@@ -1351,9 +1384,10 @@ Per-field resolution order for a **sandbox**: caller value → platform default 
 sandbox-template resource layer**. **Agents** insert a middle layer (the agent template's
 `default_resources`) — see [Agent resources](#agent-resources).
 
-`cpu` and `memory_gb` are resizable in place via `client.agents.update` (resized on the
-running sandbox); `disk_gb` is fixed at creation and is rejected if `update` supplies a
-different value.
+`cpu` and `memory_gb` are resizable in place on the running sandbox — via
+`client.sandboxes.update` for a sandbox, or `client.agents.update` for an agent's backing
+sandbox. `disk_gb` is fixed at creation and is rejected if `update` supplies a different
+value.
 
 ### Agent resources
 
@@ -1382,6 +1416,14 @@ Alias for generated `CreateSandboxRequest`.
 | `resources` | `SandboxResources \| None` | no |
 | `egress` | `SandboxEgressConfig \| None` | no |
 | `from_snapshot` | `UUID \| None` | no |
+
+### `UpdateSandboxParams`
+
+Alias for generated `UpdateSandboxRequest`. Rejects unknown top-level fields.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `resources` | `SandboxResources` | yes (must set `cpu` and/or `memory_gb`; `disk_gb` is not resizable) |
 
 ### `EnvVar`
 

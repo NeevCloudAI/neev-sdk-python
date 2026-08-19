@@ -23,6 +23,7 @@ from neevai.types import (
     SandboxPort,
     Snapshot,
     SnapshotListResponse,
+    UpdateSandboxParams,
 )
 
 # Defaults for get_url's wait: overall budget and delay between preview-URL probes.
@@ -145,6 +146,25 @@ def _prepare_create_snapshot_body(
     return body
 
 
+def _prepare_update_body(
+    params: UpdateSandboxParams | Mapping[str, Any],
+) -> dict[str, Any]:
+    """Validate update params; unset sizes are dropped because the server reads them as unchanged."""
+    if isinstance(params, Mapping):
+        raw: dict[str, Any] = dict(params)
+    else:
+        raw = params.model_dump(exclude_unset=True)
+    body = coerce_params(UpdateSandboxParams, raw).model_dump(mode="json", exclude_unset=True)
+    # SandboxResources accepts unknown keys, so a misspelled size drops out silently here.
+    # Without this guard that becomes PATCH {"resources": {}} — a 200 that resizes nothing.
+    if not body.get("resources"):
+        raise NeevAIError(
+            "UpdateSandboxParams.resources must set at least one of `cpu` or `memory_gb`; "
+            "no recognised size was provided (check for a misspelled field)."
+        )
+    return body
+
+
 def _list_query(
     page: int | None,
     limit: int | None,
@@ -253,24 +273,41 @@ class Sandboxes:
         data = coerce_model(SandboxData, raw)
         return Sandbox(self, data, scope)
 
+    def update(
+        self,
+        id: str,
+        params: UpdateSandboxParams | Mapping[str, Any],
+        org_id: str | None = None,
+        project_id: str | None = None,
+    ) -> Sandbox:
+        """Resizes a running sandbox's cpu/memory in place; disk is not resizable this way."""
+        from neevai.handles.sandbox import Sandbox
+
+        scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
+        path = f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes/{id}"
+
+        raw = self._client._transport.request("PATCH", path, body=_prepare_update_body(params))
+        data = coerce_model(SandboxData, raw)
+        return Sandbox(self, data, scope)
+
     def pause(
         self,
         id: str,
         *,
-        preserve_memory: bool | None = None,
         org_id: str | None = None,
         project_id: str | None = None,
     ) -> Sandbox:
-        """Scales a sandbox to 0 replicas, putting it in Paused state."""
+        """Scales a sandbox to 0 replicas, putting it in Paused state.
+
+        Always captures the full snapshot (root filesystem, process memory, and
+        workspace); the pause endpoint takes no body fields.
+        """
         from neevai.handles.sandbox import Sandbox
 
         scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
         path = f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes/{id}/pause"
 
-        body: dict[str, Any] = {}
-        if preserve_memory is not None:
-            body["preserve_memory"] = preserve_memory
-        raw = self._client._transport.request("POST", path, body=body)
+        raw = self._client._transport.request("POST", path, body={})
         data = coerce_model(SandboxData, raw)
         return Sandbox(self, data, scope)
 
@@ -564,24 +601,39 @@ class AsyncSandboxes:
         data = coerce_model(SandboxData, raw)
         return AsyncSandbox(self, data, scope)
 
+    async def update(
+        self,
+        id: str,
+        params: UpdateSandboxParams | Mapping[str, Any],
+        org_id: str | None = None,
+        project_id: str | None = None,
+    ) -> AsyncSandbox:
+        """Resizes a running sandbox's cpu/memory in place asynchronously."""
+        from neevai.handles.sandbox import AsyncSandbox
+
+        scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
+        path = f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes/{id}"
+
+        raw = await self._client._transport.request(
+            "PATCH", path, body=_prepare_update_body(params)
+        )
+        data = coerce_model(SandboxData, raw)
+        return AsyncSandbox(self, data, scope)
+
     async def pause(
         self,
         id: str,
         *,
-        preserve_memory: bool | None = None,
         org_id: str | None = None,
         project_id: str | None = None,
     ) -> AsyncSandbox:
-        """Scales a sandbox to 0 replicas asynchronously."""
+        """Scales a sandbox to 0 replicas asynchronously, always capturing the full snapshot."""
         from neevai.handles.sandbox import AsyncSandbox
 
         scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
         path = f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes/{id}/pause"
 
-        body: dict[str, Any] = {}
-        if preserve_memory is not None:
-            body["preserve_memory"] = preserve_memory
-        raw = await self._client._transport.request("POST", path, body=body)
+        raw = await self._client._transport.request("POST", path, body={})
         data = coerce_model(SandboxData, raw)
         return AsyncSandbox(self, data, scope)
 

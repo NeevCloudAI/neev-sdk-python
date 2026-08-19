@@ -378,7 +378,14 @@ def _control_response(
                 return json_resp(204)
             if method == "PATCH":
                 if isinstance(body, dict):
-                    sandbox.update(body)
+                    patch = dict(body)
+                    # Mirror the backend resize: resources merge field-by-field, so a
+                    # size the caller left out keeps its current value.
+                    if isinstance(patch.get("resources"), dict):
+                        merged = dict(sandbox.get("resources") or {})
+                        merged.update(patch["resources"])
+                        patch["resources"] = merged
+                    sandbox.update(patch)
                     return json_resp(200, sandbox)
             return json_resp(400, {"message": "bad request"})
 

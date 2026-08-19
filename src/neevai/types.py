@@ -20,7 +20,6 @@ __all__ = [
     "FileEntry",
     "ForkSandboxRequest",
     "MetricSeries",
-    "PauseSandboxParams",
     "ProcessInfo",
     "ProcessLogEntry",
     "ProcessLogEvent",
@@ -46,6 +45,7 @@ __all__ = [
     "StderrStreamEvent",
     "StdoutStreamEvent",
     "UpdateAgentParams",
+    "UpdateSandboxParams",
     "WatchEvent",
 ]
 
@@ -81,9 +81,6 @@ from neevai.generated.aiagent import (  # noqa: F401
 )
 from neevai.generated.aiagent import (  # noqa: F401
     MetricSeries as MetricSeries,
-)
-from neevai.generated.aiagent import (  # noqa: F401
-    PauseSandboxRequest as PauseSandboxParams,
 )
 from neevai.generated.aiagent import (  # noqa: F401
     RestoreSandboxRequest as RestoreSandboxRequest,
@@ -123,6 +120,9 @@ from neevai.generated.aiagent import (  # noqa: F401
 )
 from neevai.generated.aiagent import (  # noqa: F401
     UpdateAgentRequest as UpdateAgentParams,
+)
+from neevai.generated.aiagent import (  # noqa: F401
+    UpdateSandboxRequest as UpdateSandboxParams,
 )
 
 # Steady-state phases from the OpenAPI spec, plus transitional values the API may

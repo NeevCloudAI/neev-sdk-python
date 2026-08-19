@@ -1,9 +1,10 @@
 """
 Command-line controller for sandbox resource operations.
 
-Thin CLI over ``client.sandboxes`` — create, list, get, pause, resume, delete,
-and query metrics without writing a custom script. Useful for manual testing
-and automation that prefers subprocess invocations over embedded SDK calls.
+Thin CLI over ``client.sandboxes`` — create, list, get, resize, pause, resume,
+delete, and query metrics without writing a custom script. Useful for manual
+testing and automation that prefers subprocess invocations over embedded SDK
+calls.
 
 Prerequisites
 -------------
@@ -29,10 +30,14 @@ Subcommands
 | ``create`` | Provision a new sandbox | ``--name``, ``--template-id``, ``--wait`` |
 | ``list`` | Paginated sandbox list | ``--page``, ``--limit``, ``--name``, ``--status`` |
 | ``get`` | Fetch one sandbox by ID | — |
-| ``pause`` | Scale to 0 replicas | ``--preserve-memory`` / ``--no-preserve-memory`` |
+| ``resize`` | Resize cpu/memory in place | ``--cpu``, ``--memory-gb`` |
+| ``pause`` | Scale to 0 replicas | — |
 | ``resume`` | Scale back to 1 replica | — |
 | ``delete`` | Permanently remove | — |
 | ``metrics`` | Query health metrics | ``--from``, ``--to``, ``--step`` |
+
+``resize`` sends only the sizes you pass, so anything you leave out keeps its current
+value. Disk is not resizable in place.
 
 Global flag ``--json`` emits structured JSON on stdout instead of human-readable
 lines.
@@ -53,6 +58,7 @@ Usage::
 
     python examples/sandbox_lifecycle_controller.py list --page 1 --limit 20
     python examples/sandbox_lifecycle_controller.py get <sandbox-id>
+    python examples/sandbox_lifecycle_controller.py resize <sandbox-id> --cpu 2 --memory-gb 4
     python examples/sandbox_lifecycle_controller.py pause <sandbox-id>
     python examples/sandbox_lifecycle_controller.py resume <sandbox-id>
     python examples/sandbox_lifecycle_controller.py delete <sandbox-id>
@@ -148,12 +154,23 @@ def _cmd_get(client: NeevAI, args: argparse.Namespace) -> None:
     _print_sandbox(sandbox, as_json=args.json)
 
 
+def _cmd_resize(client: NeevAI, args: argparse.Namespace) -> None:
+    """Resize a running sandbox in place; only the sizes passed on the CLI are sent."""
+    resources: dict[str, Any] = {}
+    if args.cpu is not None:
+        resources["cpu"] = args.cpu
+    if args.memory_gb is not None:
+        resources["memory_gb"] = args.memory_gb
+    if not resources:
+        print("Error: resize needs --cpu and/or --memory-gb", file=sys.stderr)
+        sys.exit(1)
+    sandbox = client.sandboxes.update(args.sandbox_id, {"resources": resources})
+    _print_sandbox(sandbox, as_json=args.json)
+
+
 def _cmd_pause(client: NeevAI, args: argparse.Namespace) -> None:
     """Pause a sandbox (scale to 0 replicas)."""
-    pause_kwargs: dict[str, Any] = {}
-    if args.preserve_memory is not None:
-        pause_kwargs["preserve_memory"] = args.preserve_memory
-    sandbox = client.sandboxes.pause(args.sandbox_id, **pause_kwargs)
+    sandbox = client.sandboxes.pause(args.sandbox_id)
     _print_sandbox(sandbox, as_json=args.json)
 
 
@@ -220,15 +237,13 @@ def _build_parser() -> argparse.ArgumentParser:
     get = subparsers.add_parser("get", help="Get sandbox details.")
     get.add_argument("sandbox_id", help="Sandbox UUID.")
 
+    resize = subparsers.add_parser("resize", help="Resize a running sandbox in place.")
+    resize.add_argument("sandbox_id", help="Sandbox UUID.")
+    resize.add_argument("--cpu", type=float, help="New vCPU count (multiples of 0.5).")
+    resize.add_argument("--memory-gb", dest="memory_gb", type=int, help="New memory size in GB.")
+
     pause = subparsers.add_parser("pause", help="Pause a sandbox (scale to 0 replicas).")
     pause.add_argument("sandbox_id", help="Sandbox UUID.")
-    pause.add_argument(
-        "--preserve-memory",
-        dest="preserve_memory",
-        action=argparse.BooleanOptionalAction,
-        default=None,
-        help="Capture FS+memory snapshot before pause (server default: true).",
-    )
 
     resume = subparsers.add_parser("resume", help="Resume a paused sandbox.")
     resume.add_argument("sandbox_id", help="Sandbox UUID.")
@@ -254,6 +269,7 @@ def main() -> None:
         "create": _cmd_create,
         "list": _cmd_list,
         "get": _cmd_get,
+        "resize": _cmd_resize,
         "pause": _cmd_pause,
         "resume": _cmd_resume,
         "delete": _cmd_delete,
