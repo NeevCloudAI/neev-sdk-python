@@ -5,7 +5,7 @@ import uuid
 import pytest
 
 from neevai._parse import ResponseValidationError
-from neevai.client import NeevAI
+from neevai.client import AsyncNeevAI, NeevAI
 from neevai.errors import NotFoundError
 from neevai.generated.aiagent import SnapshotStatus
 from neevai.types import CreateSandboxParams, Snapshot
@@ -252,6 +252,34 @@ def test_sandboxes_pause_sends_a_body_with_no_fields(mock_transport):
     sb.pause()
     assert captured_bodies == [{}, {}]
     client.close()
+
+
+@pytest.mark.asyncio
+async def test_async_sandboxes_pause_sends_a_body_with_no_fields(async_mock_transport):
+    """The async surface must send `{}` too — `None` would change the content type."""
+    client = AsyncNeevAI(
+        api_key="test",
+        org_id="org1",
+        project_id="proj1",
+        client=async_mock_transport,
+    )
+    sb = await client.sandboxes.create(
+        {"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"}
+    )
+
+    captured_bodies: list[dict | None] = []
+    original_request = client._transport.request
+
+    async def capturing_request(method, path, query=None, body=None):
+        captured_bodies.append(body)
+        return await original_request(method, path, query=query, body=body)
+
+    client._transport.request = capturing_request  # type: ignore[method-assign]
+
+    await client.sandboxes.pause(sb.id)
+    await sb.pause()
+    assert captured_bodies == [{}, {}]
+    await client.aclose()
 
 
 def test_sandboxes_metrics(mock_transport):

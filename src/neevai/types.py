@@ -20,7 +20,6 @@ __all__ = [
     "FileEntry",
     "ForkSandboxRequest",
     "MetricSeries",
-    "PauseSandboxParams",
     "ProcessInfo",
     "ProcessLogEntry",
     "ProcessLogEvent",
@@ -82,9 +81,6 @@ from neevai.generated.aiagent import (  # noqa: F401
 )
 from neevai.generated.aiagent import (  # noqa: F401
     MetricSeries as MetricSeries,
-)
-from neevai.generated.aiagent import (  # noqa: F401
-    PauseSandboxRequest as PauseSandboxParams,
 )
 from neevai.generated.aiagent import (  # noqa: F401
     RestoreSandboxRequest as RestoreSandboxRequest,
