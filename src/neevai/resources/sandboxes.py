@@ -438,19 +438,19 @@ class Sandboxes:
         )
         self._client._transport.request("DELETE", path)
 
-    def restore(
+    def rollback(
         self,
         id: str,
         snapshot_id: str,
         org_id: str | None = None,
         project_id: str | None = None,
     ) -> Sandbox:
-        """Restores a sandbox in place from a snapshot."""
+        """Rolls a sandbox back in place to a previous snapshot."""
         from neevai.handles.sandbox import Sandbox
 
         scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
         path = (
-            f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes/{id}/restore"
+            f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes/{id}/rollback"
         )
         raw = self._client._transport.request(
             "POST",
@@ -749,19 +749,19 @@ class AsyncSandboxes:
         )
         await self._client._transport.request("DELETE", path)
 
-    async def restore(
+    async def rollback(
         self,
         id: str,
         snapshot_id: str,
         org_id: str | None = None,
         project_id: str | None = None,
     ) -> AsyncSandbox:
-        """Restores a sandbox in place from a snapshot asynchronously."""
+        """Rolls a sandbox back in place to a previous snapshot asynchronously."""
         from neevai.handles.sandbox import AsyncSandbox
 
         scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
         path = (
-            f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes/{id}/restore"
+            f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes/{id}/rollback"
         )
         raw = await self._client._transport.request(
             "POST",
