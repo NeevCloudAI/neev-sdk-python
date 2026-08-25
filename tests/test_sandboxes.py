@@ -569,3 +569,18 @@ async def test_async_sandboxes_update(async_mock_transport):
     res = (await client.sandboxes.get(sb.id)).data["resources"]
     assert res["cpu"] == 2 and res["memory_gb"] == 4
     await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_async_sandbox_handle_update(async_mock_transport):
+    client = AsyncNeevAI(
+        api_key="test", org_id="org1", project_id="proj1", client=async_mock_transport
+    )
+    sb = await client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-x"})
+    same = await sb.update(
+        {"resources": {"cpu": 2, "memory_gb": 4}}, allow_egress=["api.github.com"]
+    )
+    assert same is sb
+    assert sb.data["resources"]["cpu"] == 2 and sb.data["resources"]["memory_gb"] == 4
+    assert [r["host"] for r in sb.data["egress"]["allow"]] == ["api.github.com"]
+    await client.aclose()

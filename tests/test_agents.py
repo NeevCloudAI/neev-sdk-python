@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 import httpx
 import pytest
 
-from neevai.client import NeevAI
+from neevai.client import AsyncNeevAI, NeevAI
 from neevai.errors import NeevAIError, NotFoundError
 
 
@@ -192,6 +192,32 @@ def test_agents_update_resources_and_egress_single_patch(mock_transport):
     # Egress enum is serialised to a plain string, not a Python Enum.
     assert body["egress"]["mode"] == "allow_list"
     client.close()
+
+
+@pytest.mark.asyncio
+async def test_async_agents_update(async_mock_transport):
+    client = AsyncNeevAI(
+        api_key="test", org_id="org1", project_id="proj1", client=async_mock_transport
+    )
+    agent = await client.agents.create({"name": "web", "agent_template": "claude-code"})
+    updated = await client.agents.update(
+        agent.id,
+        {"resources": {"cpu": 2, "memory_gb": 4}},
+        allow_egress=["api.github.com"],
+    )
+    assert updated.id == agent.id
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_async_agent_handle_update(async_mock_transport):
+    client = AsyncNeevAI(
+        api_key="test", org_id="org1", project_id="proj1", client=async_mock_transport
+    )
+    agent = await client.agents.create({"name": "web", "agent_template": "claude-code"})
+    same = await agent.update({"resources": {"cpu": 2, "memory_gb": 4}})
+    assert same is agent
+    await client.aclose()
 
 
 def test_agents_pause_resume_paths(mock_transport):

@@ -1,10 +1,10 @@
 """
 Resize a running sandbox in place, then re-scope its egress — no restart.
 
-Provisions a sandbox, waits for it to become ready, resizes its CPU/memory in
-place with ``client.sandboxes.update``, then replaces its egress policy with a
-new allow-list. Both updates keep the sandbox's ID, name, and preview URLs and
-take effect without a restart.
+Provisions a sandbox, waits for it to become ready, then resizes its CPU/memory
+and replaces its egress policy in a single ``client.sandboxes.update`` call —
+one PATCH carrying both ``resources`` and ``egress``. The update keeps the
+sandbox's ID, name, and preview URLs and takes effect without a restart.
 
 Prerequisites
 -------------
@@ -26,12 +26,11 @@ Flow
 ----
 
 1. **Create & wait** — provision a sandbox and block on ``wait_until_ready``
-2. **Resize** — ``client.sandboxes.update(id, {"resources": {...}})`` bumps
-   cpu/memory on the running sandbox (``disk_gb`` is not resizable in place)
-3. **Re-scope egress** — a second ``update`` swaps the egress policy via the
-   ``allow_egress`` convenience; a single call could also carry both at once
-4. **Verify** — a fresh ``get`` reflects the new shape; the ID is unchanged
-5. **Cleanup** — delete the sandbox
+2. **Resize + re-scope egress in one call** — a single
+   ``update(resources=…, allow_egress=…)`` bumps cpu/memory and swaps the
+   egress policy in one PATCH (``disk_gb`` is not resizable in place)
+3. **Verify** — a fresh ``get`` reflects the new shape; the ID is unchanged
+4. **Cleanup** — delete the sandbox
 
 Run::
 
@@ -62,18 +61,14 @@ def main() -> None:
             sandbox.wait_until_ready(timeout_ms=WAIT_TIMEOUT_MS)
             print(f"ready {sandbox.id} at {sandbox.connect_url}")
 
-            # --- Resize in place (no restart; keeps ID, name, preview URLs) ---
-            sandbox.update({"resources": {"cpu": 2, "memory_gb": 4}})
+            # --- Resize AND re-scope egress in a single PATCH (no restart;
+            #     keeps ID, name, preview URLs) ---
+            sandbox.update(
+                {"resources": {"cpu": 2, "memory_gb": 4}},
+                allow_egress=["api.github.com"],
+            )
             print(f"resized: {sandbox.data.get('resources')}")
-
-            # --- Re-scope egress live (replaces the policy in full) ---
-            sandbox.update({}, allow_egress=["api.github.com"])
             print(f"egress now allows: {[r['host'] for r in sandbox.data['egress']['allow']]}")
-
-            # A single call can carry both at once:
-            #   sandbox.update(
-            #       {"resources": {"cpu": 4}}, allow_egress=["api.github.com"]
-            #   )
 
             # --- Verify the new shape survives a round-trip; ID is unchanged ---
             fresh = client.sandboxes.get(sandbox.id)
