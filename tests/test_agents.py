@@ -134,10 +134,63 @@ def test_agents_empty_update_raises_without_http(mock_transport):
     request_mock = MagicMock(side_effect=client._transport.request)
     client._transport.request = request_mock
 
-    with pytest.raises(NeevAIError, match="empty body"):
+    with pytest.raises(NeevAIError, match="empty body") as ei:
         client.agents.update(agent.id, {})
+    msg = str(ei.value)
+    assert "resources" in msg and "egress" in msg
 
     request_mock.assert_not_called()
+    client.close()
+
+
+def _capture_requests(client) -> list[tuple[str, str, dict | None]]:
+    captured: list[tuple[str, str, dict | None]] = []
+    original = client._transport.request
+
+    def capturing(method, path, query=None, body=None):
+        captured.append((method, path, body))
+        return original(method, path, query=query, body=body)
+
+    client._transport.request = capturing  # type: ignore[method-assign]
+    return captured
+
+
+def test_agents_update_egress_convenience_matches_create(mock_transport):
+    client = _make_client(mock_transport)
+    captured = _capture_requests(client)
+
+    agent = client.agents.create(
+        {"name": "web", "agent_template": "claude-code"}, allow_egress=["github.com"]
+    )
+    create_egress = next(b for (m, _p, b) in captured if m == "POST")["egress"]
+
+    client.agents.update(agent.id, {}, allow_egress=["github.com"])
+    update_egress = captured[-1][2]["egress"]
+
+    # Criterion 7: convenience shape is byte-identical between create and update.
+    assert update_egress == create_egress
+    client.close()
+
+
+def test_agents_update_resources_and_egress_single_patch(mock_transport):
+    client = _make_client(mock_transport)
+    agent = client.agents.create({"name": "web", "agent_template": "claude-code"})
+    captured = _capture_requests(client)
+
+    client.agents.update(
+        agent.id,
+        {
+            "resources": {"cpu": 2, "memory_gb": 4},
+            "egress": {"mode": "allow_list", "allow": [{"host": "api.github.com"}]},
+        },
+    )
+
+    patches = [(p, b) for (m, p, b) in captured if m == "PATCH"]
+    assert len(patches) == 1
+    _path, body = patches[0]
+    assert "resources" in body and "egress" in body
+    # Egress enum is serialised to a plain string, not a Python Enum.
+    assert body["egress"]["mode"] == "allow_list"
     client.close()
 
 

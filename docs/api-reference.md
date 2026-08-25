@@ -39,6 +39,7 @@ Details: [`api-inventory.md` → Client](./api-inventory.md#client)
 | `create(params, org_id=None, project_id=None, *, allow_internet=None, allow_egress=None)` | `Sandbox` | Creates a new sandbox. `allow_internet=True` / `allow_egress=[...]` open egress (deny-all by default; explicit `egress` wins). Optional `from_snapshot` in params provisions from a snapshot. |
 | `list(page=None, limit=None, org_id=None, project_id=None)` | `SandboxPage` | Lists sandboxes with pagination in the resolved org/project scope. |
 | `get(id, org_id=None, project_id=None)` | `Sandbox` | Fetches the current record for a sandbox by ID. |
+| `update(id, params, org_id=None, project_id=None, *, allow_internet=None, allow_egress=None)` | `Sandbox` | In-place update of `resources` (cpu/memory) and/or `egress`. Resize keeps the ID/name/preview URLs and does not restart; `disk_gb` is not resizable and the server rejects a change. `allow_internet` / `allow_egress` are the same egress convenience as `create`. Rejects `{}` locally, naming both fields. |
 | `pause(id, preserve_memory=None, org_id=None, project_id=None)` | `Sandbox` | Scales a sandbox to 0 replicas (Paused state). Optional `preserve_memory` request body (server default `true`). |
 | `resume(id, org_id=None, project_id=None)` | `Sandbox` | Scales a sandbox back to 1 replica toward Ready. |
 | `delete(id, org_id=None, project_id=None)` | `None` | Permanently deletes a sandbox. |
@@ -88,7 +89,7 @@ workspace on some backends. See
 | `create(params, org_id=None, project_id=None, *, allow_internet=None, allow_egress=None)` | `Agent` | Creates an agent from a catalogue template name (`agent_template`). `allow_internet=True` / `allow_egress=[...]` open egress (deny-all by default; explicit `egress` wins). |
 | `list(page=None, limit=None, org_id=None, project_id=None)` | `AgentPage` | Lists agents with pagination in the resolved org/project scope. |
 | `get(id, org_id=None, project_id=None)` | `Agent` | Fetches the current record for an agent by ID. |
-| `update(id, params, org_id=None, project_id=None)` | `Agent` | In-place update of egress and/or cpu/memory (`resources`; defaults & bounds in [Agent resources](./api-inventory.md#agent-resources)). Rejects `{}` locally. |
+| `update(id, params, org_id=None, project_id=None, *, allow_internet=None, allow_egress=None)` | `Agent` | In-place update of egress and/or cpu/memory (`resources`; defaults & bounds in [Agent resources](./api-inventory.md#agent-resources)). `allow_internet` / `allow_egress` are the same egress convenience as `create`. Rejects `{}` locally, naming both fields. |
 | `pause(id, org_id=None, project_id=None)` | `Agent` | Pauses the agent and its backing sandbox. |
 | `resume(id, org_id=None, project_id=None)` | `Agent` | Resumes a paused agent. |
 | `delete(id, org_id=None, project_id=None)` | `None` | Permanently deletes an agent (HTTP 204, no body). |
@@ -114,6 +115,7 @@ Returned by `create()`, `get()`, `list().items`, etc.
 | --- | ---- |
 | `id`, `name`, `phase`, `replicas`, `connect_url`, `data` | properties |
 | `refresh()` | method |
+| `update(params, *, allow_internet=None, allow_egress=None)` | method — in-place resize / egress re-scope; updates state in place |
 | `wait_until_ready(timeout_ms=120000, ...)` | method — polls the API until `Ready` |
 | `pause(preserve_memory=None)` / `resume()` | methods |
 | `snapshot(params=None)` / `snapshots()` | methods |
@@ -219,6 +221,7 @@ Minimal one-liners for each public API. Runnable examples link to repo paths.
 | `client.sandboxes.create(...)` | `sandbox = client.sandboxes.create({...})` | `sandbox = await client.sandboxes.create({...})` | [sandbox_lifecycle.py](../examples/sandbox_lifecycle.py), [snapshot_fork_restore.py](../examples/snapshot_fork_restore.py) (`from_snapshot`) |
 | `client.sandboxes.list(...)` | `page = client.sandboxes.list(name="web", status="Paused")` | `page = await client.sandboxes.list(name="web", status="Paused")` | [sandbox_lifecycle_controller.py](../examples/sandbox_lifecycle_controller.py) |
 | `client.sandboxes.get(id)` | `sandbox = client.sandboxes.get(sandbox_id)` | `sandbox = await client.sandboxes.get(sandbox_id)` | [sandbox_lifecycle_controller.py](../examples/sandbox_lifecycle_controller.py) |
+| `client.sandboxes.update(id, params, *, allow_internet, allow_egress)` | `client.sandboxes.update(id, {"resources": {"cpu": 2}})` | `await client.sandboxes.update(id, {"resources": {"cpu": 2}})` | [sandbox_update.py](../examples/sandbox_update.py) |
 | `client.sandboxes.pause(id, preserve_memory=None)` | `sandbox = client.sandboxes.pause(sandbox_id, preserve_memory=True)` | `sandbox = await client.sandboxes.pause(sandbox_id, preserve_memory=True)` | [sandbox_lifecycle_controller.py](../examples/sandbox_lifecycle_controller.py) |
 | `client.sandboxes.resume(id)` | `sandbox = client.sandboxes.resume(sandbox_id)` | `sandbox = await client.sandboxes.resume(sandbox_id)` | [sandbox_lifecycle_controller.py](../examples/sandbox_lifecycle_controller.py) |
 | `client.sandboxes.delete(id)` | `client.sandboxes.delete(sandbox_id)` | `await client.sandboxes.delete(sandbox_id)` | [sandbox_lifecycle_controller.py](../examples/sandbox_lifecycle_controller.py) |
@@ -244,6 +247,7 @@ Minimal one-liners for each public API. Runnable examples link to repo paths.
 | `sandbox.connect_url` | `print(sandbox.connect_url)` | `print(sandbox.connect_url)` | [templates_list.py](../examples/templates_list.py) |
 | `sandbox.data` | `record = sandbox.data` | `record = sandbox.data` | — |
 | `sandbox.refresh()` | `sandbox.refresh()` | `await sandbox.refresh()` | — |
+| `sandbox.update(params, *, allow_internet, allow_egress)` | `sandbox.update({"resources": {"cpu": 2}}, allow_egress=["api.github.com"])` | `await sandbox.update({"resources": {"cpu": 2}})` | [sandbox_update.py](../examples/sandbox_update.py) |
 | `sandbox.wait_until_ready(...)` | `sandbox.wait_until_ready(timeout_ms=120_000)` | `await sandbox.wait_until_ready()` | [sandbox_lifecycle.py](../examples/sandbox_lifecycle.py) |
 | `sandbox.pause(preserve_memory=None)` | `sandbox.pause(preserve_memory=True)` | `await sandbox.pause(preserve_memory=True)` | [sandbox_lifecycle.py](../examples/sandbox_lifecycle.py) |
 | `sandbox.resume()` | `sandbox.resume()` | `await sandbox.resume()` | — |

@@ -380,6 +380,13 @@ def _control_response(
                 return json_resp(204)
             if method == "PATCH":
                 if isinstance(body, dict):
+                    # Mirror the backend: disk_gb is not resizable in place.
+                    resources = body.get("resources")
+                    if isinstance(resources, dict) and "disk_gb" in resources:
+                        return json_resp(
+                            400,
+                            {"error": "disk_gb is not resizable in place", "details": "disk_gb"},
+                        )
                     sandbox.update(body)
                     return json_resp(200, sandbox)
             return json_resp(400, {"message": "bad request"})

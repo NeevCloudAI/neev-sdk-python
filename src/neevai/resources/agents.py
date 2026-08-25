@@ -1,12 +1,12 @@
 from __future__ import annotations
 
+import builtins
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from neevai._egress import build_egress
+from neevai._egress import build_egress, prepare_update_body
 from neevai._parse import coerce_model, coerce_params
-from neevai.errors import NeevAIError
 from neevai.types import (
     AgentData,
     AgentListResponse,
@@ -67,21 +67,6 @@ def _prepare_create_params(
         if egress is not None:
             raw["egress"] = egress
     return coerce_params(CreateAgentParams, raw)
-
-
-def _prepare_update_body(
-    params: UpdateAgentParams | Mapping[str, Any],
-) -> dict[str, Any]:
-    if isinstance(params, Mapping):
-        raw: dict[str, Any] = dict(params)
-    else:
-        raw = params.model_dump(exclude_unset=True)
-    body = coerce_params(UpdateAgentParams, raw).model_dump(exclude_unset=True)
-    if not body:
-        raise NeevAIError(
-            "UpdateAgentParams must include at least one of `egress` or `resources`; empty body is not allowed."
-        )
-    return body
 
 
 class Agents:
@@ -179,12 +164,22 @@ class Agents:
         params: UpdateAgentParams | Mapping[str, Any],
         org_id: str | None = None,
         project_id: str | None = None,
+        *,
+        allow_internet: bool | None = None,
+        allow_egress: builtins.list[str] | None = None,
     ) -> Agent:
-        """Updates mutable agent fields in place."""
+        """Updates mutable agent fields (``resources`` and/or ``egress``) in place.
+
+        ``allow_internet=True`` opens all egress (0.0.0.0/0 and ::/0); ``allow_egress``
+        allows specific hosts (FQDN or CIDR). An explicit ``egress`` in ``params`` takes
+        precedence over both. At least one of ``resources`` or ``egress`` must result.
+        """
         from neevai.handles.agent import Agent
 
         scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
-        body = _prepare_update_body(params)
+        body = prepare_update_body(
+            UpdateAgentParams, params, allow_internet=allow_internet, allow_egress=allow_egress
+        )
         raw = self._client._transport.request(
             "PATCH",
             f"{_agents_path(scope)}/{id}",
@@ -327,12 +322,22 @@ class AsyncAgents:
         params: UpdateAgentParams | Mapping[str, Any],
         org_id: str | None = None,
         project_id: str | None = None,
+        *,
+        allow_internet: bool | None = None,
+        allow_egress: builtins.list[str] | None = None,
     ) -> AsyncAgent:
-        """Updates mutable agent fields in place asynchronously."""
+        """Updates mutable agent fields (``resources`` and/or ``egress``) in place asynchronously.
+
+        ``allow_internet=True`` opens all egress (0.0.0.0/0 and ::/0); ``allow_egress``
+        allows specific hosts (FQDN or CIDR). An explicit ``egress`` in ``params`` takes
+        precedence over both. At least one of ``resources`` or ``egress`` must result.
+        """
         from neevai.handles.agent import AsyncAgent
 
         scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
-        body = _prepare_update_body(params)
+        body = prepare_update_body(
+            UpdateAgentParams, params, allow_internet=allow_internet, allow_egress=allow_egress
+        )
         raw = await self._client._transport.request(
             "PATCH",
             f"{_agents_path(scope)}/{id}",
