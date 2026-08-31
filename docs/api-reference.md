@@ -41,6 +41,8 @@ Details: [`api-inventory.md` → Client](./api-inventory.md#client)
 | `get(id, org_id=None, project_id=None)` | `Sandbox` | Fetches the current record for a sandbox by ID. |
 | `pause(id, preserve_memory=None, org_id=None, project_id=None)` | `Sandbox` | Scales a sandbox to 0 replicas (Paused state). Optional `preserve_memory` request body (server default `true`). |
 | `resume(id, org_id=None, project_id=None)` | `Sandbox` | Scales a sandbox back to 1 replica toward Ready. |
+| `keepalive(id, org_id=None, project_id=None)` | `Sandbox` | Resets the sandbox's idle timer (POST `.../keepalive`). |
+| `update_timeout(id, params, org_id=None, project_id=None)` | `Sandbox` | Changes idle/lifetime windows (PUT `.../timeout`); only the windows passed change, `None` clears one. |
 | `delete(id, org_id=None, project_id=None)` | `None` | Permanently deletes a sandbox. |
 | `metrics(id, from_=None, to=None, step=None, ...)` | `SandboxMetricsResponse` | Queries live health metrics over an optional time range. |
 | `create_snapshot(id, params=None, ...)` | `Snapshot` | Creates a filesystem snapshot (returns immediately with status Pending). |
@@ -116,6 +118,7 @@ Returned by `create()`, `get()`, `list().items`, etc.
 | `refresh()` | method |
 | `wait_until_ready(timeout_ms=120000, ...)` | method — polls the API until `Ready` |
 | `pause(preserve_memory=None)` / `resume()` | methods |
+| `keepalive()` / `update_timeout(params)` | methods — reset idle timer / change lifecycle windows |
 | `snapshot(params=None)` / `snapshots()` | methods |
 | `restore(snapshot_id)` / `fork(name)` | methods |
 | `delete()` | method |
@@ -221,6 +224,8 @@ Minimal one-liners for each public API. Runnable examples link to repo paths.
 | `client.sandboxes.get(id)` | `sandbox = client.sandboxes.get(sandbox_id)` | `sandbox = await client.sandboxes.get(sandbox_id)` | [sandbox_lifecycle_controller.py](../examples/sandbox_lifecycle_controller.py) |
 | `client.sandboxes.pause(id, preserve_memory=None)` | `sandbox = client.sandboxes.pause(sandbox_id, preserve_memory=True)` | `sandbox = await client.sandboxes.pause(sandbox_id, preserve_memory=True)` | [sandbox_lifecycle_controller.py](../examples/sandbox_lifecycle_controller.py) |
 | `client.sandboxes.resume(id)` | `sandbox = client.sandboxes.resume(sandbox_id)` | `sandbox = await client.sandboxes.resume(sandbox_id)` | [sandbox_lifecycle_controller.py](../examples/sandbox_lifecycle_controller.py) |
+| `client.sandboxes.keepalive(id)` | `client.sandboxes.keepalive(sandbox_id)` | `await client.sandboxes.keepalive(sandbox_id)` | [sandbox_lifecycle_windows.py](../examples/sandbox_lifecycle_windows.py) |
+| `client.sandboxes.update_timeout(id, params)` | `client.sandboxes.update_timeout(sandbox_id, {"idle_timeout_seconds": 300})` | `await client.sandboxes.update_timeout(sandbox_id, {"idle_timeout_seconds": 300})` | [sandbox_lifecycle_windows.py](../examples/sandbox_lifecycle_windows.py) |
 | `client.sandboxes.delete(id)` | `client.sandboxes.delete(sandbox_id)` | `await client.sandboxes.delete(sandbox_id)` | [sandbox_lifecycle_controller.py](../examples/sandbox_lifecycle_controller.py) |
 | `client.sandboxes.metrics(id, ...)` | `metrics = client.sandboxes.metrics(sandbox_id)` | `metrics = await client.sandboxes.metrics(sandbox_id)` | [sandbox_lifecycle_controller.py](../examples/sandbox_lifecycle_controller.py) |
 | `client.sandboxes.create_snapshot(id, ...)` | `snap = client.sandboxes.create_snapshot(sb.id, {"name": "demo"})` | `snap = await client.sandboxes.create_snapshot(sb.id, {"name": "demo"})` | [snapshot_fork_restore.py](../examples/snapshot_fork_restore.py) (via `sandbox.snapshot`) |
@@ -247,6 +252,8 @@ Minimal one-liners for each public API. Runnable examples link to repo paths.
 | `sandbox.wait_until_ready(...)` | `sandbox.wait_until_ready(timeout_ms=120_000)` | `await sandbox.wait_until_ready()` | [sandbox_lifecycle.py](../examples/sandbox_lifecycle.py) |
 | `sandbox.pause(preserve_memory=None)` | `sandbox.pause(preserve_memory=True)` | `await sandbox.pause(preserve_memory=True)` | [sandbox_lifecycle.py](../examples/sandbox_lifecycle.py) |
 | `sandbox.resume()` | `sandbox.resume()` | `await sandbox.resume()` | — |
+| `sandbox.keepalive()` | `sandbox.keepalive()` | `await sandbox.keepalive()` | [sandbox_lifecycle_windows.py](../examples/sandbox_lifecycle_windows.py) |
+| `sandbox.update_timeout(params)` | `sandbox.update_timeout({"idle_timeout_seconds": 300, "max_lifetime_seconds": None})` | `await sandbox.update_timeout({"idle_timeout_seconds": 300})` | [sandbox_lifecycle_windows.py](../examples/sandbox_lifecycle_windows.py) |
 | `sandbox.snapshot(params=None)` | `pending = sandbox.snapshot({"name": "demo-snap"})` | `pending = await sandbox.snapshot({"name": "demo-snap"})` | [snapshot_fork_restore.py](../examples/snapshot_fork_restore.py) |
 | `sandbox.snapshots()` | `snaps = sandbox.snapshots()` | `snaps = await sandbox.snapshots()` | — |
 | `sandbox.restore(snapshot_id)` | `sandbox.restore(snapshot_id)` | `await sandbox.restore(snapshot_id)` | — (prefer `from_snapshot` create; see [Snapshots](#snapshots)) |

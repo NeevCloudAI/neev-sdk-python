@@ -4,7 +4,7 @@ import uuid
 
 import pytest
 
-from neevai.client import NeevAI
+from neevai.client import AsyncNeevAI, NeevAI
 from neevai.errors import NeevAIError
 from neevai.handles.sandbox import Sandbox
 
@@ -243,3 +243,32 @@ def test_sandbox_refresh_invalidates_connection_when_connect_url_changes(mock_tr
     assert second_conn._transport.connect_url == "https://second.example.com"
 
     client.close()
+
+
+def test_sandbox_handle_keepalive_and_update_timeout_in_place(mock_transport):
+    client = NeevAI(api_key="test", org_id="org1", project_id="proj1", client=mock_transport)
+    sb = client.sandboxes.create(
+        {"sandbox_template_id": "sb-x", "lifecycle": {"idle_timeout_seconds": 300}}
+    )
+
+    assert sb.keepalive() is sb
+
+    same = sb.update_timeout({"idle_timeout_seconds": 900})
+    assert same is sb
+    assert sb.data["idle_timeout_seconds"] == 900
+    client.close()
+
+
+@pytest.mark.asyncio
+async def test_async_sandbox_handle_keepalive_and_update_timeout(async_mock_transport):
+    client = AsyncNeevAI(
+        api_key="test", org_id="org1", project_id="proj1", client=async_mock_transport
+    )
+    sb = await client.sandboxes.create({"sandbox_template_id": "sb-x"})
+
+    assert await sb.keepalive() is sb
+
+    same = await sb.update_timeout({"idle_timeout_seconds": 42})
+    assert same is sb
+    assert sb.data["idle_timeout_seconds"] == 42
+    await client.aclose()

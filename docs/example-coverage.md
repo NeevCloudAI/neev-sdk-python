@@ -16,10 +16,14 @@ path and run commands, see [`examples/README.md`](../examples/README.md).
 | `AsyncNeevAI(...)` | `async_sandbox.py` | `async with AsyncNeevAI() as client:` |
 | `client.sandboxes.create` | tier-1, `agent_patterns/*`, `workflow_examples/*`, `sandbox_lifecycle_controller.py`, `snapshot_fork_restore.py` | `sandbox = client.sandboxes.create({...})` |
 | `client.sandboxes.create` (`from_snapshot`) | `snapshot_fork_restore.py` | `restored = client.sandboxes.create({..., "from_snapshot": snapshot_id})` |
+| `client.sandboxes.create` (`lifecycle`) | `sandbox_lifecycle_windows.py` | `client.sandboxes.create({..., "lifecycle": {"idle_timeout_seconds": 60}})` |
+| `client.sandboxes.create` (BYOI `image`/`command`) | `byoi_create.py` | `client.sandboxes.create({"image": "docker.io/library/python:3.12", "command": [...]})` |
 | `client.sandboxes.list` | `sandbox_lifecycle_controller.py` | `page = client.sandboxes.list(page=1, limit=20)` |
 | `client.sandboxes.get` | `sandbox_lifecycle_controller.py` | `sandbox = client.sandboxes.get(sandbox_id)` |
 | `client.sandboxes.pause` | `sandbox_lifecycle_controller.py` | `sandbox = client.sandboxes.pause(sandbox_id)` |
 | `client.sandboxes.resume` | `sandbox_lifecycle_controller.py` | `sandbox = client.sandboxes.resume(sandbox_id)` |
+| `client.sandboxes.keepalive` / `sandbox.keepalive` | `sandbox_lifecycle_windows.py` | `sandbox.keepalive()` |
+| `client.sandboxes.update_timeout` / `sandbox.update_timeout` | `sandbox_lifecycle_windows.py` | `sandbox.update_timeout({"idle_timeout_seconds": 300, "max_lifetime_seconds": None})` |
 | `client.sandboxes.delete` | `sandbox_lifecycle_controller.py` | `client.sandboxes.delete(sandbox_id)` |
 | `client.sandboxes.metrics` | `sandbox_lifecycle_controller.py` | `metrics = client.sandboxes.metrics(sandbox_id)` |
 | `client.sandboxes.create_snapshot` | `snapshot_fork_restore.py` (via `sandbox.snapshot`) | `pending = sandbox.snapshot({"name": "demo-snap"})` |

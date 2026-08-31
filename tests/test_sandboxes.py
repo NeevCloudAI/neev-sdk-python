@@ -1,12 +1,13 @@
 """Basic sanity tests for the Sandboxes resource (the API, sync)."""
 
 import uuid
+from unittest.mock import MagicMock
 
 import pytest
 
 from neevai._parse import ResponseValidationError
-from neevai.client import NeevAI
-from neevai.errors import NotFoundError
+from neevai.client import AsyncNeevAI, NeevAI
+from neevai.errors import NeevAIError, NotFoundError
 from neevai.generated.aiagent import SnapshotStatus
 from neevai.types import CreateSandboxParams, Snapshot
 
@@ -446,3 +447,127 @@ def test_sandboxes_create_from_snapshot(mock_transport):
     )
     assert restored.name == "from-snap"
     client.close()
+
+
+# --- Lifecycle windows + create-time options ---
+
+
+def _capture_bodies(client) -> list[tuple[str, str, dict | None]]:
+    captured: list[tuple[str, str, dict | None]] = []
+    original = client._transport.request
+
+    def capturing(method, path, query=None, body=None):
+        captured.append((method, path, body))
+        return original(method, path, query=query, body=body)
+
+    client._transport.request = capturing  # type: ignore[method-assign]
+    return captured
+
+
+def test_sandboxes_create_with_lifecycle_sends_lifecycle(mock_transport):
+    client = _make_client(mock_transport)
+    captured = _capture_bodies(client)
+    sb = client.sandboxes.create(
+        {
+            "sandbox_template_id": "sb-x",
+            "lifecycle": {"max_lifetime_seconds": 3600, "idle_timeout_seconds": 300},
+        }
+    )
+    body = next(b for (m, _p, b) in captured if m == "POST")
+    assert body["lifecycle"] == {"max_lifetime_seconds": 3600, "idle_timeout_seconds": 300}
+    # The window is observable on the created sandbox.
+    assert sb.data["idle_timeout_seconds"] == 300
+    client.close()
+
+
+def test_sandboxes_create_without_lifecycle_omits_key(mock_transport):
+    client = _make_client(mock_transport)
+    captured = _capture_bodies(client)
+    client.sandboxes.create({"sandbox_template_id": "sb-x"})
+    body = next(b for (m, _p, b) in captured if m == "POST")
+    assert "lifecycle" not in body
+    client.close()
+
+
+def test_sandboxes_create_byoi_sends_image_and_command(mock_transport):
+    client = _make_client(mock_transport)
+    captured = _capture_bodies(client)
+    client.sandboxes.create(
+        {"image": "docker.io/library/python:3.12", "command": ["sleep", "infinity"]}
+    )
+    body = next(b for (m, _p, b) in captured if m == "POST")
+    assert body["image"] == "docker.io/library/python:3.12"
+    assert body["command"] == ["sleep", "infinity"]
+    client.close()
+
+
+def test_sandboxes_keepalive(mock_transport):
+    client = _make_client(mock_transport)
+    sb = client.sandboxes.create({"sandbox_template_id": "sb-x"})
+    captured = _capture_bodies(client)
+    same = client.sandboxes.keepalive(sb.id)
+    assert same.id == sb.id
+    method, path, _body = captured[-1]
+    assert method == "POST" and path.endswith(f"/sandboxes/{sb.id}/keepalive")
+    client.close()
+
+
+def test_sandboxes_update_timeout_partial_leaves_others_unchanged(mock_transport):
+    client = _make_client(mock_transport)
+    sb = client.sandboxes.create(
+        {
+            "sandbox_template_id": "sb-x",
+            "lifecycle": {"idle_timeout_seconds": 300, "max_lifetime_seconds": 3600},
+        }
+    )
+    captured = _capture_bodies(client)
+    updated = client.sandboxes.update_timeout(sb.id, {"idle_timeout_seconds": 600})
+
+    method, path, body = captured[-1]
+    assert method == "PUT" and path.endswith(f"/sandboxes/{sb.id}/timeout")
+    # Only the passed window is on the wire; the others are not sent (left unchanged).
+    assert body == {"idle_timeout_seconds": 600}
+    assert updated.data["idle_timeout_seconds"] == 600
+    assert updated.data["max_lifetime_seconds"] == 3600
+    client.close()
+
+
+def test_sandboxes_update_timeout_clears_window(mock_transport):
+    client = _make_client(mock_transport)
+    sb = client.sandboxes.create(
+        {"sandbox_template_id": "sb-x", "lifecycle": {"max_lifetime_seconds": 3600}}
+    )
+    captured = _capture_bodies(client)
+    updated = client.sandboxes.update_timeout(sb.id, {"max_lifetime_seconds": None})
+
+    _method, _path, body = captured[-1]
+    # An explicit None must be sent as null so the server clears the window.
+    assert body == {"max_lifetime_seconds": None}
+    assert updated.data["max_lifetime_seconds"] is None
+    client.close()
+
+
+def test_sandboxes_update_timeout_invalid_on_idle_raises_without_http(mock_transport):
+    client = _make_client(mock_transport)
+    sb = client.sandboxes.create({"sandbox_template_id": "sb-x"})
+    request_mock = MagicMock(side_effect=client._transport.request)
+    client._transport.request = request_mock
+
+    with pytest.raises(NeevAIError):
+        client.sandboxes.update_timeout(sb.id, {"on_idle": "explode"})
+
+    request_mock.assert_not_called()
+    client.close()
+
+
+@pytest.mark.asyncio
+async def test_async_sandboxes_keepalive_and_update_timeout(async_mock_transport):
+    client = AsyncNeevAI(
+        api_key="test", org_id="org1", project_id="proj1", client=async_mock_transport
+    )
+    sb = await client.sandboxes.create({"sandbox_template_id": "sb-x"})
+    alive = await client.sandboxes.keepalive(sb.id)
+    assert alive.id == sb.id
+    updated = await client.sandboxes.update_timeout(sb.id, {"idle_timeout_seconds": 120})
+    assert updated.data["idle_timeout_seconds"] == 120
+    await client.aclose()

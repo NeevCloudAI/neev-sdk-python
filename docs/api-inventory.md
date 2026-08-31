@@ -21,6 +21,8 @@ which examples demonstrate which APIs, see
   - [get](#clientsandboxesgetid-org_idnone-project_idnone)
   - [pause](#clientsandboxespauseid-org_idnone-project_idnone)
   - [resume](#clientsandboxesresumeid-org_idnone-project_idnone)
+  - [keepalive](#clientsandboxeskeepaliveid-org_idnone-project_idnone)
+  - [update_timeout](#clientsandboxesupdate_timeoutid-params-org_idnone-project_idnone)
   - [delete](#clientsandboxesdeleteid-org_idnone-project_idnone)
   - [metrics](#clientsandboxesmetricsid-from_none-to-none-step-none-org_idnone-project_idnone)
   - [create_snapshot](#clientsandboxescreate_snapshotid-paramsnone-org_idnone-project_idnone)
@@ -197,6 +199,17 @@ Creates a new sandbox in the resolved project context.
 `allow_internet` / `allow_egress` translate into the `egress` policy; an explicit `egress`
 in `params` takes precedence over both.
 
+Notable `params` fields (see `CreateSandboxParams`):
+
+- **Image source** — set exactly one of `sandbox_template_id` (catalogue) or `image`
+  (BYOI: a public OCI reference with an explicit tag or digest), optionally with
+  `command`. See [`byoi_create.py`](../examples/byoi_create.py).
+- **`lifecycle`** — idle/lifetime windows applied at create time
+  (`idle_timeout_seconds`, `max_lifetime_seconds`, `paused_retention_seconds`,
+  `on_idle`). Omit it entirely and the account defaults apply — the request body then
+  carries no `lifecycle` key at all. See
+  [`sandbox_lifecycle_windows.py`](../examples/sandbox_lifecycle_windows.py).
+
 **Returns:** `Sandbox` handle with initial API state (`phase` is typically
 `Pending` immediately after create).
 
@@ -292,6 +305,41 @@ resumed.wait_until_ready()
 
 **Examples:** [`sandbox_lifecycle.py`](../examples/sandbox_lifecycle.py),
 [`sandbox_lifecycle_controller.py`](../examples/sandbox_lifecycle_controller.py)
+
+### `client.sandboxes.keepalive(id, org_id=None, project_id=None)`
+
+Resets the sandbox's idle timer so a busy sandbox stays running without an open
+connection. Call it periodically while work is in progress (e.g. once per agent turn).
+
+**Returns:** Updated `Sandbox` handle.
+
+```python
+client.sandboxes.keepalive(sandbox.id)
+```
+
+**Example:** [`sandbox_lifecycle_windows.py`](../examples/sandbox_lifecycle_windows.py)
+
+### `client.sandboxes.update_timeout(id, params, org_id=None, project_id=None)`
+
+Changes a sandbox's idle/lifetime windows. `params` is an
+`UpdateSandboxTimeoutParams` (or mapping) with any of `idle_timeout_seconds`,
+`max_lifetime_seconds`, `paused_retention_seconds`, `on_idle`. Only the windows you
+pass change; omitted ones are left unchanged. Send an explicit `None` to clear a
+window (so no limit applies). An `on_idle` outside `pause`/`delete` is rejected
+before the request is sent.
+
+**Returns:** Updated `Sandbox` handle.
+
+```python
+# Raise the idle window and clear the lifetime cap in one call:
+client.sandboxes.update_timeout(
+    sandbox.id, {"idle_timeout_seconds": 300, "max_lifetime_seconds": None}
+)
+```
+
+**Async:** `await client.sandboxes.update_timeout(...)`
+
+**Example:** [`sandbox_lifecycle_windows.py`](../examples/sandbox_lifecycle_windows.py)
 
 ### `client.sandboxes.delete(id, org_id=None, project_id=None)`
 
@@ -643,6 +691,22 @@ sandbox = sandbox.pause()   # phase → Paused, replicas → 0
 sandbox = sandbox.resume()  # scales back, then wait for Ready
 sandbox.wait_until_ready()
 ```
+
+### `sandbox.keepalive()` / `sandbox.update_timeout(params)`
+
+Handle wrappers that delegate to `client.sandboxes.keepalive` / `.update_timeout` and
+update handle state in place, returning `self`. `keepalive()` resets the idle timer;
+`update_timeout(params)` changes only the windows passed (send `None` to clear one).
+
+```python
+# Hold a busy sandbox alive:
+sandbox.keepalive()
+
+# Raise the idle window, clear the lifetime cap:
+sandbox.update_timeout({"idle_timeout_seconds": 300, "max_lifetime_seconds": None})
+```
+
+**Async:** `await sandbox.keepalive()` / `await sandbox.update_timeout(...)`
 
 ### `sandbox.metrics(from_=None, to=None, step=None)`
 

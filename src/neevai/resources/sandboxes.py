@@ -23,6 +23,7 @@ from neevai.types import (
     SandboxPort,
     Snapshot,
     SnapshotListResponse,
+    UpdateSandboxTimeoutParams,
 )
 
 # Defaults for get_url's wait: overall budget and delay between preview-URL probes.
@@ -142,6 +143,22 @@ def _prepare_create_snapshot_body(
         raw = params.model_dump(exclude_unset=True)
     body = coerce_params(CreateSnapshotParams, raw).model_dump(exclude_unset=True)
     return body
+
+
+def _prepare_timeout_body(
+    params: UpdateSandboxTimeoutParams | Mapping[str, Any],
+) -> dict[str, Any]:
+    """Normalize + validate a timeout-window update body.
+
+    Only fields the caller actually set are serialized: an omitted window is left
+    unchanged by the server, while an explicit ``None`` is sent as ``null`` to clear it.
+    Validation (e.g. an out-of-enum ``on_idle``) happens here, before any HTTP call.
+    """
+    if isinstance(params, Mapping):
+        raw: dict[str, Any] = dict(params)
+    else:
+        raw = params.model_dump(exclude_unset=True)
+    return coerce_params(UpdateSandboxTimeoutParams, raw).model_dump(exclude_unset=True)
 
 
 def _list_query(
@@ -286,6 +303,45 @@ class Sandboxes:
         path = f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes/{id}/resume"
 
         raw = self._client._transport.request("POST", path)
+        data = coerce_model(SandboxData, raw)
+        return Sandbox(self, data, scope)
+
+    def keepalive(
+        self,
+        id: str,
+        org_id: str | None = None,
+        project_id: str | None = None,
+    ) -> Sandbox:
+        """Resets a sandbox's idle timer, keeping a busy sandbox running."""
+        from neevai.handles.sandbox import Sandbox
+
+        scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
+        path = (
+            f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes/{id}/keepalive"
+        )
+        raw = self._client._transport.request("POST", path)
+        data = coerce_model(SandboxData, raw)
+        return Sandbox(self, data, scope)
+
+    def update_timeout(
+        self,
+        id: str,
+        params: UpdateSandboxTimeoutParams | Mapping[str, Any],
+        org_id: str | None = None,
+        project_id: str | None = None,
+    ) -> Sandbox:
+        """Changes a sandbox's idle/lifetime windows.
+
+        Only the windows present in ``params`` change; omitted ones are left as-is. Send
+        an explicit ``None`` to clear a window (so no limit applies).
+        """
+        from neevai.handles.sandbox import Sandbox
+
+        scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
+        path = (
+            f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes/{id}/timeout"
+        )
+        raw = self._client._transport.request("PUT", path, body=_prepare_timeout_body(params))
         data = coerce_model(SandboxData, raw)
         return Sandbox(self, data, scope)
 
@@ -597,6 +653,45 @@ class AsyncSandboxes:
         path = f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes/{id}/resume"
 
         raw = await self._client._transport.request("POST", path)
+        data = coerce_model(SandboxData, raw)
+        return AsyncSandbox(self, data, scope)
+
+    async def keepalive(
+        self,
+        id: str,
+        org_id: str | None = None,
+        project_id: str | None = None,
+    ) -> AsyncSandbox:
+        """Resets a sandbox's idle timer asynchronously."""
+        from neevai.handles.sandbox import AsyncSandbox
+
+        scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
+        path = (
+            f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes/{id}/keepalive"
+        )
+        raw = await self._client._transport.request("POST", path)
+        data = coerce_model(SandboxData, raw)
+        return AsyncSandbox(self, data, scope)
+
+    async def update_timeout(
+        self,
+        id: str,
+        params: UpdateSandboxTimeoutParams | Mapping[str, Any],
+        org_id: str | None = None,
+        project_id: str | None = None,
+    ) -> AsyncSandbox:
+        """Changes a sandbox's idle/lifetime windows asynchronously.
+
+        Only the windows present in ``params`` change; omitted ones are left as-is. Send
+        an explicit ``None`` to clear a window (so no limit applies).
+        """
+        from neevai.handles.sandbox import AsyncSandbox
+
+        scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
+        path = (
+            f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes/{id}/timeout"
+        )
+        raw = await self._client._transport.request("PUT", path, body=_prepare_timeout_body(params))
         data = coerce_model(SandboxData, raw)
         return AsyncSandbox(self, data, scope)
 
