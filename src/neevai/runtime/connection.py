@@ -54,6 +54,7 @@ class SandboxFiles:
     """Synchronous file operations on the sandbox runtime."""
 
     def __init__(self, connection: "SandboxConnection"):
+        """Initializes file operations for a sandbox connection."""
         self._conn = connection
 
     def write(self, path: str, content: str | bytes, cwd: str | None = None) -> dict[str, int]:
@@ -186,6 +187,7 @@ class SandboxConnection:
         client: httpx.Client | None = None,
         sandbox_id: str | None = None,
     ):
+        """Initializes a synchronous connection to a sandbox runtime."""
         self._transport = RuntimeTransport(
             connect_url, api_key, timeout_ms, client=client, sandbox_id=sandbox_id
         )
@@ -259,6 +261,7 @@ class AsyncSandboxFiles:
     """Asynchronous file operations on the sandbox runtime."""
 
     def __init__(self, connection: "AsyncSandboxConnection"):
+        """Initializes asynchronous file operations for a sandbox connection."""
         self._conn = connection
 
     async def write(
@@ -400,6 +403,7 @@ class AsyncSandboxConnection:
         client: httpx.AsyncClient | None = None,
         sandbox_id: str | None = None,
     ):
+        """Initializes an asynchronous connection to a sandbox runtime."""
         self._transport = AsyncRuntimeTransport(
             connect_url, api_key, timeout_ms, client=client, sandbox_id=sandbox_id
         )

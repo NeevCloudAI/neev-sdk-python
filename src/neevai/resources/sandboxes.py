@@ -99,6 +99,8 @@ if TYPE_CHECKING:
 
 @dataclass
 class SandboxPage:
+    """A paginated collection of Sandbox handles."""
+
     items: list[Sandbox]
     total: int
     page: int
@@ -107,6 +109,8 @@ class SandboxPage:
 
 @dataclass
 class AsyncSandboxPage:
+    """A paginated collection of AsyncSandbox handles."""
+
     items: list[AsyncSandbox]
     total: int
     page: int
@@ -187,6 +191,7 @@ class Sandboxes:
     """Operations on the /sandboxes API endpoint (synchronous)."""
 
     def __init__(self, client: NeevAI):
+        """Initializes the Sandboxes resource with a client."""
         self._client = client
 
     def create(
@@ -538,6 +543,7 @@ class AsyncSandboxes:
     """Operations on the /sandboxes API endpoint (asynchronous)."""
 
     def __init__(self, client: AsyncNeevAI):
+        """Initializes the AsyncSandboxes resource with a client."""
         self._client = client
 
     async def create(

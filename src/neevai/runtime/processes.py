@@ -79,42 +79,52 @@ class Process:
     """Handle for a single supervised sandbox process."""
 
     def __init__(self, processes: SandboxProcesses, status: ProcessStatus):
+        """Initializes a Process handle from status data."""
         self._processes = processes
         self._status = status
 
     @property
     def id(self) -> str:
+        """Process ID."""
         return self._status.process_id
 
     @property
     def state(self) -> str:
+        """Current process state."""
         return self._status.state
 
     @property
     def exit_code(self) -> int | None:
+        """Exit code if the process has terminated, otherwise None."""
         return self._status.exit_code
 
     @property
     def started_at(self) -> int:
+        """Timestamp when the process started."""
         return self._status.started_at
 
     def status(self) -> ProcessStatus:
+        """Fetches the current status of the process."""
         refreshed = self._processes.get(self.id, wait=False)
         self._status = refreshed
         return refreshed
 
     def wait(self) -> ProcessStatus:
+        """Waits for the process to complete and returns its final status."""
         refreshed = self._processes.get(self.id, wait=True)
         self._status = refreshed
         return refreshed
 
     def kill(self, signal: int | None = None) -> bool:
+        """Sends a signal to the process."""
         return self._processes.kill(self.id, signal=signal)
 
     def logs(self, cursor: int | None = None) -> ProcessLogsPage:
+        """Fetches a page of logs for this process."""
         return self._processes.logs(self.id, cursor=cursor)
 
     def follow(self, cursor: int | None = None) -> Iterator[ProcessLogEvent]:
+        """Streams log events for this process."""
         yield from self._processes.follow(self.id, cursor=cursor)
 
 
@@ -122,42 +132,52 @@ class AsyncProcess:
     """Async handle for a single supervised sandbox process."""
 
     def __init__(self, processes: AsyncSandboxProcesses, status: ProcessStatus):
+        """Initializes an AsyncProcess handle from status data."""
         self._processes = processes
         self._status = status
 
     @property
     def id(self) -> str:
+        """Process ID."""
         return self._status.process_id
 
     @property
     def state(self) -> str:
+        """Current process state."""
         return self._status.state
 
     @property
     def exit_code(self) -> int | None:
+        """Exit code if the process has terminated, otherwise None."""
         return self._status.exit_code
 
     @property
     def started_at(self) -> int:
+        """Timestamp when the process started."""
         return self._status.started_at
 
     async def status(self) -> ProcessStatus:
+        """Fetches the current status of the process."""
         refreshed = await self._processes.get(self.id, wait=False)
         self._status = refreshed
         return refreshed
 
     async def wait(self) -> ProcessStatus:
+        """Waits for the process to complete and returns its final status."""
         refreshed = await self._processes.get(self.id, wait=True)
         self._status = refreshed
         return refreshed
 
     async def kill(self, signal: int | None = None) -> bool:
+        """Sends a signal to the process."""
         return await self._processes.kill(self.id, signal=signal)
 
     async def logs(self, cursor: int | None = None) -> ProcessLogsPage:
+        """Fetches a page of logs for this process."""
         return await self._processes.logs(self.id, cursor=cursor)
 
     async def follow(self, cursor: int | None = None) -> AsyncIterator[ProcessLogEvent]:
+        """Streams log events for this process."""
         async for event in self._processes.follow(self.id, cursor=cursor):
             yield event
 
@@ -166,6 +186,7 @@ class SandboxProcesses:
     """Synchronous supervised process operations on the sandbox runtime."""
 
     def __init__(self, connection: SandboxConnection):
+        """Initializes process operations for a sandbox connection."""
         self._conn = connection
 
     def start(
@@ -176,6 +197,7 @@ class SandboxProcesses:
         env: dict[str, str] | None = None,
         stdin: str | None = None,
     ) -> Process:
+        """Starts a supervised process in the sandbox and returns a handle."""
         prog, cmd_args = _prepare_argv(program, args, prefix="processes")
         body = _prepare_start_body(prog, cmd_args, cwd, env, stdin)
         response = self._conn._transport.request(
@@ -188,6 +210,7 @@ class SandboxProcesses:
         return Process(self, status)
 
     def get(self, process_id: str, *, wait: bool = False) -> ProcessStatus:
+        """Fetches the status of a process, optionally waiting for it to complete."""
         body: dict[str, object] = {"process_id": process_id}
         if wait:
             body["wait"] = True
@@ -200,6 +223,7 @@ class SandboxProcesses:
         return _map_status(RawProcessStatus.model_validate(response.json()))
 
     def list(self) -> list[ProcessInfo]:
+        """Lists all supervised processes in the sandbox."""
         response = self._conn._transport.request(
             method="POST",
             path="/v1/processes/list",
@@ -210,6 +234,7 @@ class SandboxProcesses:
         return [_map_info(item) for item in parsed.processes]
 
     def kill(self, process_id: str, signal: int | None = None) -> bool:
+        """Sends a signal to a process."""
         body: dict[str, object] = {"process_id": process_id}
         signal_value = _signal_body_value(signal)
         if signal_value is not None:
@@ -223,6 +248,7 @@ class SandboxProcesses:
         return RawKillResponse.model_validate(response.json()).signalled
 
     def kill_all(self, signal: int | None = None) -> int:
+        """Sends a signal to all supervised processes in the sandbox."""
         body: dict[str, object] = {}
         signal_value = _signal_body_value(signal)
         if signal_value is not None:
@@ -236,6 +262,7 @@ class SandboxProcesses:
         return RawKillAllResponse.model_validate(response.json()).signalled_count
 
     def logs(self, process_id: str, cursor: int | None = None) -> ProcessLogsPage:
+        """Fetches a page of logs for a process."""
         body: dict[str, object] = {"process_id": process_id}
         if cursor is not None:
             body["cursor"] = cursor
@@ -248,6 +275,7 @@ class SandboxProcesses:
         return _map_logs_page(RawProcessLogsPage.model_validate(response.json()))
 
     def follow(self, process_id: str, cursor: int | None = None) -> Iterator[ProcessLogEvent]:
+        """Streams log events for a process."""
         body: dict[str, object] = {"process_id": process_id, "follow": True}
         if cursor is not None:
             body["cursor"] = cursor
@@ -268,6 +296,7 @@ class AsyncSandboxProcesses:
     """Asynchronous supervised process operations on the sandbox runtime."""
 
     def __init__(self, connection: AsyncSandboxConnection):
+        """Initializes asynchronous process operations for a sandbox connection."""
         self._conn = connection
 
     async def start(
@@ -278,6 +307,7 @@ class AsyncSandboxProcesses:
         env: dict[str, str] | None = None,
         stdin: str | None = None,
     ) -> AsyncProcess:
+        """Starts a supervised process in the sandbox asynchronously and returns a handle."""
         prog, cmd_args = _prepare_argv(program, args, prefix="processes")
         body = _prepare_start_body(prog, cmd_args, cwd, env, stdin)
         response = await self._conn._transport.request(
@@ -290,6 +320,7 @@ class AsyncSandboxProcesses:
         return AsyncProcess(self, status)
 
     async def get(self, process_id: str, *, wait: bool = False) -> ProcessStatus:
+        """Fetches the status of a process asynchronously, optionally waiting for it to complete."""
         body: dict[str, object] = {"process_id": process_id}
         if wait:
             body["wait"] = True
@@ -302,6 +333,7 @@ class AsyncSandboxProcesses:
         return _map_status(RawProcessStatus.model_validate(response.json()))
 
     async def list(self) -> list[ProcessInfo]:
+        """Lists all supervised processes in the sandbox asynchronously."""
         response = await self._conn._transport.request(
             method="POST",
             path="/v1/processes/list",
@@ -312,6 +344,7 @@ class AsyncSandboxProcesses:
         return [_map_info(item) for item in parsed.processes]
 
     async def kill(self, process_id: str, signal: int | None = None) -> bool:
+        """Sends a signal to a process asynchronously."""
         body: dict[str, object] = {"process_id": process_id}
         signal_value = _signal_body_value(signal)
         if signal_value is not None:
@@ -325,6 +358,7 @@ class AsyncSandboxProcesses:
         return RawKillResponse.model_validate(response.json()).signalled
 
     async def kill_all(self, signal: int | None = None) -> int:
+        """Sends a signal to all supervised processes in the sandbox asynchronously."""
         body: dict[str, object] = {}
         signal_value = _signal_body_value(signal)
         if signal_value is not None:
@@ -338,6 +372,7 @@ class AsyncSandboxProcesses:
         return RawKillAllResponse.model_validate(response.json()).signalled_count
 
     async def logs(self, process_id: str, cursor: int | None = None) -> ProcessLogsPage:
+        """Fetches a page of logs for a process asynchronously."""
         body: dict[str, object] = {"process_id": process_id}
         if cursor is not None:
             body["cursor"] = cursor
@@ -352,6 +387,7 @@ class AsyncSandboxProcesses:
     async def follow(
         self, process_id: str, cursor: int | None = None
     ) -> AsyncIterator[ProcessLogEvent]:
+        """Streams log events for a process asynchronously."""
         body: dict[str, object] = {"process_id": process_id, "follow": True}
         if cursor is not None:
             body["cursor"] = cursor

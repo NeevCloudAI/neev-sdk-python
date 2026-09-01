@@ -68,6 +68,7 @@ class SshTunnel:
         connect: Any,
         open_timeout_s: float,
     ):
+        """Initializes an SSH tunnel with a local listener socket."""
         self.host, self.port = listener.getsockname()[:2]
         self._listener = listener
         self._ws_url = ws_url
@@ -110,6 +111,7 @@ class SshTunnel:
 
         # ws -> client: SSH output frames become local socket bytes.
         def pump_ws_to_client() -> None:
+            """Pumps SSH output from WebSocket to local TCP client."""
             try:
                 for message in ws:
                     if isinstance(message, (bytes, bytearray)):
@@ -171,6 +173,7 @@ class SandboxSsh:
     """SSH tunnelling on a sandbox (synchronous), reached via ``connection.ssh``."""
 
     def __init__(self, connection: SandboxConnection):
+        """Initializes SSH tunnelling operations for a sandbox connection."""
         self._conn = connection
 
     def open(self, port: int | None = None, host: str = "127.0.0.1") -> SshTunnel:
@@ -190,6 +193,7 @@ class AsyncSshTunnel:
     """A running SSH tunnel (asynchronous). See :class:`SshTunnel`."""
 
     def __init__(self, ws_url: str, headers: dict[str, str], connect: Any, open_timeout_s: float):
+        """Initializes an async SSH tunnel with connection parameters."""
         self._ws_url = ws_url
         self._headers = headers
         self._connect = connect
@@ -219,6 +223,7 @@ class AsyncSshTunnel:
             return
 
         async def pump_ws_to_tcp() -> None:
+            """Pumps SSH output from WebSocket to local TCP stream."""
             try:
                 async for message in ws:
                     if isinstance(message, (bytes, bytearray)):
@@ -228,6 +233,7 @@ class AsyncSshTunnel:
                 pass
 
         async def pump_tcp_to_ws() -> None:
+            """Pumps local TCP input to WebSocket SSH frames."""
             try:
                 while True:
                     data = await reader.read(_CHUNK)
@@ -276,6 +282,7 @@ class AsyncSandboxSsh:
     """SSH tunnelling on a sandbox (asynchronous), reached via ``connection.ssh``."""
 
     def __init__(self, connection: AsyncSandboxConnection):
+        """Initializes asynchronous SSH tunnelling operations for a sandbox connection."""
         self._conn = connection
 
     async def open(self, port: int | None = None, host: str = "127.0.0.1") -> AsyncSshTunnel:

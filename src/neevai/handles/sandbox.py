@@ -81,6 +81,7 @@ class Sandbox:
         data: SandboxData | Mapping[str, Any],
         scope: Scope | None = None,
     ):
+        """Initializes a Sandbox handle from raw state data."""
         self.sandboxes = sandboxes
         self._state = _coerce_sandbox_data(data)
         self.scope = scope
@@ -499,6 +500,7 @@ class AsyncSandbox:
         data: SandboxData | Mapping[str, Any],
         scope: Scope | None = None,
     ):
+        """Initializes an AsyncSandbox handle from raw state data."""
         self.sandboxes = sandboxes
         self._state = _coerce_sandbox_data(data)
         self.scope = scope
@@ -506,10 +508,12 @@ class AsyncSandbox:
 
     @property
     def id(self) -> str:
+        """Sandbox UUID."""
         return str(self._state.id)
 
     @property
     def name(self) -> str:
+        """Human-readable sandbox name."""
         return self._state.name
 
     @property
@@ -519,20 +523,25 @@ class AsyncSandbox:
 
     @property
     def replicas(self) -> int:
+        """Desired replica count (0 when paused, 1 when running)."""
         return int(_state_as_json(self._state)["replicas"])
 
     @property
     def connect_url(self) -> str | None:
+        """Direct address of the sandbox runtime, or None if not ready/configured."""
         return self._state.connect_url
 
     @property
     def data(self) -> dict[str, Any]:
+        """Full raw sandbox record as a JSON-compatible dict."""
         return _state_as_json(self._state)
 
     def to_json(self) -> dict[str, Any]:
+        """Returns the raw record so json.dumps(sandbox.to_json()) matches the API shape."""
         return _state_as_json(self._state)
 
     async def refresh(self) -> AsyncSandbox:
+        """Re-fetches the sandbox and updates this handle's state in place."""
         if self.sandboxes is None:
             raise NeevAIError("Cannot refresh a sandbox handle with no client context.")
         previous_connect_url = self.connect_url
@@ -547,6 +556,7 @@ class AsyncSandbox:
         return self
 
     async def pause(self, *, preserve_memory: bool | None = None) -> AsyncSandbox:
+        """Pauses the sandbox (scales to 0 replicas) and updates this handle in place."""
         if self.sandboxes is None:
             raise NeevAIError("Cannot pause a sandbox handle with no client context.")
         next_state = await self.sandboxes.pause(
@@ -560,6 +570,7 @@ class AsyncSandbox:
         return self
 
     async def resume(self) -> AsyncSandbox:
+        """Resumes the sandbox (scales to 1 replica) and updates this handle in place."""
         if self.sandboxes is None:
             raise NeevAIError("Cannot resume a sandbox handle with no client context.")
         next_state = await self.sandboxes.resume(
@@ -599,6 +610,7 @@ class AsyncSandbox:
         return self
 
     async def delete(self) -> None:
+        """Permanently deletes the sandbox."""
         if self.sandboxes is None:
             raise NeevAIError("Cannot delete a sandbox handle with no client context.")
         await self.sandboxes.delete(
@@ -613,6 +625,7 @@ class AsyncSandbox:
         to: str | None = None,
         step: str | None = None,
     ) -> SandboxMetricsResponse:
+        """Queries live health metrics for this sandbox."""
         if self.sandboxes is None:
             raise NeevAIError("Cannot query metrics on a sandbox handle with no client context.")
         return await self.sandboxes.metrics(
@@ -680,6 +693,7 @@ class AsyncSandbox:
         self,
         params: CreateSnapshotParams | Mapping[str, Any] | None = None,
     ) -> Snapshot:
+        """Captures a snapshot of this sandbox (returns immediately with status Pending)."""
         if self.sandboxes is None:
             raise NeevAIError("Cannot snapshot a sandbox handle with no client context.")
         return await self.sandboxes.create_snapshot(
@@ -690,6 +704,7 @@ class AsyncSandbox:
         )
 
     async def snapshots(self) -> list[Snapshot]:
+        """Lists snapshots taken from this sandbox."""
         if self.sandboxes is None:
             raise NeevAIError("Cannot list snapshots on a sandbox handle with no client context.")
         return await self.sandboxes.list_snapshots(
@@ -699,6 +714,7 @@ class AsyncSandbox:
         )
 
     async def restore(self, snapshot_id: str) -> AsyncSandbox:
+        """Restores this sandbox in place from a snapshot."""
         if self.sandboxes is None:
             raise NeevAIError("Cannot restore a sandbox handle with no client context.")
         next_state = await self.sandboxes.restore(
@@ -712,6 +728,7 @@ class AsyncSandbox:
         return self
 
     async def fork(self, name: str) -> AsyncSandbox:
+        """Forks this sandbox into a new sandbox seeded from its current state."""
         if self.sandboxes is None:
             raise NeevAIError("Cannot fork a sandbox handle with no client context.")
         return await self.sandboxes.fork(
@@ -727,6 +744,10 @@ class AsyncSandbox:
         poll_interval_ms: int = DEFAULT_POLL_INTERVAL_MS,
         on_poll: Callable[[AsyncSandbox], None] | None = None,
     ) -> AsyncSandbox:
+        """Polls until the sandbox reaches the Ready phase.
+
+        Fails fast if Paused, or throws NeevAIError if the timeout is reached first.
+        """
         deadline = (time.time() * 1000.0) + timeout_ms
         import asyncio
 
@@ -749,6 +770,7 @@ class AsyncSandbox:
 
     @property
     def files(self) -> AsyncSandboxFiles:
+        """Exposes files operations on the sandbox runtime."""
         return self._connection().files
 
     @property
@@ -774,6 +796,7 @@ class AsyncSandbox:
         timeout_ms: int | None = None,
         stdin: str | None = None,
     ) -> ExecResult:
+        """Runs a command inside the sandbox."""
         return await self._connection().exec(
             command=command,
             args=args,
@@ -792,6 +815,7 @@ class AsyncSandbox:
         timeout_ms: int | None = None,
         stdin: str | None = None,
     ) -> AsyncGenerator[ExecStreamEvent, None]:
+        """Runs a command and yields stdout/stderr chunks as they arrive, then an exit event."""
         async for event in self._connection().exec_stream(
             command=command,
             args=args,

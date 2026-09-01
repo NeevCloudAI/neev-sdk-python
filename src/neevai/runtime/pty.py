@@ -88,6 +88,7 @@ class PtyHandle:
     """
 
     def __init__(self, socket: Any, on_data: Callable[[bytes], None] | None = None):
+        """Initializes a PTY handle with a WebSocket and optional data callback."""
         self._ws = socket
         self._on_data = on_data
         self._id: str | None = None
@@ -161,6 +162,7 @@ class SandboxPty:
     """PTY operations on a sandbox (synchronous), reached via ``sandbox.pty``."""
 
     def __init__(self, connection: SandboxConnection):
+        """Initializes PTY operations for a sandbox connection."""
         self._conn = connection
 
     def create(
@@ -189,6 +191,7 @@ class AsyncPtyHandle:
     """A live interactive PTY session (asynchronous). See :class:`PtyHandle`."""
 
     def __init__(self, socket: Any, on_data: Callable[[bytes], None] | None = None):
+        """Initializes an async PTY handle with a WebSocket and optional data callback."""
         self._ws = socket
         self._on_data = on_data
         self._id: str | None = None
@@ -262,6 +265,7 @@ class AsyncSandboxPty:
     """PTY operations on a sandbox (asynchronous), reached via ``sandbox.pty``."""
 
     def __init__(self, connection: AsyncSandboxConnection):
+        """Initializes asynchronous PTY operations for a sandbox connection."""
         self._conn = connection
 
     async def create(

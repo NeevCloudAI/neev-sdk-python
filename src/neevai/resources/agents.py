@@ -24,6 +24,8 @@ if TYPE_CHECKING:
 
 @dataclass
 class AgentPage:
+    """A paginated collection of Agent handles."""
+
     items: list[Agent]
     total: int
     page: int
@@ -32,6 +34,8 @@ class AgentPage:
 
 @dataclass
 class AsyncAgentPage:
+    """A paginated collection of AsyncAgent handles."""
+
     items: list[AsyncAgent]
     total: int
     page: int
@@ -40,6 +44,8 @@ class AsyncAgentPage:
 
 @dataclass
 class ListAgentsParams:
+    """Parameters for listing agents with pagination and scope."""
+
     page: int | None = None
     limit: int | None = None
     org_id: str | None = None
@@ -88,6 +94,7 @@ class Agents:
     """Operations on the /agents API endpoint (synchronous)."""
 
     def __init__(self, client: NeevAI, sandboxes: Sandboxes):
+        """Initializes the Agents resource with a client and sandbox resource."""
         self._client = client
         self._sandboxes = sandboxes
 
@@ -236,6 +243,7 @@ class AsyncAgents:
     """Operations on the /agents API endpoint (asynchronous)."""
 
     def __init__(self, client: AsyncNeevAI, sandboxes: AsyncSandboxes):
+        """Initializes the AsyncAgents resource with a client and sandbox resource."""
         self._client = client
         self._sandboxes = sandboxes
 

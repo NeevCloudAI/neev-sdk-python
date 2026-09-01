@@ -10,6 +10,8 @@ if TYPE_CHECKING:
 
 @dataclass
 class AgentTemplatePage:
+    """A paginated collection of agent templates."""
+
     items: list[AgentTemplate]
     total: int
     page: int
@@ -18,6 +20,8 @@ class AgentTemplatePage:
 
 @dataclass
 class AsyncAgentTemplatePage:
+    """A paginated collection of agent templates (async)."""
+
     items: list[AgentTemplate]
     total: int
     page: int
@@ -26,6 +30,8 @@ class AsyncAgentTemplatePage:
 
 @dataclass
 class ListAgentTemplatesParams:
+    """Parameters for listing agent templates with pagination."""
+
     page: int | None = None
     limit: int | None = None
 
@@ -34,6 +40,7 @@ class AgentTemplates:
     """Read-only access to the platform agent-template catalogue."""
 
     def __init__(self, client: "NeevAI"):
+        """Initializes the AgentTemplates resource with a client."""
         self._client = client
 
     def list(self, page: int | None = None, limit: int | None = None) -> AgentTemplatePage:
@@ -69,6 +76,7 @@ class AsyncAgentTemplates:
     """Asynchronous read-only access to the platform agent-template catalogue."""
 
     def __init__(self, client: "AsyncNeevAI"):
+        """Initializes the AsyncAgentTemplates resource with a client."""
         self._client = client
 
     async def list(

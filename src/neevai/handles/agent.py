@@ -49,6 +49,7 @@ class Agent:
         data: AgentData | Mapping[str, Any],
         scope: Scope | None = None,
     ):
+        """Initializes an Agent handle from raw state data."""
         self.agents = agents
         self._state = _coerce_agent_data(data)
         self.scope = scope
@@ -208,50 +209,62 @@ class AsyncAgent:
         data: AgentData | Mapping[str, Any],
         scope: Scope | None = None,
     ):
+        """Initializes an AsyncAgent handle from raw state data."""
         self.agents = agents
         self._state = _coerce_agent_data(data)
         self.scope = scope
 
     @property
     def id(self) -> str:
+        """Agent UUID."""
         return str(self._state.id)
 
     @property
     def name(self) -> str:
+        """Human-readable agent name."""
         return self._state.name
 
     @property
     def status(self) -> str:
+        """Current lifecycle status as last fetched from the server."""
         return self._state.status
 
     @property
     def sandbox_id(self) -> str:
+        """UUID of the backing sandbox."""
         return str(self._state.sandbox_id)
 
     @property
     def agent_template_id(self) -> str:
+        """Catalogue template id the agent was created from."""
         return self._state.agent_template_id
 
     @property
     def config(self) -> dict[str, Any] | None:
+        """Effective agent configuration."""
         return self._state.config
 
     @property
     def created_at(self) -> str:
+        """Creation timestamp (ISO 8601)."""
         return cast(str, _state_as_json(self._state)["created_at"])
 
     @property
     def updated_at(self) -> str:
+        """Last update timestamp (ISO 8601)."""
         return cast(str, _state_as_json(self._state)["updated_at"])
 
     @property
     def data(self) -> dict[str, Any]:
+        """Full raw agent record as a JSON-compatible dict."""
         return _state_as_json(self._state)
 
     def to_json(self) -> dict[str, Any]:
+        """Returns the raw record so json.dumps(agent.to_json()) matches the API shape."""
         return _state_as_json(self._state)
 
     async def refresh(self) -> AsyncAgent:
+        """Re-fetches the agent and updates this handle's state in place."""
         if self.agents is None:
             raise NeevAIError("Cannot refresh an agent handle with no client context.")
         fresh = await self.agents.get(
@@ -263,6 +276,7 @@ class AsyncAgent:
         return self
 
     async def update(self, params: UpdateAgentParams | Mapping[str, Any]) -> AsyncAgent:
+        """Updates mutable agent fields in place."""
         if self.agents is None:
             raise NeevAIError("Cannot update an agent handle with no client context.")
         next_state = await self.agents.update(
@@ -275,6 +289,7 @@ class AsyncAgent:
         return self
 
     async def pause(self) -> AsyncAgent:
+        """Pauses the agent and updates this handle in place."""
         if self.agents is None:
             raise NeevAIError("Cannot pause an agent handle with no client context.")
         next_state = await self.agents.pause(
@@ -286,6 +301,7 @@ class AsyncAgent:
         return self
 
     async def resume(self) -> AsyncAgent:
+        """Resumes the agent and updates this handle in place."""
         if self.agents is None:
             raise NeevAIError("Cannot resume an agent handle with no client context.")
         next_state = await self.agents.resume(
@@ -297,6 +313,7 @@ class AsyncAgent:
         return self
 
     async def delete(self) -> None:
+        """Permanently deletes the agent and its backing sandbox."""
         if self.agents is None:
             raise NeevAIError("Cannot delete an agent handle with no client context.")
         await self.agents.delete(
@@ -306,6 +323,7 @@ class AsyncAgent:
         )
 
     async def sandbox(self) -> AsyncSandbox:
+        """Resolves the backing sandbox as an AsyncSandbox handle."""
         if self.agents is None:
             raise NeevAIError("Cannot resolve sandbox on an agent handle with no client context.")
         return await self.agents.get_sandbox(self.sandbox_id, self.scope)
@@ -316,6 +334,10 @@ class AsyncAgent:
         poll_interval_ms: int = DEFAULT_POLL_INTERVAL_MS,
         on_poll: Callable[[AsyncAgent], None] | None = None,
     ) -> AsyncAgent:
+        """Polls until the agent reaches Ready status.
+
+        Fails fast on Failed or Paused, or raises NeevAIError if the timeout is reached.
+        """
         import asyncio
 
         _validate_wait_timings(timeout_ms, poll_interval_ms)

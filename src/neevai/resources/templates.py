@@ -10,6 +10,8 @@ if TYPE_CHECKING:
 
 @dataclass
 class TemplatePage:
+    """A paginated collection of sandbox templates."""
+
     items: list[SandboxTemplate]
     total: int
     page: int
@@ -18,6 +20,8 @@ class TemplatePage:
 
 @dataclass
 class AsyncTemplatePage:
+    """A paginated collection of sandbox templates (async)."""
+
     items: list[SandboxTemplate]
     total: int
     page: int
@@ -28,6 +32,7 @@ class Templates:
     """Read-only access to the platform sandbox-template catalogue."""
 
     def __init__(self, client: "NeevAI"):
+        """Initializes the Templates resource with a client."""
         self._client = client
 
     def list(self, page: int | None = None, limit: int | None = None) -> TemplatePage:
@@ -58,6 +63,7 @@ class AsyncTemplates:
     """Asynchronous read-only access to the platform sandbox-template catalogue."""
 
     def __init__(self, client: "AsyncNeevAI"):
+        """Initializes the AsyncTemplates resource with a client."""
         self._client = client
 
     async def list(self, page: int | None = None, limit: int | None = None) -> AsyncTemplatePage:
