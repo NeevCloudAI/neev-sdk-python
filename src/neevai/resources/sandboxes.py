@@ -150,15 +150,19 @@ def _prepare_timeout_body(
 ) -> dict[str, Any]:
     """Normalize + validate a timeout-window update body.
 
-    Only fields the caller actually set are serialized: an omitted window is left
-    unchanged by the server, while an explicit ``None`` is sent as ``null`` to clear it.
-    Validation (e.g. an out-of-enum ``on_idle``) happens here, before any HTTP call.
+    Only fields the caller actually set are serialized. Omit a window to leave it
+    unchanged; send ``0`` to turn it off. Validation (e.g. an out-of-enum ``on_idle``)
+    happens here, before any HTTP call.
     """
     if isinstance(params, Mapping):
         raw: dict[str, Any] = dict(params)
     else:
         raw = params.model_dump(exclude_unset=True)
-    return coerce_params(UpdateSandboxTimeoutParams, raw).model_dump(exclude_unset=True)
+    # mode="json" renders the on_idle enum as its string value; a plain model_dump
+    # would leave a non-JSON-serializable enum member the transport can't encode.
+    return coerce_params(UpdateSandboxTimeoutParams, raw).model_dump(
+        mode="json", exclude_unset=True
+    )
 
 
 def _list_query(
@@ -332,8 +336,9 @@ class Sandboxes:
     ) -> Sandbox:
         """Changes a sandbox's idle/lifetime windows.
 
-        Only the windows present in ``params`` change; omitted ones are left as-is. Send
-        an explicit ``None`` to clear a window (so no limit applies).
+        Only the windows present in ``params`` change; omit a field to leave it as-is.
+        Send ``0`` to turn a window off, so no limit applies. (An explicit ``None`` is
+        accepted but the server treats it as "leave unchanged", the same as omitting it.)
         """
         from neevai.handles.sandbox import Sandbox
 
@@ -682,8 +687,9 @@ class AsyncSandboxes:
     ) -> AsyncSandbox:
         """Changes a sandbox's idle/lifetime windows asynchronously.
 
-        Only the windows present in ``params`` change; omitted ones are left as-is. Send
-        an explicit ``None`` to clear a window (so no limit applies).
+        Only the windows present in ``params`` change; omit a field to leave it as-is.
+        Send ``0`` to turn a window off, so no limit applies. (An explicit ``None`` is
+        accepted but the server treats it as "leave unchanged", the same as omitting it.)
         """
         from neevai.handles.sandbox import AsyncSandbox
 

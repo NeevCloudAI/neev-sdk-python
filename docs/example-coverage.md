@@ -23,7 +23,7 @@ path and run commands, see [`examples/README.md`](../examples/README.md).
 | `client.sandboxes.pause` | `sandbox_lifecycle_controller.py` | `sandbox = client.sandboxes.pause(sandbox_id)` |
 | `client.sandboxes.resume` | `sandbox_lifecycle_controller.py` | `sandbox = client.sandboxes.resume(sandbox_id)` |
 | `client.sandboxes.keepalive` / `sandbox.keepalive` | `sandbox_lifecycle_windows.py` | `sandbox.keepalive()` |
-| `client.sandboxes.update_timeout` / `sandbox.update_timeout` | `sandbox_lifecycle_windows.py` | `sandbox.update_timeout({"idle_timeout_seconds": 300, "max_lifetime_seconds": None})` |
+| `client.sandboxes.update_timeout` / `sandbox.update_timeout` | `sandbox_lifecycle_windows.py` | `sandbox.update_timeout({"idle_timeout_seconds": 300, "max_lifetime_seconds": 0})` |
 | `client.sandboxes.delete` | `sandbox_lifecycle_controller.py` | `client.sandboxes.delete(sandbox_id)` |
 | `client.sandboxes.metrics` | `sandbox_lifecycle_controller.py` | `metrics = client.sandboxes.metrics(sandbox_id)` |
 | `client.sandboxes.create_snapshot` | `snapshot_fork_restore.py` (via `sandbox.snapshot`) | `pending = sandbox.snapshot({"name": "demo-snap"})` |

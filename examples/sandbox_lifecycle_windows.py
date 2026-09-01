@@ -73,6 +73,7 @@ def main() -> None:
         org_id=os.environ.get("NEEV_ORG_ID"),
         project_id=os.environ.get("NEEV_PROJECT_ID"),
     ) as client:
+        sandbox = None
         try:
             # --- Create with a capped lifetime + idle window ---
             sandbox = client.sandboxes.create(
@@ -96,15 +97,17 @@ def main() -> None:
                 if i < KEEPALIVE_ITERS - 1:
                     time.sleep(KEEPALIVE_INTERVAL_SEC)
 
-            # --- Retune windows in place: raise idle, clear the lifetime cap ---
-            sandbox.update_timeout({"idle_timeout_seconds": 300, "max_lifetime_seconds": None})
+            # --- Retune windows in place: raise idle, turn off the lifetime cap.
+            #     Send 0 to turn a window off (omit a field to leave it unchanged). ---
+            sandbox.update_timeout({"idle_timeout_seconds": 300, "max_lifetime_seconds": 0})
             print(f"retuned — windows: {_windows(sandbox)}")
-
-            sandbox.delete()
-            print("deleted")
         except NeevAIError as e:
             print(f"Error: {e}", file=sys.stderr)
             sys.exit(1)
+        finally:
+            if sandbox is not None:
+                sandbox.delete()
+                print("deleted")
 
 
 if __name__ == "__main__":

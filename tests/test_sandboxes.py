@@ -538,12 +538,12 @@ def test_sandboxes_update_timeout_clears_window(mock_transport):
         {"sandbox_template_id": "sb-x", "lifecycle": {"max_lifetime_seconds": 3600}}
     )
     captured = _capture_bodies(client)
-    updated = client.sandboxes.update_timeout(sb.id, {"max_lifetime_seconds": None})
+    updated = client.sandboxes.update_timeout(sb.id, {"max_lifetime_seconds": 0})
 
     _method, _path, body = captured[-1]
-    # An explicit None must be sent as null so the server clears the window.
-    assert body == {"max_lifetime_seconds": None}
-    assert updated.data["max_lifetime_seconds"] is None
+    # 0 turns the window off (per the API: omitted = unchanged, 0 = no limit).
+    assert body == {"max_lifetime_seconds": 0}
+    assert updated.data["max_lifetime_seconds"] == 0
     client.close()
 
 
@@ -557,6 +557,19 @@ def test_sandboxes_update_timeout_invalid_on_idle_raises_without_http(mock_trans
         client.sandboxes.update_timeout(sb.id, {"on_idle": "explode"})
 
     request_mock.assert_not_called()
+    client.close()
+
+
+def test_sandboxes_update_timeout_on_idle_serialized_as_json(mock_transport):
+    client = _make_client(mock_transport)
+    sb = client.sandboxes.create({"sandbox_template_id": "sb-x"})
+    captured = _capture_bodies(client)
+    client.sandboxes.update_timeout(sb.id, {"on_idle": "delete"})
+
+    _method, _path, body = captured[-1]
+    # on_idle must serialize to a plain JSON string, not a Python enum member.
+    assert body == {"on_idle": "delete"}
+    assert isinstance(body["on_idle"], str)
     client.close()
 
 

@@ -53,6 +53,7 @@ def main() -> None:
         org_id=os.environ.get("NEEV_ORG_ID"),
         project_id=os.environ.get("NEEV_PROJECT_ID"),
     ) as client:
+        sandbox = None
         try:
             # BYOI: `image` (+ optional `command`) instead of `sandbox_template_id`.
             sandbox = client.sandboxes.create({"image": IMAGE, "command": ["sleep", "infinity"]})
@@ -61,12 +62,13 @@ def main() -> None:
 
             result = sandbox.exec(["python", "--version"])
             print(f"exec exit={result.exit_code} out={(result.stdout or result.stderr).strip()}")
-
-            sandbox.delete()
-            print("deleted")
         except NeevAIError as e:
             print(f"Error: {e}", file=sys.stderr)
             sys.exit(1)
+        finally:
+            if sandbox is not None:
+                sandbox.delete()
+                print("deleted")
 
 
 if __name__ == "__main__":
