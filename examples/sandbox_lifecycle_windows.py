@@ -96,8 +96,9 @@ def main() -> None:
                 if i < KEEPALIVE_ITERS - 1:
                     time.sleep(KEEPALIVE_INTERVAL_SEC)
 
-            # --- Retune windows in place: raise idle, clear the lifetime cap ---
-            sandbox.update_timeout({"idle_timeout_seconds": 300, "max_lifetime_seconds": None})
+            # --- Retune windows in place: raise idle, turn off the lifetime cap.
+            #     Send 0 to turn a window off (omit a field to leave it unchanged). ---
+            sandbox.update_timeout({"idle_timeout_seconds": 300, "max_lifetime_seconds": 0})
             print(f"retuned — windows: {_windows(sandbox)}")
 
             sandbox.delete()

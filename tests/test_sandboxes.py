@@ -538,12 +538,12 @@ def test_sandboxes_update_timeout_clears_window(mock_transport):
         {"sandbox_template_id": "sb-x", "lifecycle": {"max_lifetime_seconds": 3600}}
     )
     captured = _capture_bodies(client)
-    updated = client.sandboxes.update_timeout(sb.id, {"max_lifetime_seconds": None})
+    updated = client.sandboxes.update_timeout(sb.id, {"max_lifetime_seconds": 0})
 
     _method, _path, body = captured[-1]
-    # An explicit None must be sent as null so the server clears the window.
-    assert body == {"max_lifetime_seconds": None}
-    assert updated.data["max_lifetime_seconds"] is None
+    # 0 turns the window off (per the API: omitted = unchanged, 0 = no limit).
+    assert body == {"max_lifetime_seconds": 0}
+    assert updated.data["max_lifetime_seconds"] == 0
     client.close()
 
 

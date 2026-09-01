@@ -332,8 +332,9 @@ class Sandboxes:
     ) -> Sandbox:
         """Changes a sandbox's idle/lifetime windows.
 
-        Only the windows present in ``params`` change; omitted ones are left as-is. Send
-        an explicit ``None`` to clear a window (so no limit applies).
+        Only the windows present in ``params`` change; omit a field to leave it as-is.
+        Send ``0`` to turn a window off, so no limit applies. (An explicit ``None`` is
+        accepted but the server treats it as "leave unchanged", the same as omitting it.)
         """
         from neevai.handles.sandbox import Sandbox
 
@@ -682,8 +683,9 @@ class AsyncSandboxes:
     ) -> AsyncSandbox:
         """Changes a sandbox's idle/lifetime windows asynchronously.
 
-        Only the windows present in ``params`` change; omitted ones are left as-is. Send
-        an explicit ``None`` to clear a window (so no limit applies).
+        Only the windows present in ``params`` change; omit a field to leave it as-is.
+        Send ``0`` to turn a window off, so no limit applies. (An explicit ``None`` is
+        accepted but the server treats it as "leave unchanged", the same as omitting it.)
         """
         from neevai.handles.sandbox import AsyncSandbox
 

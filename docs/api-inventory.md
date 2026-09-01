@@ -324,16 +324,16 @@ client.sandboxes.keepalive(sandbox.id)
 Changes a sandbox's idle/lifetime windows. `params` is an
 `UpdateSandboxTimeoutParams` (or mapping) with any of `idle_timeout_seconds`,
 `max_lifetime_seconds`, `paused_retention_seconds`, `on_idle`. Only the windows you
-pass change; omitted ones are left unchanged. Send an explicit `None` to clear a
-window (so no limit applies). An `on_idle` outside `pause`/`delete` is rejected
-before the request is sent.
+pass change; omit a field to leave it unchanged. Send `0` to turn a window off (so no
+limit applies). An `on_idle` outside `pause`/`delete` is rejected before the request
+is sent.
 
 **Returns:** Updated `Sandbox` handle.
 
 ```python
-# Raise the idle window and clear the lifetime cap in one call:
+# Raise the idle window and turn off the lifetime cap in one call:
 client.sandboxes.update_timeout(
-    sandbox.id, {"idle_timeout_seconds": 300, "max_lifetime_seconds": None}
+    sandbox.id, {"idle_timeout_seconds": 300, "max_lifetime_seconds": 0}
 )
 ```
 
@@ -696,14 +696,14 @@ sandbox.wait_until_ready()
 
 Handle wrappers that delegate to `client.sandboxes.keepalive` / `.update_timeout` and
 update handle state in place, returning `self`. `keepalive()` resets the idle timer;
-`update_timeout(params)` changes only the windows passed (send `None` to clear one).
+`update_timeout(params)` changes only the windows passed (send `0` to turn one off).
 
 ```python
 # Hold a busy sandbox alive:
 sandbox.keepalive()
 
-# Raise the idle window, clear the lifetime cap:
-sandbox.update_timeout({"idle_timeout_seconds": 300, "max_lifetime_seconds": None})
+# Raise the idle window, turn off the lifetime cap (0 = no limit):
+sandbox.update_timeout({"idle_timeout_seconds": 300, "max_lifetime_seconds": 0})
 ```
 
 **Async:** `await sandbox.keepalive()` / `await sandbox.update_timeout(...)`
