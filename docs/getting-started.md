@@ -276,7 +276,7 @@ Key points:
 **Examples:** [`sandbox_lifecycle.py`](../examples/sandbox_lifecycle.py),
 [`files_api.py`](../examples/files_api.py)
 
-For snapshot capture, rollback via `from_snapshot`, and fork workflows, see
+For snapshot capture, restore via `restore`, and fork workflows, see
 [`snapshot_fork_restore.py`](../examples/snapshot_fork_restore.py) and the
 [Snapshots](./api-reference.md#snapshots) section in the API reference.
 
