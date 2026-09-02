@@ -51,6 +51,48 @@ class SandboxResources(BaseModel):
         description="Ephemeral disk in GB. Multiples of 10, from 10 to 100.",
         examples=[10],
     )
+    rootfs_disk_gb: conint(ge=1, le=99) | None = Field(
+        None,
+        description="Portion of disk_gb reserved for the container filesystem; the rest is\navailable to /workspace. Raise it when installs write outside\n/workspace. Must be less than disk_gb. Defaults to 20% of disk_gb,\nminimum 4. Can only be set when the sandbox is created.\n",
+        examples=[4],
+    )
+
+
+class OnIdleAction(Enum):
+    pause = "pause"
+    delete = "delete"
+
+
+class SandboxLifecycle(BaseModel):
+    idle_timeout_seconds: conint(ge=0) | None = Field(
+        None,
+        description="Automatically act on the sandbox after this many seconds without activity. Omit to use the account default, or send 0 for no idle limit.",
+    )
+    max_lifetime_seconds: conint(ge=0) | None = Field(
+        None,
+        description="Automatically act on the sandbox this many seconds after it is created, regardless of activity. Omit to use the account default, or send 0 for no lifetime limit.",
+    )
+    paused_retention_seconds: conint(ge=0) | None = Field(
+        None,
+        description="Delete the sandbox once it has stayed paused for this many seconds. Omit to use the account default, or send 0 to keep it paused indefinitely.",
+    )
+    on_idle: OnIdleAction | None = "pause"
+
+
+class UpdateSandboxTimeoutRequest(BaseModel):
+    idle_timeout_seconds: conint(ge=0) | None = None
+    max_lifetime_seconds: conint(ge=0) | None = None
+    paused_retention_seconds: conint(ge=0) | None = None
+    on_idle: OnIdleAction | None = "pause"
+
+
+class SandboxLastCrash(BaseModel):
+    reason: str = Field(..., description="Why the sandbox stopped.", examples=["OOMKilled"])
+    at: AwareDatetime = Field(..., description="When the stop was detected.")
+    storage_reset: bool = Field(
+        ...,
+        description="True when the sandbox restarted with an empty filesystem: files under\n/workspace, and anything installed since create, are gone. False when it\nrestarted with its files intact.\n",
+    )
 
 
 class ExposePortRequest(BaseModel):
@@ -67,10 +109,7 @@ class SandboxPortList(BaseModel):
 
 
 class PauseSandboxRequest(BaseModel):
-    preserve_memory: bool | None = Field(
-        True,
-        description="When true, capture FS+process memory as an implicit snapshot before\nstopping the sandbox. The snapshot is auto-consumed on the next resume.\n",
-    )
+    pass
 
 
 class SnapshotStatus(Enum):
@@ -80,6 +119,16 @@ class SnapshotStatus(Enum):
     Failed = "Failed"
 
 
+class SnapshotType(Enum):
+    full = "full"
+
+
+class SnapshotRestorability(Enum):
+    restorable = "restorable"
+    deprecating = "deprecating"
+    unsupported = "unsupported"
+
+
 class Snapshot(BaseModel):
     id: UUID = Field(..., description="Snapshot UUID.")
     sandbox_id: UUID = Field(..., description="UUID of the source sandbox.")
@@ -87,14 +136,15 @@ class Snapshot(BaseModel):
     project_id: str
     name: str | None = Field(None, description="Optional customer-supplied name.")
     status: SnapshotStatus
-    include_memory: bool = Field(..., description="True = FS+memory captured; false = FS only.")
+    snapshot_type: SnapshotType
     source_region: str = Field(..., description="Region where the snapshot is stored.")
     size_bytes: int | None = Field(
         None,
         description="Uncompressed snapshot size in bytes. Null until status=Ready.",
     )
     error_message: str | None = Field(
-        None, description="Failure detail. Null unless status=Failed."
+        None,
+        description="Human-readable reason the snapshot failed, safe to show to end users. Null unless status=Failed.",
     )
     expires_at: AwareDatetime | None = Field(
         None, description="When the platform will GC this snapshot. Null = no expiry."
@@ -102,6 +152,15 @@ class Snapshot(BaseModel):
     created_by: str | None = Field(
         None,
         description='Identity that created the snapshot (user email, or "system" for system-initiated snapshots like pause/fork).',
+    )
+    sandbox_format_version: int = Field(
+        ...,
+        description="Version of the format used to record this snapshot's captured configuration. 0 for snapshots taken before it was recorded.",
+    )
+    restorability: SnapshotRestorability
+    build_descriptor: dict[str, Any] | None = Field(
+        None,
+        description="The configuration this snapshot was captured with, recorded so the\nsnapshot can be restored consistently. Null for snapshots taken before\nit was recorded.\n",
     )
     created_at: AwareDatetime
     updated_at: AwareDatetime
@@ -119,13 +178,12 @@ class CreateSnapshotRequest(BaseModel):
         None,
         description="Optional name for this snapshot. Must be a valid DNS name (lowercase\nalphanumeric or '-', starting with a letter, max 63 characters) so it\ncan name sandboxes created on fork and restore. Omit to leave unnamed.\n",
     )
-    include_memory: bool | None = Field(
-        False,
-        description="Capture process memory in addition to filesystem. Currently forced to false (RootFS only); memory capture is not yet supported.",
-    )
-    retain_for: str | None = Field(
-        None,
-        description='Duration string (e.g. "720h" = 30 days) controlling snapshot TTL.\n"0" or omitted means no expiry.\n',
+
+
+class RollbackSandboxRequest(BaseModel):
+    snapshot_id: UUID = Field(
+        ...,
+        description="UUID of the snapshot to restore from. Must belong to this sandbox\nor another sandbox in the same project.\n",
     )
 
 
@@ -224,9 +282,19 @@ class SandboxMetricsResponse(BaseModel):
 class AgentStatus(Enum):
     Provisioning = "Provisioning"
     Ready = "Ready"
+    Pausing = "Pausing"
     Paused = "Paused"
     Failed = "Failed"
     Deleting = "Deleting"
+
+
+class AgentLastCrash(BaseModel):
+    reason: str = Field(..., description="Why the agent stopped.", examples=["OOMKilled"])
+    at: AwareDatetime = Field(..., description="When the stop was detected.")
+    storage_reset: bool = Field(
+        ...,
+        description="True when the agent restarted with an empty filesystem: files under\n/workspace, and anything installed since create, are gone. False when it\nrestarted with its files intact.\n",
+    )
 
 
 class DriveMode(Enum):
@@ -295,8 +363,10 @@ class Agent(BaseModel):
         None,
         description="Token the agent's web UI uses to authenticate. Present only for web\nagents that gate the UI on a token; null otherwise.\n",
     )
+    last_crash: AgentLastCrash | None = None
     created_at: AwareDatetime
     updated_at: AwareDatetime
+    egress: SandboxEgressConfig | None = None
 
 
 class CreateAgentRequest(BaseModel):
@@ -330,13 +400,16 @@ class CreateAgentRequest(BaseModel):
 
 
 class UpdateAgentRequest(BaseModel):
-    egress: SandboxEgressConfig | None = Field(
-        None,
-        description="Replace the agent's egress policy (re-applied live, no restart).",
+    model_config = ConfigDict(
+        extra="forbid",
     )
     resources: SandboxResources | None = Field(
         None,
         description="New cpu/memory sizing, resized in place on the running sandbox. Only the\nfields provided change. disk_gb is not resizable in place and is\nrejected if supplied with a different value.\n",
+    )
+    egress: SandboxEgressConfig | None = Field(
+        None,
+        description="Network egress policy update for the agent's backing sandbox.\n",
     )
 
 
@@ -393,7 +466,6 @@ class Sandbox(BaseModel):
     region: str = Field(..., description="Region where the sandbox runs.", examples=["dev"])
     image: str
     command: list[str] | None = None
-    env: list[EnvVar] | None = None
     resources: SandboxResources | None = None
     phase: SandboxPhase
     connect_url: str | None = Field(
@@ -414,8 +486,30 @@ class Sandbox(BaseModel):
         None,
         description="Identity that created the sandbox (user id, or API key id for key-authenticated calls); null for sandboxes created before this was recorded.",
     )
+    last_crash: SandboxLastCrash | None = None
     created_at: AwareDatetime
     updated_at: AwareDatetime
+    idle_timeout_seconds: int | None = Field(
+        None,
+        description="Idle window in seconds; 0 when the sandbox has no idle limit, null when using the account default.",
+    )
+    max_lifetime_seconds: int | None = Field(
+        None,
+        description="Maximum lifetime in seconds; 0 when the sandbox has no lifetime limit, null when using the account default.",
+    )
+    paused_retention_seconds: int | None = Field(
+        None,
+        description="Seconds a paused sandbox is kept before deletion; 0 to keep it paused indefinitely, null when using the account default.",
+    )
+    on_idle: OnIdleAction | None = "pause"
+    idle_expires_at: AwareDatetime | None = Field(
+        None,
+        description="When the sandbox will be stopped if it stays idle until then; null when no idle limit applies to it.",
+    )
+    hard_expires_at: AwareDatetime | None = Field(
+        None,
+        description="When the sandbox will be stopped regardless of activity; null when no lifetime limit applies to it.",
+    )
 
 
 class CreateSandboxRequest1(BaseModel):
@@ -446,18 +540,24 @@ class CreateSandboxRequest1(BaseModel):
         | None
     ) = Field(
         None,
-        description="Public OCI image reference with an explicit tag or digest. Mutually exclusive with `sandbox_template_id`.",
-        examples=["docker.io/library/python:3.12"],
+        description="Public OCI image reference with an explicit tag or digest. Mutually exclusive with `sandbox_template_id`. Subject to a 3 GB maximum image size.",
+        examples=["harbor.neev.work/neevcloudai-staging/ubuntu-26.04-minimal:v2026.03.1"],
     )
     command: list[str] | None = Field(
         None,
         description="Optional container command for BYOI creates; defaults to sleep infinity when omitted.",
         examples=[["sleep", "infinity"]],
     )
-    from_snapshot: UUID | None = Field(
+    restore: UUID | None = Field(
         None,
         description="When set, the new sandbox is restored from this snapshot instead of\ncold-starting from the image. Snapshot must belong to the same\nproject. Sizing and region must match the snapshot's origin. Must not\nbe combined with `image`.\n",
     )
+    from_snapshot: UUID | None = Field(
+        None,
+        deprecated=True,
+        description="Deprecated alias for `restore`. Snapshot ID to restore from.\n",
+    )
+    lifecycle: SandboxLifecycle | None = None
 
 
 class CreateSandboxRequest2(BaseModel):
@@ -485,18 +585,24 @@ class CreateSandboxRequest2(BaseModel):
         max_length=512,
     ) = Field(
         ...,
-        description="Public OCI image reference with an explicit tag or digest. Mutually exclusive with `sandbox_template_id`.",
-        examples=["docker.io/library/python:3.12"],
+        description="Public OCI image reference with an explicit tag or digest. Mutually exclusive with `sandbox_template_id`. Subject to a 3 GB maximum image size.",
+        examples=["harbor.neev.work/neevcloudai-staging/ubuntu-26.04-minimal:v2026.03.1"],
     )
     command: list[str] | None = Field(
         None,
         description="Optional container command for BYOI creates; defaults to sleep infinity when omitted.",
         examples=[["sleep", "infinity"]],
     )
-    from_snapshot: UUID | None = Field(
+    restore: UUID | None = Field(
         None,
         description="When set, the new sandbox is restored from this snapshot instead of\ncold-starting from the image. Snapshot must belong to the same\nproject. Sizing and region must match the snapshot's origin. Must not\nbe combined with `image`.\n",
     )
+    from_snapshot: UUID | None = Field(
+        None,
+        deprecated=True,
+        description="Deprecated alias for `restore`. Snapshot ID to restore from.\n",
+    )
+    lifecycle: SandboxLifecycle | None = None
 
 
 class CreateSandboxRequest3(BaseModel):
@@ -527,18 +633,24 @@ class CreateSandboxRequest3(BaseModel):
         | None
     ) = Field(
         None,
-        description="Public OCI image reference with an explicit tag or digest. Mutually exclusive with `sandbox_template_id`.",
-        examples=["docker.io/library/python:3.12"],
+        description="Public OCI image reference with an explicit tag or digest. Mutually exclusive with `sandbox_template_id`. Subject to a 3 GB maximum image size.",
+        examples=["harbor.neev.work/neevcloudai-staging/ubuntu-26.04-minimal:v2026.03.1"],
     )
     command: list[str] | None = Field(
         None,
         description="Optional container command for BYOI creates; defaults to sleep infinity when omitted.",
         examples=[["sleep", "infinity"]],
     )
-    from_snapshot: UUID = Field(
+    restore: UUID = Field(
         ...,
         description="When set, the new sandbox is restored from this snapshot instead of\ncold-starting from the image. Snapshot must belong to the same\nproject. Sizing and region must match the snapshot's origin. Must not\nbe combined with `image`.\n",
     )
+    from_snapshot: UUID | None = Field(
+        None,
+        deprecated=True,
+        description="Deprecated alias for `restore`. Snapshot ID to restore from.\n",
+    )
+    lifecycle: SandboxLifecycle | None = None
 
 
 class CreateSandboxRequest4(BaseModel):
@@ -569,18 +681,72 @@ class CreateSandboxRequest4(BaseModel):
         | None
     ) = Field(
         None,
-        description="Public OCI image reference with an explicit tag or digest. Mutually exclusive with `sandbox_template_id`.",
-        examples=["docker.io/library/python:3.12"],
+        description="Public OCI image reference with an explicit tag or digest. Mutually exclusive with `sandbox_template_id`. Subject to a 3 GB maximum image size.",
+        examples=["harbor.neev.work/neevcloudai-staging/ubuntu-26.04-minimal:v2026.03.1"],
     )
     command: list[str] | None = Field(
         None,
         description="Optional container command for BYOI creates; defaults to sleep infinity when omitted.",
         examples=[["sleep", "infinity"]],
     )
-    from_snapshot: UUID | None = Field(
+    restore: UUID | None = Field(
         None,
         description="When set, the new sandbox is restored from this snapshot instead of\ncold-starting from the image. Snapshot must belong to the same\nproject. Sizing and region must match the snapshot's origin. Must not\nbe combined with `image`.\n",
     )
+    from_snapshot: UUID = Field(
+        ...,
+        deprecated=True,
+        description="Deprecated alias for `restore`. Snapshot ID to restore from.\n",
+    )
+    lifecycle: SandboxLifecycle | None = None
+
+
+class CreateSandboxRequest5(BaseModel):
+    name: constr(pattern=r"^[a-z]([-a-z0-9]*[a-z0-9])?$", min_length=1, max_length=63) | None = (
+        Field(
+            None,
+            description="Sandbox name. Optional — when omitted, the server generates one (a\n\"sandbox-\" prefix plus a short random suffix). When provided, must be\na valid DNS name: lowercase alphanumeric characters or '-', starting\nwith a letter, ending with an alphanumeric, max 63 characters.\n",
+            examples=["my-sandbox"],
+        )
+    )
+    region: str | None = Field(
+        None,
+        description="Region to provision in; omit to use the platform default.",
+        examples=["dev"],
+    )
+    env: list[EnvVar] | None = None
+    resources: SandboxResources | None = None
+    egress: SandboxEgressConfig | None = None
+    sandbox_template_id: constr(pattern=r"^sb-[a-zA-Z0-9-]+$", min_length=1) | None = Field(
+        None, description="Catalogue template id. Mutually exclusive with `image`."
+    )
+    image: (
+        constr(
+            pattern=r"^[^/@\s]+(/[^/@\s]+)+(:[^/@\s]+|@sha256:[a-fA-F0-9]+)$",
+            min_length=1,
+            max_length=512,
+        )
+        | None
+    ) = Field(
+        None,
+        description="Public OCI image reference with an explicit tag or digest. Mutually exclusive with `sandbox_template_id`. Subject to a 3 GB maximum image size.",
+        examples=["harbor.neev.work/neevcloudai-staging/ubuntu-26.04-minimal:v2026.03.1"],
+    )
+    command: list[str] | None = Field(
+        None,
+        description="Optional container command for BYOI creates; defaults to sleep infinity when omitted.",
+        examples=[["sleep", "infinity"]],
+    )
+    restore: UUID | None = Field(
+        None,
+        description="When set, the new sandbox is restored from this snapshot instead of\ncold-starting from the image. Snapshot must belong to the same\nproject. Sizing and region must match the snapshot's origin. Must not\nbe combined with `image`.\n",
+    )
+    from_snapshot: UUID | None = Field(
+        None,
+        deprecated=True,
+        description="Deprecated alias for `restore`. Snapshot ID to restore from.\n",
+    )
+    lifecycle: SandboxLifecycle | None = None
 
 
 class CreateSandboxRequest(
@@ -589,6 +755,7 @@ class CreateSandboxRequest(
         | CreateSandboxRequest2
         | CreateSandboxRequest3
         | CreateSandboxRequest4
+        | CreateSandboxRequest5
     ]
 ):
     root: (
@@ -596,6 +763,21 @@ class CreateSandboxRequest(
         | CreateSandboxRequest2
         | CreateSandboxRequest3
         | CreateSandboxRequest4
+        | CreateSandboxRequest5
+    )
+
+
+class UpdateSandboxRequest(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    resources: SandboxResources | None = Field(
+        None,
+        description="New cpu/memory sizing, resized in place on the running sandbox. Only the\nfields provided change. disk_gb is not resizable in place and is\nrejected if supplied with a different value.\n",
+    )
+    egress: SandboxEgressConfig | None = Field(
+        None,
+        description="New egress policy for the sandbox. Replaces the existing policy\nin full and takes effect immediately for new connections — no sandbox\nrestart is required.\n",
     )
 
 

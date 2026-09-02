@@ -35,7 +35,9 @@ def snapshot_data(**overrides) -> dict:
         "org_id": "org1",
         "project_id": "proj1",
         "status": "Pending",
-        "include_memory": False,
+        "snapshot_type": "full",
+        "sandbox_format_version": 1,
+        "restorability": "restorable",
         "source_region": "as-south-1",
         "created_at": "2026-06-05T00:00:00Z",
         "updated_at": "2026-06-05T00:00:00Z",
@@ -318,10 +320,9 @@ def test_sandboxes_create_snapshot(mock_transport):
     client._transport.request = capturing_request  # type: ignore[method-assign]
 
     snap = client.sandboxes.create_snapshot(sb.id, {"name": "demo-snap"})
-    assert captured_bodies == [{"name": "demo-snap", "include_memory": False}]
+    assert captured_bodies == [{"name": "demo-snap"}]
     assert str(snap.id) == _first_snapshot_id()
     assert snap.status == SnapshotStatus.Pending
-    assert snap.include_memory is False
     client.close()
 
 

@@ -141,7 +141,6 @@ def _prepare_create_snapshot_body(
     else:
         raw = params.model_dump(exclude_unset=True)
     body = coerce_params(CreateSnapshotParams, raw).model_dump(exclude_unset=True)
-    body["include_memory"] = False
     return body
 
 

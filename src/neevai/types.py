@@ -160,7 +160,7 @@ class SandboxData(_GeneratedSandbox):
 
 
 class CreateSnapshotParams(BaseModel):
-    """Caller-facing params for creating a sandbox snapshot (excludes ``include_memory``)."""
+    """Caller-facing params for creating a sandbox snapshot."""
 
     name: str | None = None
     retain_for: str | None = None

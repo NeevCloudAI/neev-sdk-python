@@ -262,9 +262,11 @@ print(sandbox.phase, sandbox.connect_url)
 
 ### `client.sandboxes.pause(id, *, preserve_memory=None, org_id=None, project_id=None)`
 
-Scales the sandbox to 0 replicas. Lifecycle phase becomes `Paused`. When
-`preserve_memory` is set, it is sent in the request body (`PauseSandboxRequest`);
-omit it to use the server default (`true`).
+Scales the sandbox to 0 replicas. Lifecycle phase becomes `Paused`. Pause always
+snapshots the sandbox's full state (process memory + filesystem) before shutting
+down, so a resume restores exactly where it left off. `preserve_memory` was
+dropped from `PauseSandboxRequest` in the spec; the kwarg is retained for
+backward compatibility but is now a no-op on the wire.
 
 **Returns:** Updated `Sandbox` handle (not `None`).
 
@@ -332,8 +334,6 @@ Creates a filesystem snapshot of a sandbox. Returns immediately with
 | `id` | `str` | Sandbox UUID to snapshot |
 | `params` | `CreateSnapshotParams \| Mapping[str, Any] \| None` | Optional `name`, `retain_for` (TTL duration) |
 | `org_id` / `project_id` | `str \| None` | Override client scope |
-
-The SDK always sends `include_memory: false` on the wire.
 
 **Returns:** `Snapshot` with `status` typically `Pending`.
 
@@ -634,12 +634,12 @@ sandbox.wait_until_ready(on_poll=log_progress)
 Convenience wrappers that delegate to `client.sandboxes` and update handle state in
 place (except `delete`, which removes the remote resource).
 
-Both `pause()` and `resume()` return the updated `Sandbox` handle. `pause()` accepts
-optional `preserve_memory` (forwarded to `PauseSandboxRequest`; omit to use the
-server default `true`):
+Both `pause()` and `resume()` return the updated `Sandbox` handle. Pause always
+snapshots full state before shutdown; the `preserve_memory` kwarg is retained for
+backward compatibility but is now a no-op (dropped from `PauseSandboxRequest`):
 
 ```python
-sandbox = sandbox.pause(preserve_memory=True)   # phase → Paused, replicas → 0
+sandbox = sandbox.pause()   # phase → Paused, replicas → 0
 sandbox = sandbox.resume()  # scales back, then wait for Ready
 sandbox.wait_until_ready()
 ```
@@ -1251,8 +1251,7 @@ manually verify field tables here and in [`api-reference.md`](./api-reference.md
 
 ### `CreateSnapshotParams`
 
-Caller-facing snapshot create options (`types.py`). The SDK sets `include_memory`
-to `false` on the wire.
+Caller-facing snapshot create options (`types.py`).
 
 | Field | Type | Required |
 | ----- | ---- | -------- |
@@ -1271,11 +1270,15 @@ Generated snapshot metadata record.
 | `project_id` | `str` | yes |
 | `name` | `str \| None` | no |
 | `status` | `SnapshotStatus` | yes (`Pending`, `Running`, `Ready`, `Failed`) |
-| `include_memory` | `bool` | yes |
+| `snapshot_type` | `SnapshotType` | yes (`full`) |
 | `source_region` | `str` | yes |
 | `size_bytes` | `int \| None` | no |
 | `error_message` | `str \| None` | no |
 | `expires_at` | `datetime \| None` | no |
+| `created_by` | `str \| None` | no |
+| `sandbox_format_version` | `int` | yes (`0` for snapshots taken before it was recorded) |
+| `restorability` | `SnapshotRestorability` | yes (`restorable`, `deprecating`, `unsupported`) |
+| `build_descriptor` | `dict \| None` | no |
 | `created_at` | `datetime` | yes |
 | `updated_at` | `datetime` | yes |
 
@@ -1381,7 +1384,9 @@ Alias for generated `CreateSandboxRequest`.
 | `env` | `list[EnvVar] \| None` | no |
 | `resources` | `SandboxResources \| None` | no |
 | `egress` | `SandboxEgressConfig \| None` | no |
-| `from_snapshot` | `UUID \| None` | no |
+| `restore` | `UUID \| None` | no (restore the new sandbox from this snapshot instead of cold-starting) |
+| `from_snapshot` | `UUID \| None` | no (**deprecated** alias for `restore`) |
+| `lifecycle` | `SandboxLifecycle \| None` | no (idle/lifetime controls set at create time) |
 
 ### `EnvVar`
 
@@ -1408,14 +1413,45 @@ so transitional or future phase strings from the API are accepted.
 | `resources` | `SandboxResources \| None` | no |
 | `phase` | `str` | yes |
 | `connect_url` | `str \| None` | no |
+| `preview_url_template` | `str \| None` | no (template with `{port}` for `getUrl({port})`) |
 | `replicas` | `int` (0–1) | yes |
 | `egress` | `SandboxEgressConfig \| None` | no |
 | `sandbox_template_id` | `str \| None` | no |
 | `created_by` | `str \| None` | no |
+| `last_crash` | `SandboxLastCrash \| None` | no (most recent unexpected stop; records a past event) |
+| `idle_timeout_seconds` | `int \| None` | no (`0` = no idle limit, `null` = account default) |
+| `max_lifetime_seconds` | `int \| None` | no (`0` = no lifetime limit, `null` = account default) |
+| `paused_retention_seconds` | `int \| None` | no (`0` = keep paused indefinitely, `null` = account default) |
+| `on_idle` | `OnIdleAction` | no (`pause` or `delete`) |
+| `idle_expires_at` | `datetime \| None` | no |
+| `hard_expires_at` | `datetime \| None` | no |
 | `created_at` | `datetime` | yes |
 | `updated_at` | `datetime` | yes |
 
 On handles, `sandbox.phase` returns a `str` (not the generated enum). The OpenAPI spec lists five steady-state phases; the API may return additional transitional strings during pause/resume.
+
+### `SandboxLastCrash`
+
+The most recent unexpected stop of the sandbox (`null` if it never had one). Records a
+past event and is not cleared on recovery, so read `at` before acting on it.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `reason` | `str` | yes (e.g. `OOMKilled`) |
+| `at` | `datetime` | yes (when the stop was detected) |
+| `storage_reset` | `bool` | yes (`true` = restarted with an empty filesystem) |
+
+### `SandboxLifecycle`
+
+Optional idle and lifetime controls set at create time (`CreateSandboxParams.lifecycle`).
+Omit a field for the account default; send `0` to turn that limit off.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `idle_timeout_seconds` | `int \| None` | no |
+| `max_lifetime_seconds` | `int \| None` | no |
+| `paused_retention_seconds` | `int \| None` | no |
+| `on_idle` | `OnIdleAction` | no (`pause` or `delete`) |
 
 ### `SandboxTemplate`
 
@@ -1823,10 +1859,9 @@ Compact reviewer index. Each symbol should also appear in
   `connect_url`, `phase == "Ready"`, and a successful `processes.list()` probe
   before `start` — see [Processes API](#processes-api).
 - Snapshot create returns `Pending` immediately; poll `get_snapshot` until `Ready`.
-- The SDK sets `include_memory: false` on snapshot create requests.
-- For rollback, prefer `sandboxes.create({..., "from_snapshot": snapshot_id})` over
+- For rollback, prefer `sandboxes.create({..., "restore": snapshot_id})` over
   in-place `restore()` — some backends may return an empty workspace after in-place
-  restore.
+  restore. `from_snapshot` is a deprecated alias for `restore`.
 - `restore()`, `pause()`, and `resume()` invalidate the cached runtime connection
   on the handle; call `wait_until_ready()` again before file/exec/process operations when
   needed.
