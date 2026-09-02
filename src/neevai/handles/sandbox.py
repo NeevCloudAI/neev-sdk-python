@@ -291,11 +291,11 @@ class Sandbox:
             project_id=self.scope.project_id if self.scope else None,
         )
 
-    def restore(self, snapshot_id: str) -> Sandbox:
-        """Restores this sandbox in place from a snapshot."""
+    def rollback(self, snapshot_id: str) -> Sandbox:
+        """Rolls this sandbox back in place to a previous snapshot."""
         if self.sandboxes is None:
-            raise NeevAIError("Cannot restore a sandbox handle with no client context.")
-        next_state = self.sandboxes.restore(
+            raise NeevAIError("Cannot rollback a sandbox handle with no client context.")
+        next_state = self.sandboxes.rollback(
             self.id,
             snapshot_id,
             org_id=self.scope.org_id if self.scope else None,
@@ -696,10 +696,10 @@ class AsyncSandbox:
             project_id=self.scope.project_id if self.scope else None,
         )
 
-    async def restore(self, snapshot_id: str) -> AsyncSandbox:
+    async def rollback(self, snapshot_id: str) -> AsyncSandbox:
         if self.sandboxes is None:
-            raise NeevAIError("Cannot restore a sandbox handle with no client context.")
-        next_state = await self.sandboxes.restore(
+            raise NeevAIError("Cannot rollback a sandbox handle with no client context.")
+        next_state = await self.sandboxes.rollback(
             self.id,
             snapshot_id,
             org_id=self.scope.org_id if self.scope else None,

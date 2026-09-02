@@ -442,7 +442,7 @@ def _control_response(
                 _FAKE_DB["snapshots"][snap_id] = snapshot
                 return json_resp(202, snapshot)
 
-        if action == "restore" and method == "POST":
+        if action == "rollback" and method == "POST":
             sandbox["phase"] = "Pending"
             sandbox["replicas"] = 1
             return json_resp(200, sandbox)

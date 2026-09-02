@@ -108,7 +108,7 @@ uses the **platform agents API** — not the model-driven patterns in Tier 2.
 | [`create_agent.py`](./create_agent.py) | `agent_templates.list`, `agents.create`, `wait_until_ready`, `sandbox()`, `update`, `pause`, `delete` | `uv run python examples/create_agent.py` |
 | [`sandbox_lifecycle.py`](./sandbox_lifecycle.py) | `sandboxes.create`, `wait_until_ready`, `metrics`, `pause`, `delete` | `uv run python examples/sandbox_lifecycle.py` |
 | [`sandbox_update.py`](./sandbox_update.py) | `sandboxes.update` / `sandbox.update` — in-place resize, then live egress re-scope via `allow_egress` | `uv run python examples/sandbox_update.py` |
-| [`snapshot_fork_restore.py`](./snapshot_fork_restore.py) | `snapshot`, `get_snapshot`, `create` with `from_snapshot`, `fork`, `delete_snapshot` | `uv run python examples/snapshot_fork_restore.py` |
+| [`snapshot_fork_restore.py`](./snapshot_fork_restore.py) | `snapshot`, `get_snapshot`, `create` with `restore`, `fork`, `delete_snapshot` | `uv run python examples/snapshot_fork_restore.py` |
 | [`async_sandbox.py`](./async_sandbox.py) | `AsyncNeevAI`, `sandboxes.create`, `wait_until_ready`, `exec`, `delete` | `uv run python examples/async_sandbox.py` |
 | [`files_api.py`](./files_api.py) | `files.write`, `read_text`, `list(recursive=True)` | `uv run python examples/files_api.py` |
 | [`preview_ports.py`](./preview_ports.py) | `get_url(port)` — serve on a port, get its preview URL, `list_ports`, `revoke_port` | `uv run python examples/preview_ports.py` |

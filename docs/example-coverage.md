@@ -15,7 +15,7 @@ path and run commands, see [`examples/README.md`](../examples/README.md).
 | `NeevAI(...)` | tier-1, `agent_patterns/*`, `workflow_examples/*`, `sandbox_lifecycle_controller.py` | `with NeevAI() as client:` |
 | `AsyncNeevAI(...)` | `async_sandbox.py` | `async with AsyncNeevAI() as client:` |
 | `client.sandboxes.create` | tier-1, `agent_patterns/*`, `workflow_examples/*`, `sandbox_lifecycle_controller.py`, `snapshot_fork_restore.py` | `sandbox = client.sandboxes.create({...})` |
-| `client.sandboxes.create` (`from_snapshot`) | `snapshot_fork_restore.py` | `restored = client.sandboxes.create({..., "from_snapshot": snapshot_id})` |
+| `client.sandboxes.create` (`restore`) | `snapshot_fork_restore.py` | `restored = client.sandboxes.create({..., "restore": snapshot_id})` |
 | `client.sandboxes.list` | `sandbox_lifecycle_controller.py` | `page = client.sandboxes.list(page=1, limit=20)` |
 | `client.sandboxes.get` | `sandbox_lifecycle_controller.py` | `sandbox = client.sandboxes.get(sandbox_id)` |
 | `client.sandboxes.update` | `sandbox_update.py` | `client.sandboxes.update(id, {"resources": {"cpu": 2}})` |
@@ -82,7 +82,7 @@ path and run commands, see [`examples/README.md`](../examples/README.md).
 | Agent lifecycle | `examples/create_agent.py` | List agent templates, create agent, wait, sandbox exec, update, pause, delete |
 | Sandbox lifecycle | `examples/sandbox_lifecycle.py` | Create → wait → metrics → pause → delete |
 | Sandbox in-place update | `examples/sandbox_update.py` | Create → wait → resize → re-scope egress → verify → delete |
-| Snapshot fork & restore | `examples/snapshot_fork_restore.py` | Write state → snapshot → modify → `from_snapshot` create → fork → cleanup |
+| Snapshot fork & restore | `examples/snapshot_fork_restore.py` | Write state → snapshot → modify → `restore` create → fork → cleanup |
 | Async workflow | `examples/async_sandbox.py` | `AsyncNeevAI` create → wait → exec → delete |
 | Files API | `examples/files_api.py` | Write, read_text, list (recursive) |
 | Streaming exec | `examples/streaming_exec.py` | `exec_stream` with progress output |

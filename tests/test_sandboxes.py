@@ -362,7 +362,7 @@ def test_sandboxes_get_snapshot_not_found(mock_transport):
     client.close()
 
 
-def test_sandboxes_restore(mock_transport):
+def test_sandboxes_rollback(mock_transport):
     client = _make_client(mock_transport)
     sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
     snap = client.sandboxes.create_snapshot(sb.id, {"name": "restore-me"})
@@ -376,10 +376,10 @@ def test_sandboxes_restore(mock_transport):
 
     client._transport.request = capturing_request  # type: ignore[method-assign]
 
-    restored = client.sandboxes.restore(sb.id, str(snap.id))
+    rolled_back = client.sandboxes.rollback(sb.id, str(snap.id))
     assert captured_bodies == [{"snapshot_id": str(snap.id)}]
-    assert restored.id == sb.id
-    assert restored.phase == "Pending"
+    assert rolled_back.id == sb.id
+    assert rolled_back.phase == "Pending"
     client.close()
 
 
@@ -422,18 +422,18 @@ def test_sandbox_handle_snapshot_methods(mock_transport):
     listed = sb.snapshots()
     assert len(listed) == 1
 
-    sb.restore(str(pending.id))
+    sb.rollback(str(pending.id))
     fork = sb.fork("handle-fork")
     assert fork.name == "handle-fork"
 
     paths = [path for _, path in captured]
     assert any(path.endswith(f"/sandboxes/{sb.id}/snapshots") for path in paths)
-    assert any(path.endswith(f"/sandboxes/{sb.id}/restore") for path in paths)
+    assert any(path.endswith(f"/sandboxes/{sb.id}/rollback") for path in paths)
     assert any(path.endswith(f"/sandboxes/{sb.id}/fork") for path in paths)
     client.close()
 
 
-def test_sandboxes_create_from_snapshot(mock_transport):
+def test_sandboxes_create_with_restore(mock_transport):
     client = _make_client(mock_transport)
     sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
     snap = client.sandboxes.create_snapshot(sb.id, {"name": "seed"})
@@ -442,7 +442,7 @@ def test_sandboxes_create_from_snapshot(mock_transport):
         {
             "name": "from-snap",
             "sandbox_template_id": "sb-ubuntu-24-04-minimal",
-            "from_snapshot": str(snap.id),
+            "restore": str(snap.id),
         }
     )
     assert restored.name == "from-snap"

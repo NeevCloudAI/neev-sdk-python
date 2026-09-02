@@ -28,7 +28,7 @@ which examples demonstrate which APIs, see
   - [list_snapshots](#clientsandboxeslist_snapshotsid-page-none-limit-none-org_idnone-project_idnone)
   - [get_snapshot](#clientsandboxesget_snapshotsnapshot_id-org_idnone-project_idnone)
   - [delete_snapshot](#clientsandboxesdelete_snapshotsnapshot_id-org_idnone-project_idnone)
-  - [restore](#clientsandboxesrestoreid-snapshot_id-org_idnone-project_idnone)
+  - [rollback](#clientsandboxesrollbackid-snapshot_id-org_idnone-project_idnone)
   - [fork](#clientsandboxesforkid-name-org_idnone-project_idnone)
 - [Agents resource](#agents-resource)
 - [Agent templates resource](#agent-templates-resource)
@@ -217,14 +217,14 @@ sandbox.wait_until_ready()
 restored = client.sandboxes.create({
     "name": "restored-agent",
     "sandbox_template_id": "tmpl-abc123",
-    "from_snapshot": str(snap.id),
+    "restore": str(snap.id),
 })
 ```
 
 **Async:** `sandbox = await client.sandboxes.create(...)`
 
 **Examples:** [`sandbox_lifecycle.py`](../examples/sandbox_lifecycle.py),
-[`snapshot_fork_restore.py`](../examples/snapshot_fork_restore.py) (`from_snapshot`)
+[`snapshot_fork_restore.py`](../examples/snapshot_fork_restore.py) (`restore`)
 
 ### `client.sandboxes.list(page=None, limit=None, name=None, status=None, sandbox_id=None, org_id=None, project_id=None)`
 
@@ -421,24 +421,24 @@ client.sandboxes.delete_snapshot(str(snap.id))
 
 **Example:** [`snapshot_fork_restore.py`](../examples/snapshot_fork_restore.py)
 
-### `client.sandboxes.restore(id, snapshot_id, org_id=None, project_id=None)`
+### `client.sandboxes.rollback(id, snapshot_id, org_id=None, project_id=None)`
 
-Restores a sandbox **in place** from a snapshot. Overwrites the sandbox's
+Rolls a sandbox back **in place** to a previous snapshot. Overwrites the sandbox's
 filesystem with the snapshot contents.
 
 **Returns:** Updated `Sandbox` handle.
 
-**Note:** Prefer creating a new sandbox with `from_snapshot` in create params for
-rollback workflows — see [`snapshot_fork_restore.py`](../examples/snapshot_fork_restore.py).
-In-place restore may leave an empty workspace on some backends.
+**Note:** Prefer creating a new sandbox with `restore` in create params to recover
+into a new sandbox — see [`snapshot_fork_restore.py`](../examples/snapshot_fork_restore.py).
+In-place rollback may leave an empty workspace on some backends.
 
 ```python
-restored = client.sandboxes.restore(sandbox.id, str(snap.id))
+rolled_back = client.sandboxes.rollback(sandbox.id, str(snap.id))
 # or via handle (updates state in place, invalidates runtime connection):
-sandbox.restore(str(snap.id))
+sandbox.rollback(str(snap.id))
 ```
 
-**Async:** `restored = await client.sandboxes.restore(...)`
+**Async:** `rolled_back = await client.sandboxes.rollback(...)`
 
 ### `client.sandboxes.fork(id, name, org_id=None, project_id=None)`
 
@@ -456,16 +456,16 @@ fork = sandbox.fork("fork-name")
 
 **Example:** [`snapshot_fork_restore.py`](../examples/snapshot_fork_restore.py)
 
-### Restore via `from_snapshot` on create
+### Restore via `restore` on create
 
-To roll back without mutating the original sandbox, pass `from_snapshot` when
+To recover without mutating the original sandbox, pass `restore` when
 creating a new sandbox:
 
 ```python
 restored = client.sandboxes.create({
     "name": "restored-from-snap",
     "sandbox_template_id": template_id,
-    "from_snapshot": str(snap.id),
+    "restore": str(snap.id),
 })
 restored.wait_until_ready()
 ```
@@ -782,32 +782,32 @@ all_snaps = sandbox.snapshots()
 
 **Example:** [`snapshot_fork_restore.py`](../examples/snapshot_fork_restore.py)
 
-### `sandbox.restore(snapshot_id)` / `sandbox.fork(name)`
+### `sandbox.rollback(snapshot_id)` / `sandbox.fork(name)`
 
-`restore` delegates to `client.sandboxes.restore`, updates handle state in place,
+`rollback` delegates to `client.sandboxes.rollback`, updates handle state in place,
 invalidates the cached runtime connection, and returns `self`. `fork` returns a
 new `Sandbox` handle.
 
-For rollback workflows, prefer `client.sandboxes.create({..., "from_snapshot": ...})`
-over in-place `restore` — see
+To recover into a new sandbox, prefer `client.sandboxes.create({..., "restore": ...})`
+over in-place `rollback` — see
 [`snapshot_fork_restore.py`](../examples/snapshot_fork_restore.py).
 
 ```python
-# In-place restore (mutates this sandbox):
-sandbox.restore(str(snap.id))
+# In-place rollback (mutates this sandbox):
+sandbox.rollback(str(snap.id))
 
-# Recommended rollback — new sandbox from snapshot:
+# Recommended restore — new sandbox from snapshot:
 restored = client.sandboxes.create({
     "name": "restored",
     "sandbox_template_id": template_id,
-    "from_snapshot": str(snap.id),
+    "restore": str(snap.id),
 })
 
 fork = sandbox.fork("fork-name")
 ```
 
 **Example:** [`snapshot_fork_restore.py`](../examples/snapshot_fork_restore.py) (`fork`,
-`from_snapshot` create)
+`restore` create)
 
 ### `sandbox.to_json()`
 
@@ -1778,7 +1778,7 @@ Compact reviewer index. Each symbol should also appear in
 | `Sandboxes.list_snapshots` | method | `list[Snapshot]` |
 | `Sandboxes.get_snapshot` | method | `Snapshot` |
 | `Sandboxes.delete_snapshot` | method | `None` |
-| `Sandboxes.restore` | method | `Sandbox` |
+| `Sandboxes.rollback` | method | `Sandbox` |
 | `Sandboxes.fork` | method | `Sandbox` |
 | `AsyncSandboxes.*` | methods | Same as sync with `await`; returns `AsyncSandbox` / `AsyncSandboxPage` |
 
@@ -1835,7 +1835,7 @@ Compact reviewer index. Each symbol should also appear in
 | `Sandbox.wait_until_ready` | method | Poll until `Ready` |
 | `Sandbox.pause` / `.resume` | methods | Return updated `Sandbox` |
 | `Sandbox.snapshot` / `.snapshots` | methods | `Snapshot` / `list[Snapshot]` |
-| `Sandbox.restore` / `.fork` | methods | `Sandbox` (restore updates in place) |
+| `Sandbox.rollback` / `.fork` | methods | `Sandbox` (rollback updates in place) |
 | `Sandbox.delete` | method | `None` |
 | `Sandbox.metrics` | method | `SandboxMetricsResponse` |
 | `Sandbox.exec` | method | `ExecResult` |
@@ -1905,10 +1905,10 @@ Compact reviewer index. Each symbol should also appear in
   `connect_url`, `phase == "Ready"`, and a successful `processes.list()` probe
   before `start` — see [Processes API](#processes-api).
 - Snapshot create returns `Pending` immediately; poll `get_snapshot` until `Ready`.
-- For rollback, prefer `sandboxes.create({..., "restore": snapshot_id})` over
-  in-place `restore()` — some backends may return an empty workspace after in-place
-  restore. `from_snapshot` is a deprecated alias for `restore`.
-- `restore()`, `pause()`, and `resume()` invalidate the cached runtime connection
+- To recover into a new sandbox, prefer `sandboxes.create({..., "restore": snapshot_id})`
+  over in-place `rollback()` — some backends may return an empty workspace after
+  in-place rollback. `from_snapshot` is a deprecated alias for the create `restore` field.
+- `rollback()`, `pause()`, and `resume()` invalidate the cached runtime connection
   on the handle; call `wait_until_ready()` again before file/exec/process operations when
   needed.
 
