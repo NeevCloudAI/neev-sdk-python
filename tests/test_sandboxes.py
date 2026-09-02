@@ -462,6 +462,9 @@ def _capture_requests(client) -> list[tuple[str, str, dict | None]]:
     return captured
 
 
+# --- In-place resize + live egress update (#31) ---
+
+
 def test_sandboxes_update_resources_in_place(mock_transport):
     client = _make_client(mock_transport)
     sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-x"})
@@ -533,6 +536,7 @@ def test_sandboxes_update_empty_raises_without_http(mock_transport):
         client.sandboxes.update(sb.id, {})
     msg = str(ei.value)
     assert "resources" in msg and "egress" in msg
+
     request_mock.assert_not_called()
     client.close()
 
@@ -542,7 +546,7 @@ def test_sandboxes_update_disk_gb_surfaces_server_rejection(mock_transport):
     sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-x"})
     captured = _capture_requests(client)
 
-    # disk_gb is not dropped client-side; the server's rejection surfaces unchanged.
+    # disk_gb is not dropped client-side; the server rejection surfaces unchanged.
     with pytest.raises(BadRequestError):
         client.sandboxes.update(sb.id, {"resources": {"disk_gb": 20}})
     assert captured[-1][2] == {"resources": {"disk_gb": 20}}
@@ -555,6 +559,118 @@ def test_sandbox_handle_update_in_place(mock_transport):
     same = sb.update({"resources": {"cpu": 2, "memory_gb": 4}})
     assert same is sb
     assert sb.data["resources"]["cpu"] == 2 and sb.data["resources"]["memory_gb"] == 4
+    client.close()
+
+
+# --- Lifecycle windows + create-time options (#32) ---
+
+
+def test_sandboxes_create_with_lifecycle_sends_lifecycle(mock_transport):
+    client = _make_client(mock_transport)
+    captured = _capture_requests(client)
+    sb = client.sandboxes.create(
+        {
+            "sandbox_template_id": "sb-x",
+            "lifecycle": {"max_lifetime_seconds": 3600, "idle_timeout_seconds": 300},
+        }
+    )
+    body = next(b for (m, _p, b) in captured if m == "POST")
+    assert body["lifecycle"] == {"max_lifetime_seconds": 3600, "idle_timeout_seconds": 300}
+    # The window is observable on the created sandbox.
+    assert sb.data["idle_timeout_seconds"] == 300
+    client.close()
+
+
+def test_sandboxes_create_without_lifecycle_omits_key(mock_transport):
+    client = _make_client(mock_transport)
+    captured = _capture_requests(client)
+    client.sandboxes.create({"sandbox_template_id": "sb-x"})
+    body = next(b for (m, _p, b) in captured if m == "POST")
+    assert "lifecycle" not in body
+    client.close()
+
+
+def test_sandboxes_create_byoi_sends_image_and_command(mock_transport):
+    client = _make_client(mock_transport)
+    captured = _capture_requests(client)
+    client.sandboxes.create(
+        {"image": "docker.io/library/python:3.12", "command": ["sleep", "infinity"]}
+    )
+    body = next(b for (m, _p, b) in captured if m == "POST")
+    assert body["image"] == "docker.io/library/python:3.12"
+    assert body["command"] == ["sleep", "infinity"]
+    client.close()
+
+
+def test_sandboxes_keepalive(mock_transport):
+    client = _make_client(mock_transport)
+    sb = client.sandboxes.create({"sandbox_template_id": "sb-x"})
+    captured = _capture_requests(client)
+    same = client.sandboxes.keepalive(sb.id)
+    assert same.id == sb.id
+    method, path, _body = captured[-1]
+    assert method == "POST" and path.endswith(f"/sandboxes/{sb.id}/keepalive")
+    client.close()
+
+
+def test_sandboxes_update_timeout_partial_leaves_others_unchanged(mock_transport):
+    client = _make_client(mock_transport)
+    sb = client.sandboxes.create(
+        {
+            "sandbox_template_id": "sb-x",
+            "lifecycle": {"idle_timeout_seconds": 300, "max_lifetime_seconds": 3600},
+        }
+    )
+    captured = _capture_requests(client)
+    updated = client.sandboxes.update_timeout(sb.id, {"idle_timeout_seconds": 600})
+
+    method, path, body = captured[-1]
+    assert method == "PUT" and path.endswith(f"/sandboxes/{sb.id}/timeout")
+    # Only the passed window is on the wire; the others are not sent (left unchanged).
+    assert body == {"idle_timeout_seconds": 600}
+    assert updated.data["idle_timeout_seconds"] == 600
+    assert updated.data["max_lifetime_seconds"] == 3600
+    client.close()
+
+
+def test_sandboxes_update_timeout_clears_window(mock_transport):
+    client = _make_client(mock_transport)
+    sb = client.sandboxes.create(
+        {"sandbox_template_id": "sb-x", "lifecycle": {"max_lifetime_seconds": 3600}}
+    )
+    captured = _capture_requests(client)
+    updated = client.sandboxes.update_timeout(sb.id, {"max_lifetime_seconds": 0})
+
+    _method, _path, body = captured[-1]
+    # 0 turns the window off (per the API: omitted = unchanged, 0 = no limit).
+    assert body == {"max_lifetime_seconds": 0}
+    assert updated.data["max_lifetime_seconds"] == 0
+    client.close()
+
+
+def test_sandboxes_update_timeout_invalid_on_idle_raises_without_http(mock_transport):
+    client = _make_client(mock_transport)
+    sb = client.sandboxes.create({"sandbox_template_id": "sb-x"})
+    request_mock = MagicMock(side_effect=client._transport.request)
+    client._transport.request = request_mock
+
+    with pytest.raises(NeevAIError):
+        client.sandboxes.update_timeout(sb.id, {"on_idle": "explode"})
+
+    request_mock.assert_not_called()
+    client.close()
+
+
+def test_sandboxes_update_timeout_on_idle_serialized_as_json(mock_transport):
+    client = _make_client(mock_transport)
+    sb = client.sandboxes.create({"sandbox_template_id": "sb-x"})
+    captured = _capture_requests(client)
+    client.sandboxes.update_timeout(sb.id, {"on_idle": "delete"})
+
+    _method, _path, body = captured[-1]
+    # on_idle must serialize to a plain JSON string, not a Python enum member.
+    assert body == {"on_idle": "delete"}
+    assert isinstance(body["on_idle"], str)
     client.close()
 
 
@@ -583,4 +699,17 @@ async def test_async_sandbox_handle_update(async_mock_transport):
     assert same is sb
     assert sb.data["resources"]["cpu"] == 2 and sb.data["resources"]["memory_gb"] == 4
     assert [r["host"] for r in sb.data["egress"]["allow"]] == ["api.github.com"]
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_async_sandboxes_keepalive_and_update_timeout(async_mock_transport):
+    client = AsyncNeevAI(
+        api_key="test", org_id="org1", project_id="proj1", client=async_mock_transport
+    )
+    sb = await client.sandboxes.create({"sandbox_template_id": "sb-x"})
+    alive = await client.sandboxes.keepalive(sb.id)
+    assert alive.id == sb.id
+    updated = await client.sandboxes.update_timeout(sb.id, {"idle_timeout_seconds": 120})
+    assert updated.data["idle_timeout_seconds"] == 120
     await client.aclose()

@@ -20,6 +20,7 @@ __all__ = [
     "FileEntry",
     "ForkSandboxRequest",
     "MetricSeries",
+    "OnIdleAction",
     "PauseSandboxParams",
     "ProcessInfo",
     "ProcessLogEntry",
@@ -30,6 +31,7 @@ __all__ = [
     "RestoreSandboxRequest",
     "SandboxData",
     "SandboxEgressConfig",
+    "SandboxLifecycle",
     "SandboxListResponse",
     "SandboxMetricsResponse",
     "SandboxPhase",
@@ -47,6 +49,7 @@ __all__ = [
     "StdoutStreamEvent",
     "UpdateAgentParams",
     "UpdateSandboxParams",
+    "UpdateSandboxTimeoutParams",
     "WatchEvent",
 ]
 
@@ -84,6 +87,9 @@ from neevai.generated.aiagent import (  # noqa: F401
     MetricSeries as MetricSeries,
 )
 from neevai.generated.aiagent import (  # noqa: F401
+    OnIdleAction as OnIdleAction,
+)
+from neevai.generated.aiagent import (  # noqa: F401
     PauseSandboxRequest as PauseSandboxParams,
 )
 from neevai.generated.aiagent import (  # noqa: F401
@@ -94,6 +100,9 @@ from neevai.generated.aiagent import (  # noqa: F401
 )
 from neevai.generated.aiagent import (  # noqa: F401
     SandboxEgressConfig as SandboxEgressConfig,
+)
+from neevai.generated.aiagent import (  # noqa: F401
+    SandboxLifecycle as SandboxLifecycle,
 )
 from neevai.generated.aiagent import (  # noqa: F401
     SandboxMetricsResponse as SandboxMetricsResponse,
@@ -127,6 +136,9 @@ from neevai.generated.aiagent import (  # noqa: F401
 )
 from neevai.generated.aiagent import (  # noqa: F401
     UpdateSandboxRequest as UpdateSandboxParams,
+)
+from neevai.generated.aiagent import (  # noqa: F401
+    UpdateSandboxTimeoutRequest as UpdateSandboxTimeoutParams,
 )
 
 # Steady-state phases from the OpenAPI spec, plus transitional values the API may

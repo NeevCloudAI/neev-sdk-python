@@ -108,6 +108,8 @@ uses the **platform agents API** — not the model-driven patterns in Tier 2.
 | [`create_agent.py`](./create_agent.py) | `agent_templates.list`, `agents.create`, `wait_until_ready`, `sandbox()`, `update`, `pause`, `delete` | `uv run python examples/create_agent.py` |
 | [`sandbox_lifecycle.py`](./sandbox_lifecycle.py) | `sandboxes.create`, `wait_until_ready`, `metrics`, `pause`, `delete` | `uv run python examples/sandbox_lifecycle.py` |
 | [`sandbox_update.py`](./sandbox_update.py) | `sandboxes.update` / `sandbox.update` — in-place resize, then live egress re-scope via `allow_egress` | `uv run python examples/sandbox_update.py` |
+| [`sandbox_lifecycle_windows.py`](./sandbox_lifecycle_windows.py) | `create` with `lifecycle`, `keepalive` loop, `update_timeout` (change + clear windows) | `uv run python examples/sandbox_lifecycle_windows.py` |
+| [`byoi_create.py`](./byoi_create.py) | BYOI `create` with `image` + `command`, `wait_until_ready`, `exec`, `delete` | `uv run python examples/byoi_create.py` |
 | [`snapshot_fork_restore.py`](./snapshot_fork_restore.py) | `snapshot`, `get_snapshot`, `create` with `restore`, `fork`, `delete_snapshot` | `uv run python examples/snapshot_fork_restore.py` |
 | [`async_sandbox.py`](./async_sandbox.py) | `AsyncNeevAI`, `sandboxes.create`, `wait_until_ready`, `exec`, `delete` | `uv run python examples/async_sandbox.py` |
 | [`files_api.py`](./files_api.py) | `files.write`, `read_text`, `list(recursive=True)` | `uv run python examples/files_api.py` |

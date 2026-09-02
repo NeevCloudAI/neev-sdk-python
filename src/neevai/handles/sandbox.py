@@ -19,6 +19,7 @@ from neevai.types import (
     Scope,
     Snapshot,
     UpdateSandboxParams,
+    UpdateSandboxTimeoutParams,
 )
 
 if TYPE_CHECKING:
@@ -185,6 +186,31 @@ class Sandbox:
         )
         self._state = next_state._state
         self._invalidate_connection()
+        return self
+
+    def keepalive(self) -> Sandbox:
+        """Resets the sandbox's idle timer and updates this handle in place."""
+        if self.sandboxes is None:
+            raise NeevAIError("Cannot keepalive a sandbox handle with no client context.")
+        next_state = self.sandboxes.keepalive(
+            self.id,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+        )
+        self._state = next_state._state
+        return self
+
+    def update_timeout(self, params: UpdateSandboxTimeoutParams | Mapping[str, Any]) -> Sandbox:
+        """Changes the sandbox's idle/lifetime windows and updates this handle in place."""
+        if self.sandboxes is None:
+            raise NeevAIError("Cannot update timeout on a sandbox handle with no client context.")
+        next_state = self.sandboxes.update_timeout(
+            self.id,
+            params,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+        )
+        self._state = next_state._state
         return self
 
     def delete(self) -> None:
@@ -594,6 +620,33 @@ class AsyncSandbox:
         )
         self._state = next_state._state
         await self._invalidate_connection()
+        return self
+
+    async def keepalive(self) -> AsyncSandbox:
+        """Resets the sandbox's idle timer and updates this handle in place."""
+        if self.sandboxes is None:
+            raise NeevAIError("Cannot keepalive a sandbox handle with no client context.")
+        next_state = await self.sandboxes.keepalive(
+            self.id,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+        )
+        self._state = next_state._state
+        return self
+
+    async def update_timeout(
+        self, params: UpdateSandboxTimeoutParams | Mapping[str, Any]
+    ) -> AsyncSandbox:
+        """Changes the sandbox's idle/lifetime windows and updates this handle in place."""
+        if self.sandboxes is None:
+            raise NeevAIError("Cannot update timeout on a sandbox handle with no client context.")
+        next_state = await self.sandboxes.update_timeout(
+            self.id,
+            params,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+        )
+        self._state = next_state._state
         return self
 
     async def delete(self) -> None:

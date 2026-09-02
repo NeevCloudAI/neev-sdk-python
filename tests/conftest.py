@@ -143,14 +143,15 @@ def _make_sandbox_record(
     now: str,
 ) -> dict[str, Any]:
     req = body or {}
+    lifecycle = req.get("lifecycle") or {}
     return {
         "id": sid,
         "org_id": org_id,
         "project_id": project_id,
         "name": req.get("name", "test-sandbox"),
         "region": req.get("region", "as-south-1"),
-        "image": "ubuntu:22.04",
-        "command": None,
+        "image": req.get("image", "ubuntu:22.04"),
+        "command": req.get("command"),
         "env": req.get("env"),
         "resources": req.get("resources"),
         "phase": "Pending",
@@ -159,6 +160,10 @@ def _make_sandbox_record(
         "egress": req.get("egress"),
         "sandbox_template_id": req.get("sandbox_template_id"),
         "created_by": None,
+        "idle_timeout_seconds": lifecycle.get("idle_timeout_seconds"),
+        "max_lifetime_seconds": lifecycle.get("max_lifetime_seconds"),
+        "paused_retention_seconds": lifecycle.get("paused_retention_seconds"),
+        "on_idle": lifecycle.get("on_idle"),
         "created_at": now,
         "updated_at": now,
     }
@@ -399,6 +404,21 @@ def _control_response(
             sandbox["phase"] = "Pending"
             sandbox["replicas"] = 1
             return json_resp(200, sandbox)
+        if action == "keepalive" and method == "POST":
+            return json_resp(200, sandbox)
+        if action == "timeout" and method == "PUT":
+            if isinstance(body, dict):
+                # Apply every window present in the body (including explicit null).
+                for key in (
+                    "idle_timeout_seconds",
+                    "max_lifetime_seconds",
+                    "paused_retention_seconds",
+                    "on_idle",
+                ):
+                    if key in body:
+                        sandbox[key] = body[key]
+                return json_resp(200, sandbox)
+            return json_resp(400, {"message": "bad request"})
         if action == "metrics" and method == "GET":
             return json_resp(
                 200,
