@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 import httpx
 
-from neevai._egress import build_egress
+from neevai._egress import build_egress, prepare_update_body
 from neevai._parse import coerce_model, coerce_params
 from neevai.errors import NeevAIError
 from neevai.generated.aiagent import SandboxPortList
@@ -23,6 +23,7 @@ from neevai.types import (
     SandboxPort,
     Snapshot,
     SnapshotListResponse,
+    UpdateSandboxParams,
 )
 
 # Defaults for get_url's wait: overall budget and delay between preview-URL probes.
@@ -249,6 +250,37 @@ class Sandboxes:
         path = f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes/{id}"
 
         raw = self._client._transport.request("GET", path)
+        data = coerce_model(SandboxData, raw)
+        return Sandbox(self, data, scope)
+
+    def update(
+        self,
+        id: str,
+        params: UpdateSandboxParams | Mapping[str, Any],
+        org_id: str | None = None,
+        project_id: str | None = None,
+        *,
+        allow_internet: bool | None = None,
+        allow_egress: builtins.list[str] | None = None,
+    ) -> Sandbox:
+        """Updates a running sandbox in place (``resources`` and/or ``egress``).
+
+        ``resources`` (cpu/memory) are resized on the running sandbox without a
+        restart; ``disk_gb`` is not resizable in place and is rejected by the server if
+        changed. ``egress`` replaces the policy in full and takes effect for new
+        connections with no restart. ``allow_internet=True`` opens all egress
+        (0.0.0.0/0 and ::/0); ``allow_egress`` allows specific hosts (FQDN or CIDR); an
+        explicit ``egress`` in ``params`` takes precedence. At least one of
+        ``resources`` or ``egress`` must result.
+        """
+        from neevai.handles.sandbox import Sandbox
+
+        scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
+        path = f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes/{id}"
+        body = prepare_update_body(
+            UpdateSandboxParams, params, allow_internet=allow_internet, allow_egress=allow_egress
+        )
+        raw = self._client._transport.request("PATCH", path, body=body)
         data = coerce_model(SandboxData, raw)
         return Sandbox(self, data, scope)
 
@@ -560,6 +592,37 @@ class AsyncSandboxes:
         path = f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes/{id}"
 
         raw = await self._client._transport.request("GET", path)
+        data = coerce_model(SandboxData, raw)
+        return AsyncSandbox(self, data, scope)
+
+    async def update(
+        self,
+        id: str,
+        params: UpdateSandboxParams | Mapping[str, Any],
+        org_id: str | None = None,
+        project_id: str | None = None,
+        *,
+        allow_internet: bool | None = None,
+        allow_egress: builtins.list[str] | None = None,
+    ) -> AsyncSandbox:
+        """Updates a running sandbox in place (``resources`` and/or ``egress``) asynchronously.
+
+        ``resources`` (cpu/memory) are resized on the running sandbox without a
+        restart; ``disk_gb`` is not resizable in place and is rejected by the server if
+        changed. ``egress`` replaces the policy in full and takes effect for new
+        connections with no restart. ``allow_internet=True`` opens all egress
+        (0.0.0.0/0 and ::/0); ``allow_egress`` allows specific hosts (FQDN or CIDR); an
+        explicit ``egress`` in ``params`` takes precedence. At least one of
+        ``resources`` or ``egress`` must result.
+        """
+        from neevai.handles.sandbox import AsyncSandbox
+
+        scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
+        path = f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes/{id}"
+        body = prepare_update_body(
+            UpdateSandboxParams, params, allow_internet=allow_internet, allow_egress=allow_egress
+        )
+        raw = await self._client._transport.request("PATCH", path, body=body)
         data = coerce_model(SandboxData, raw)
         return AsyncSandbox(self, data, scope)
 

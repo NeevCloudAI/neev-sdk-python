@@ -114,8 +114,14 @@ class Agent:
         self._state = fresh._state
         return self
 
-    def update(self, params: UpdateAgentParams | Mapping[str, Any]) -> Agent:
-        """Updates mutable agent fields in place."""
+    def update(
+        self,
+        params: UpdateAgentParams | Mapping[str, Any],
+        *,
+        allow_internet: bool | None = None,
+        allow_egress: list[str] | None = None,
+    ) -> Agent:
+        """Updates mutable agent fields (``resources`` and/or ``egress``) in place."""
         if self.agents is None:
             raise NeevAIError("Cannot update an agent handle with no client context.")
         next_state = self.agents.update(
@@ -123,6 +129,8 @@ class Agent:
             params,
             org_id=self.scope.org_id if self.scope else None,
             project_id=self.scope.project_id if self.scope else None,
+            allow_internet=allow_internet,
+            allow_egress=allow_egress,
         )
         self._state = next_state._state
         return self
@@ -262,7 +270,13 @@ class AsyncAgent:
         self._state = fresh._state
         return self
 
-    async def update(self, params: UpdateAgentParams | Mapping[str, Any]) -> AsyncAgent:
+    async def update(
+        self,
+        params: UpdateAgentParams | Mapping[str, Any],
+        *,
+        allow_internet: bool | None = None,
+        allow_egress: list[str] | None = None,
+    ) -> AsyncAgent:
         if self.agents is None:
             raise NeevAIError("Cannot update an agent handle with no client context.")
         next_state = await self.agents.update(
@@ -270,6 +284,8 @@ class AsyncAgent:
             params,
             org_id=self.scope.org_id if self.scope else None,
             project_id=self.scope.project_id if self.scope else None,
+            allow_internet=allow_internet,
+            allow_egress=allow_egress,
         )
         self._state = next_state._state
         return self

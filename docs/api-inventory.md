@@ -19,6 +19,7 @@ which examples demonstrate which APIs, see
   - [create](#clientsandboxescreateparams-org_idnone-project_idnone)
   - [list](#clientsandboxeslistpage-none-limit-none-org_idnone-project_idnone)
   - [get](#clientsandboxesgetid-org_idnone-project_idnone)
+  - [update](#clientsandboxesupdateid-params-org_idnone-project_idnone--allow_internetnone-allow_egressnone)
   - [pause](#clientsandboxespauseid-org_idnone-project_idnone)
   - [resume](#clientsandboxesresumeid-org_idnone-project_idnone)
   - [delete](#clientsandboxesdeleteid-org_idnone-project_idnone)
@@ -259,6 +260,34 @@ Fetches a single sandbox by UUID.
 sandbox = client.sandboxes.get("550e8400-e29b-41d4-a716-446655440000")
 print(sandbox.phase, sandbox.connect_url)
 ```
+
+### `client.sandboxes.update(id, params, org_id=None, project_id=None, *, allow_internet=None, allow_egress=None)`
+
+Updates a running sandbox in place. Carries `resources` and/or `egress` in a
+single `PATCH`:
+
+- `resources` (cpu/memory) are resized on the running sandbox with no restart;
+  the sandbox keeps its ID, name, and preview URLs. `disk_gb` is **not**
+  resizable in place — the server rejects a change and the SDK surfaces that
+  error unchanged (it is not dropped client-side).
+- `egress` replaces the policy in full and takes effect for new connections
+  with no restart. `allow_internet` / `allow_egress` are the same convenience
+  as `create`; an explicit `egress` in `params` takes precedence.
+
+**Returns:** Updated `Sandbox` handle.
+
+**Raises:** `NeevAIError` before any request if neither `resources` nor
+`egress` is present (naming both fields).
+
+```python
+# Resize, then re-scope egress (two calls, or combine both in one):
+client.sandboxes.update(sandbox.id, {"resources": {"cpu": 2, "memory_gb": 4}})
+client.sandboxes.update(sandbox.id, {}, allow_egress=["api.github.com"])
+```
+
+**Async:** `updated = await client.sandboxes.update(...)`
+
+**Example:** [`sandbox_update.py`](../examples/sandbox_update.py)
 
 ### `client.sandboxes.pause(id, *, preserve_memory=None, org_id=None, project_id=None)`
 
@@ -608,6 +637,21 @@ Re-fetches the sandbox from the API and updates this handle in place.
 sandbox.refresh()
 print(sandbox.phase, sandbox.replicas)
 ```
+
+### `sandbox.update(params, *, allow_internet=None, allow_egress=None)`
+
+Resizes this sandbox and/or re-scopes its egress in place, delegating to
+`client.sandboxes.update` and updating handle state from the response. The
+sandbox keeps its ID, name, and preview URLs and is not restarted, so the
+cached runtime connection stays valid.
+
+**Returns:** `self`.
+
+```python
+sandbox.update({"resources": {"cpu": 2, "memory_gb": 4}}, allow_egress=["api.github.com"])
+```
+
+**Example:** [`sandbox_update.py`](../examples/sandbox_update.py)
 
 ### `sandbox.wait_until_ready(timeout_ms=120000, poll_interval_ms=2000, on_poll=None)`
 
@@ -1725,6 +1769,7 @@ Compact reviewer index. Each symbol should also appear in
 | `Sandboxes.create` | method | `Sandbox` |
 | `Sandboxes.list` | method | `SandboxPage` |
 | `Sandboxes.get` | method | `Sandbox` |
+| `Sandboxes.update` | method | `Sandbox` (in-place resize / egress) |
 | `Sandboxes.pause` | method | `Sandbox` |
 | `Sandboxes.resume` | method | `Sandbox` |
 | `Sandboxes.delete` | method | `None` |
@@ -1786,6 +1831,7 @@ Compact reviewer index. Each symbol should also appear in
 | `Sandbox.data` | property | `dict[str, Any]` snapshot |
 | `Sandbox.to_json` | method | JSON-serializable dict |
 | `Sandbox.refresh` | method | Re-fetch from the API → `Sandbox` |
+| `Sandbox.update` | method | In-place resize / egress re-scope → `Sandbox` |
 | `Sandbox.wait_until_ready` | method | Poll until `Ready` |
 | `Sandbox.pause` / `.resume` | methods | Return updated `Sandbox` |
 | `Sandbox.snapshot` / `.snapshots` | methods | `Snapshot` / `list[Snapshot]` |

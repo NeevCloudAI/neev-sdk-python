@@ -46,6 +46,7 @@ __all__ = [
     "StderrStreamEvent",
     "StdoutStreamEvent",
     "UpdateAgentParams",
+    "UpdateSandboxParams",
     "WatchEvent",
 ]
 
@@ -123,6 +124,9 @@ from neevai.generated.aiagent import (  # noqa: F401
 )
 from neevai.generated.aiagent import (  # noqa: F401
     UpdateAgentRequest as UpdateAgentParams,
+)
+from neevai.generated.aiagent import (  # noqa: F401
+    UpdateSandboxRequest as UpdateSandboxParams,
 )
 
 # Steady-state phases from the OpenAPI spec, plus transitional values the API may

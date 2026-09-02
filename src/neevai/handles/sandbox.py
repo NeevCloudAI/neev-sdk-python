@@ -18,6 +18,7 @@ from neevai.types import (
     SandboxPort,
     Scope,
     Snapshot,
+    UpdateSandboxParams,
 )
 
 if TYPE_CHECKING:
@@ -132,6 +133,31 @@ class Sandbox:
         self._state = fresh._state
         if self.connect_url != previous_connect_url:
             self._invalidate_connection()
+        return self
+
+    def update(
+        self,
+        params: UpdateSandboxParams | Mapping[str, Any],
+        *,
+        allow_internet: bool | None = None,
+        allow_egress: list[str] | None = None,
+    ) -> Sandbox:
+        """Resizes this sandbox and/or re-scopes its egress in place.
+
+        Updates handle state from the response. The sandbox keeps its ID, name, and
+        preview URLs and is not restarted, so the cached runtime connection stays valid.
+        """
+        if self.sandboxes is None:
+            raise NeevAIError("Cannot update a sandbox handle with no client context.")
+        next_state = self.sandboxes.update(
+            self.id,
+            params,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+            allow_internet=allow_internet,
+            allow_egress=allow_egress,
+        )
+        self._state = next_state._state
         return self
 
     def pause(self, *, preserve_memory: bool | None = None) -> Sandbox:
@@ -518,6 +544,31 @@ class AsyncSandbox:
         self._state = fresh._state
         if self.connect_url != previous_connect_url:
             await self._invalidate_connection()
+        return self
+
+    async def update(
+        self,
+        params: UpdateSandboxParams | Mapping[str, Any],
+        *,
+        allow_internet: bool | None = None,
+        allow_egress: list[str] | None = None,
+    ) -> AsyncSandbox:
+        """Resizes this sandbox and/or re-scopes its egress in place (async).
+
+        Updates handle state from the response. The sandbox keeps its ID, name, and
+        preview URLs and is not restarted, so the cached runtime connection stays valid.
+        """
+        if self.sandboxes is None:
+            raise NeevAIError("Cannot update a sandbox handle with no client context.")
+        next_state = await self.sandboxes.update(
+            self.id,
+            params,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+            allow_internet=allow_internet,
+            allow_egress=allow_egress,
+        )
+        self._state = next_state._state
         return self
 
     async def pause(self, *, preserve_memory: bool | None = None) -> AsyncSandbox:

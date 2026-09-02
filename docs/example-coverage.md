@@ -18,6 +18,7 @@ path and run commands, see [`examples/README.md`](../examples/README.md).
 | `client.sandboxes.create` (`restore`) | `snapshot_fork_restore.py` | `restored = client.sandboxes.create({..., "restore": snapshot_id})` |
 | `client.sandboxes.list` | `sandbox_lifecycle_controller.py` | `page = client.sandboxes.list(page=1, limit=20)` |
 | `client.sandboxes.get` | `sandbox_lifecycle_controller.py` | `sandbox = client.sandboxes.get(sandbox_id)` |
+| `client.sandboxes.update` | `sandbox_update.py` | `client.sandboxes.update(id, {"resources": {"cpu": 2}})` |
 | `client.sandboxes.pause` | `sandbox_lifecycle_controller.py` | `sandbox = client.sandboxes.pause(sandbox_id)` |
 | `client.sandboxes.resume` | `sandbox_lifecycle_controller.py` | `sandbox = client.sandboxes.resume(sandbox_id)` |
 | `client.sandboxes.delete` | `sandbox_lifecycle_controller.py` | `client.sandboxes.delete(sandbox_id)` |
@@ -25,6 +26,7 @@ path and run commands, see [`examples/README.md`](../examples/README.md).
 | `client.sandboxes.create_snapshot` | `snapshot_fork_restore.py` (via `sandbox.snapshot`) | `pending = sandbox.snapshot({"name": "demo-snap"})` |
 | `client.sandboxes.get_snapshot` | `snapshot_fork_restore.py` | `snap = client.sandboxes.get_snapshot(snapshot_id)` |
 | `client.sandboxes.delete_snapshot` | `snapshot_fork_restore.py` | `client.sandboxes.delete_snapshot(snapshot_id)` |
+| `sandbox.update` | `sandbox_update.py` | `sandbox.update({"resources": {"cpu": 2}}, allow_egress=["api.github.com"])` |
 | `sandbox.snapshot` | `snapshot_fork_restore.py` | `pending = sandbox.snapshot({"name": "demo-snap"})` |
 | `sandbox.fork` | `snapshot_fork_restore.py` | `fork = restored.fork("snapshot-fork")` |
 | `client.templates.list` | `templates_list.py` | `page = client.templates.list(limit=10)` |
@@ -79,6 +81,7 @@ path and run commands, see [`examples/README.md`](../examples/README.md).
 | Templates list & create | `examples/templates_list.py` | List templates, get by id, create sandbox, wait, delete |
 | Agent lifecycle | `examples/create_agent.py` | List agent templates, create agent, wait, sandbox exec, update, pause, delete |
 | Sandbox lifecycle | `examples/sandbox_lifecycle.py` | Create → wait → metrics → pause → delete |
+| Sandbox in-place update | `examples/sandbox_update.py` | Create → wait → resize → re-scope egress → verify → delete |
 | Snapshot fork & restore | `examples/snapshot_fork_restore.py` | Write state → snapshot → modify → `restore` create → fork → cleanup |
 | Async workflow | `examples/async_sandbox.py` | `AsyncNeevAI` create → wait → exec → delete |
 | Files API | `examples/files_api.py` | Write, read_text, list (recursive) |
