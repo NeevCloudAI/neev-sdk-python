@@ -385,6 +385,13 @@ def _control_response(
                 return json_resp(204)
             if method == "PATCH":
                 if isinstance(body, dict):
+                    # Mirror the backend: disk_gb is not resizable in place.
+                    resources = body.get("resources")
+                    if isinstance(resources, dict) and "disk_gb" in resources:
+                        return json_resp(
+                            400,
+                            {"error": "disk_gb is not resizable in place", "details": "disk_gb"},
+                        )
                     sandbox.update(body)
                     return json_resp(200, sandbox)
             return json_resp(400, {"message": "bad request"})
@@ -455,7 +462,7 @@ def _control_response(
                 _FAKE_DB["snapshots"][snap_id] = snapshot
                 return json_resp(202, snapshot)
 
-        if action == "restore" and method == "POST":
+        if action == "rollback" and method == "POST":
             sandbox["phase"] = "Pending"
             sandbox["replicas"] = 1
             return json_resp(200, sandbox)

@@ -106,7 +106,7 @@ def _mark_ready(sb, *, connect_url: str = "https://old.example.com") -> None:
     sb.refresh()
 
 
-def test_sandbox_restore_invalidates_cached_connection(mock_transport):
+def test_sandbox_rollback_invalidates_cached_connection(mock_transport):
     """Restore must drop the runtime connection created before reconciliation."""
     client = NeevAI(
         api_key="test",
@@ -121,7 +121,7 @@ def test_sandbox_restore_invalidates_cached_connection(mock_transport):
     assert sb._conn is old_conn
 
     snap = client.sandboxes.create_snapshot(sb.id, {"name": "restore-me"})
-    sb.restore(str(snap.id))
+    sb.rollback(str(snap.id))
 
     assert sb._conn is None
     assert sb.phase == "Pending"
@@ -156,8 +156,8 @@ def test_sandbox_pause_and_resume_invalidate_cached_connection(mock_transport):
     client.close()
 
 
-def test_sandbox_restore_does_not_wait_for_runtime(mock_transport, monkeypatch):
-    """restore invalidates the connection but does not probe the sandbox runtime."""
+def test_sandbox_rollback_does_not_wait_for_runtime(mock_transport, monkeypatch):
+    """rollback invalidates the connection but does not probe the sandbox runtime."""
     client = NeevAI(
         api_key="test",
         org_id="org1",
@@ -169,7 +169,7 @@ def test_sandbox_restore_does_not_wait_for_runtime(mock_transport, monkeypatch):
 
     sb._connection()
     snap = client.sandboxes.create_snapshot(sb.id, {"name": "restore-me"})
-    sb.restore(str(snap.id))
+    sb.rollback(str(snap.id))
     _mark_ready(sb, connect_url="https://same.example.com")
 
     probe_calls = {"count": 0}

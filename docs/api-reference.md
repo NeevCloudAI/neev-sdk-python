@@ -36,9 +36,10 @@ Details: [`api-inventory.md` → Client](./api-inventory.md#client)
 
 | Method | Returns | Summary |
 | ------ | ------- | ------- |
-| `create(params, org_id=None, project_id=None, *, allow_internet=None, allow_egress=None)` | `Sandbox` | Creates a new sandbox. `allow_internet=True` / `allow_egress=[...]` open egress (deny-all by default; explicit `egress` wins). Optional `from_snapshot` in params provisions from a snapshot. |
+| `create(params, org_id=None, project_id=None, *, allow_internet=None, allow_egress=None)` | `Sandbox` | Creates a new sandbox. `allow_internet=True` / `allow_egress=[...]` open egress (deny-all by default; explicit `egress` wins). Optional `restore` in params provisions from a snapshot. |
 | `list(page=None, limit=None, org_id=None, project_id=None)` | `SandboxPage` | Lists sandboxes with pagination in the resolved org/project scope. |
 | `get(id, org_id=None, project_id=None)` | `Sandbox` | Fetches the current record for a sandbox by ID. |
+| `update(id, params, org_id=None, project_id=None, *, allow_internet=None, allow_egress=None)` | `Sandbox` | In-place update of `resources` (cpu/memory) and/or `egress`. Resize keeps the ID/name/preview URLs and does not restart; `disk_gb` is not resizable and the server rejects a change. `allow_internet` / `allow_egress` are the same egress convenience as `create`. Rejects `{}` locally, naming both fields. |
 | `pause(id, preserve_memory=None, org_id=None, project_id=None)` | `Sandbox` | Scales a sandbox to 0 replicas (Paused state). Optional `preserve_memory` request body (server default `true`). |
 | `resume(id, org_id=None, project_id=None)` | `Sandbox` | Scales a sandbox back to 1 replica toward Ready. |
 | `keepalive(id, org_id=None, project_id=None)` | `Sandbox` | Resets the sandbox's idle timer (POST `.../keepalive`). |
@@ -49,16 +50,16 @@ Details: [`api-inventory.md` → Client](./api-inventory.md#client)
 | `list_snapshots(id, page=None, limit=None, ...)` | `list[Snapshot]` | Lists snapshots for a sandbox (unwraps pagination items). |
 | `get_snapshot(snapshot_id, ...)` | `Snapshot` | Fetches snapshot metadata by project-scoped ID. |
 | `delete_snapshot(snapshot_id, ...)` | `None` | Deletes a snapshot permanently. |
-| `restore(id, snapshot_id, ...)` | `Sandbox` | Restores a sandbox in place from a snapshot. Prefer `create({..., "from_snapshot": ...})` for rollback — see [Snapshots](#snapshots). |
+| `rollback(id, snapshot_id, ...)` | `Sandbox` | Rolls a sandbox back in place to a previous snapshot. Prefer `create({..., "restore": ...})` to recover into a new sandbox — see [Snapshots](#snapshots). |
 | `fork(id, name, ...)` | `Sandbox` | Forks a sandbox into a new sandbox from its current state. |
 
 ### Snapshots
 
-Snapshot workflows capture filesystem state, roll back via a new sandbox, or fork
+Snapshot workflows capture filesystem state, restore into a new sandbox, or fork
 inherited state. Snapshots are asynchronous: `create_snapshot` returns
 `status=Pending`; poll `get_snapshot` until `Ready`.
 
-**Recommended rollback pattern** — create a new sandbox from a snapshot (does not
+**Recommended restore pattern** — create a new sandbox from a snapshot (does not
 mutate the original sandbox):
 
 ```python
@@ -67,12 +68,12 @@ pending = sandbox.snapshot({"name": "checkpoint"})
 restored = client.sandboxes.create({
     "name": "restored",
     "sandbox_template_id": template_id,
-    "from_snapshot": str(pending.id),
+    "restore": str(pending.id),
 })
 restored.wait_until_ready()
 ```
 
-In-place `sandbox.restore(snapshot_id)` is also available but may leave an empty
+In-place `sandbox.rollback(snapshot_id)` is also available but may leave an empty
 workspace on some backends. See
 [`snapshot_fork_restore.py`](../examples/snapshot_fork_restore.py).
 
@@ -90,7 +91,7 @@ workspace on some backends. See
 | `create(params, org_id=None, project_id=None, *, allow_internet=None, allow_egress=None)` | `Agent` | Creates an agent from a catalogue template name (`agent_template`). `allow_internet=True` / `allow_egress=[...]` open egress (deny-all by default; explicit `egress` wins). |
 | `list(page=None, limit=None, org_id=None, project_id=None)` | `AgentPage` | Lists agents with pagination in the resolved org/project scope. |
 | `get(id, org_id=None, project_id=None)` | `Agent` | Fetches the current record for an agent by ID. |
-| `update(id, params, org_id=None, project_id=None)` | `Agent` | In-place update of egress and/or cpu/memory (`resources`; defaults & bounds in [Agent resources](./api-inventory.md#agent-resources)). Rejects `{}` locally. |
+| `update(id, params, org_id=None, project_id=None, *, allow_internet=None, allow_egress=None)` | `Agent` | In-place update of egress and/or cpu/memory (`resources`; defaults & bounds in [Agent resources](./api-inventory.md#agent-resources)). `allow_internet` / `allow_egress` are the same egress convenience as `create`. Rejects `{}` locally, naming both fields. |
 | `pause(id, org_id=None, project_id=None)` | `Agent` | Pauses the agent and its backing sandbox. |
 | `resume(id, org_id=None, project_id=None)` | `Agent` | Resumes a paused agent. |
 | `delete(id, org_id=None, project_id=None)` | `None` | Permanently deletes an agent (HTTP 204, no body). |
@@ -116,11 +117,12 @@ Returned by `create()`, `get()`, `list().items`, etc.
 | --- | ---- |
 | `id`, `name`, `phase`, `replicas`, `connect_url`, `data` | properties |
 | `refresh()` | method |
+| `update(params, *, allow_internet=None, allow_egress=None)` | method — in-place resize / egress re-scope; updates state in place |
 | `wait_until_ready(timeout_ms=120000, ...)` | method — polls the API until `Ready` |
 | `pause(preserve_memory=None)` / `resume()` | methods |
 | `keepalive()` / `update_timeout(params)` | methods — reset idle timer / change lifecycle windows |
 | `snapshot(params=None)` / `snapshots()` | methods |
-| `restore(snapshot_id)` / `fork(name)` | methods |
+| `rollback(snapshot_id)` / `fork(name)` | methods |
 | `delete()` | method |
 | `metrics(from_=None, to=None, step=None)` | method |
 | `to_json()` | method |
@@ -219,9 +221,10 @@ Minimal one-liners for each public API. Runnable examples link to repo paths.
 | --- | ------------ | ------------- | ---------------- |
 | `NeevAI(...)` | `with NeevAI() as client:` | `async with AsyncNeevAI() as client:` | [templates_list.py](../examples/templates_list.py), [async_sandbox.py](../examples/async_sandbox.py) |
 | `client.close()` / `aclose()` | `with NeevAI() as client:` (auto) | `async with AsyncNeevAI() as client:` (auto) | all tier-1 examples |
-| `client.sandboxes.create(...)` | `sandbox = client.sandboxes.create({...})` | `sandbox = await client.sandboxes.create({...})` | [sandbox_lifecycle.py](../examples/sandbox_lifecycle.py), [snapshot_fork_restore.py](../examples/snapshot_fork_restore.py) (`from_snapshot`) |
+| `client.sandboxes.create(...)` | `sandbox = client.sandboxes.create({...})` | `sandbox = await client.sandboxes.create({...})` | [sandbox_lifecycle.py](../examples/sandbox_lifecycle.py), [snapshot_fork_restore.py](../examples/snapshot_fork_restore.py) (`restore`) |
 | `client.sandboxes.list(...)` | `page = client.sandboxes.list(name="web", status="Paused")` | `page = await client.sandboxes.list(name="web", status="Paused")` | [sandbox_lifecycle_controller.py](../examples/sandbox_lifecycle_controller.py) |
 | `client.sandboxes.get(id)` | `sandbox = client.sandboxes.get(sandbox_id)` | `sandbox = await client.sandboxes.get(sandbox_id)` | [sandbox_lifecycle_controller.py](../examples/sandbox_lifecycle_controller.py) |
+| `client.sandboxes.update(id, params, *, allow_internet, allow_egress)` | `client.sandboxes.update(id, {"resources": {"cpu": 2}})` | `await client.sandboxes.update(id, {"resources": {"cpu": 2}})` | [sandbox_update.py](../examples/sandbox_update.py) |
 | `client.sandboxes.pause(id, preserve_memory=None)` | `sandbox = client.sandboxes.pause(sandbox_id, preserve_memory=True)` | `sandbox = await client.sandboxes.pause(sandbox_id, preserve_memory=True)` | [sandbox_lifecycle_controller.py](../examples/sandbox_lifecycle_controller.py) |
 | `client.sandboxes.resume(id)` | `sandbox = client.sandboxes.resume(sandbox_id)` | `sandbox = await client.sandboxes.resume(sandbox_id)` | [sandbox_lifecycle_controller.py](../examples/sandbox_lifecycle_controller.py) |
 | `client.sandboxes.keepalive(id)` | `client.sandboxes.keepalive(sandbox_id)` | `await client.sandboxes.keepalive(sandbox_id)` | [sandbox_lifecycle_windows.py](../examples/sandbox_lifecycle_windows.py) |
@@ -232,7 +235,7 @@ Minimal one-liners for each public API. Runnable examples link to repo paths.
 | `client.sandboxes.list_snapshots(id)` | `snaps = client.sandboxes.list_snapshots(sb.id)` | `snaps = await client.sandboxes.list_snapshots(sb.id)` | — |
 | `client.sandboxes.get_snapshot(id)` | `snap = client.sandboxes.get_snapshot(snap_id)` | `snap = await client.sandboxes.get_snapshot(snap_id)` | [snapshot_fork_restore.py](../examples/snapshot_fork_restore.py) |
 | `client.sandboxes.delete_snapshot(id)` | `client.sandboxes.delete_snapshot(snap_id)` | `await client.sandboxes.delete_snapshot(snap_id)` | [snapshot_fork_restore.py](../examples/snapshot_fork_restore.py) |
-| `client.sandboxes.restore(id, snapshot_id)` | `sb = client.sandboxes.restore(sb.id, snap_id)` | `sb = await client.sandboxes.restore(sb.id, snap_id)` | — (prefer `from_snapshot` create; see [Snapshots](#snapshots)) |
+| `client.sandboxes.rollback(id, snapshot_id)` | `sb = client.sandboxes.rollback(sb.id, snap_id)` | `sb = await client.sandboxes.rollback(sb.id, snap_id)` | — (prefer `restore` create; see [Snapshots](#snapshots)) |
 | `client.sandboxes.fork(id, name)` | `fork = client.sandboxes.fork(sb.id, "fork-name")` | `fork = await client.sandboxes.fork(sb.id, "fork-name")` | [snapshot_fork_restore.py](../examples/snapshot_fork_restore.py) (via `sandbox.fork`) |
 | `client.templates.list(...)` | `page = client.templates.list(limit=10)` | `page = await client.templates.list(limit=10)` | [templates_list.py](../examples/templates_list.py) |
 | `client.templates.get(id)` | `tpl = client.templates.get(template_id)` | `tpl = await client.templates.get(template_id)` | [templates_list.py](../examples/templates_list.py) |
@@ -249,6 +252,7 @@ Minimal one-liners for each public API. Runnable examples link to repo paths.
 | `sandbox.connect_url` | `print(sandbox.connect_url)` | `print(sandbox.connect_url)` | [templates_list.py](../examples/templates_list.py) |
 | `sandbox.data` | `record = sandbox.data` | `record = sandbox.data` | — |
 | `sandbox.refresh()` | `sandbox.refresh()` | `await sandbox.refresh()` | — |
+| `sandbox.update(params, *, allow_internet, allow_egress)` | `sandbox.update({"resources": {"cpu": 2}}, allow_egress=["api.github.com"])` | `await sandbox.update({"resources": {"cpu": 2}})` | [sandbox_update.py](../examples/sandbox_update.py) |
 | `sandbox.wait_until_ready(...)` | `sandbox.wait_until_ready(timeout_ms=120_000)` | `await sandbox.wait_until_ready()` | [sandbox_lifecycle.py](../examples/sandbox_lifecycle.py) |
 | `sandbox.pause(preserve_memory=None)` | `sandbox.pause(preserve_memory=True)` | `await sandbox.pause(preserve_memory=True)` | [sandbox_lifecycle.py](../examples/sandbox_lifecycle.py) |
 | `sandbox.resume()` | `sandbox.resume()` | `await sandbox.resume()` | — |
@@ -256,7 +260,7 @@ Minimal one-liners for each public API. Runnable examples link to repo paths.
 | `sandbox.update_timeout(params)` | `sandbox.update_timeout({"idle_timeout_seconds": 300, "max_lifetime_seconds": 0})` | `await sandbox.update_timeout({"idle_timeout_seconds": 300})` | [sandbox_lifecycle_windows.py](../examples/sandbox_lifecycle_windows.py) |
 | `sandbox.snapshot(params=None)` | `pending = sandbox.snapshot({"name": "demo-snap"})` | `pending = await sandbox.snapshot({"name": "demo-snap"})` | [snapshot_fork_restore.py](../examples/snapshot_fork_restore.py) |
 | `sandbox.snapshots()` | `snaps = sandbox.snapshots()` | `snaps = await sandbox.snapshots()` | — |
-| `sandbox.restore(snapshot_id)` | `sandbox.restore(snapshot_id)` | `await sandbox.restore(snapshot_id)` | — (prefer `from_snapshot` create; see [Snapshots](#snapshots)) |
+| `sandbox.rollback(snapshot_id)` | `sandbox.rollback(snapshot_id)` | `await sandbox.rollback(snapshot_id)` | — (prefer `restore` create; see [Snapshots](#snapshots)) |
 | `sandbox.fork(name)` | `fork = sandbox.fork("fork-name")` | `fork = await sandbox.fork("fork-name")` | [snapshot_fork_restore.py](../examples/snapshot_fork_restore.py) |
 | `sandbox.delete()` | `sandbox.delete()` | `await sandbox.delete()` | [sandbox_lifecycle.py](../examples/sandbox_lifecycle.py) |
 | `sandbox.metrics(...)` | `metrics = sandbox.metrics()` | `metrics = await sandbox.metrics()` | [sandbox_metrics.py](../examples/sandbox_metrics.py) |

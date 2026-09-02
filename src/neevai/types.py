@@ -48,6 +48,7 @@ __all__ = [
     "StderrStreamEvent",
     "StdoutStreamEvent",
     "UpdateAgentParams",
+    "UpdateSandboxParams",
     "UpdateSandboxTimeoutParams",
     "WatchEvent",
 ]
@@ -132,6 +133,9 @@ from neevai.generated.aiagent import (  # noqa: F401
 )
 from neevai.generated.aiagent import (  # noqa: F401
     UpdateAgentRequest as UpdateAgentParams,
+)
+from neevai.generated.aiagent import (  # noqa: F401
+    UpdateSandboxRequest as UpdateSandboxParams,
 )
 from neevai.generated.aiagent import (  # noqa: F401
     UpdateSandboxTimeoutRequest as UpdateSandboxTimeoutParams,

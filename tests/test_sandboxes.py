@@ -7,7 +7,7 @@ import pytest
 
 from neevai._parse import ResponseValidationError
 from neevai.client import AsyncNeevAI, NeevAI
-from neevai.errors import NeevAIError, NotFoundError
+from neevai.errors import BadRequestError, NeevAIError, NotFoundError
 from neevai.generated.aiagent import SnapshotStatus
 from neevai.types import CreateSandboxParams, Snapshot
 
@@ -362,7 +362,7 @@ def test_sandboxes_get_snapshot_not_found(mock_transport):
     client.close()
 
 
-def test_sandboxes_restore(mock_transport):
+def test_sandboxes_rollback(mock_transport):
     client = _make_client(mock_transport)
     sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
     snap = client.sandboxes.create_snapshot(sb.id, {"name": "restore-me"})
@@ -376,10 +376,10 @@ def test_sandboxes_restore(mock_transport):
 
     client._transport.request = capturing_request  # type: ignore[method-assign]
 
-    restored = client.sandboxes.restore(sb.id, str(snap.id))
+    rolled_back = client.sandboxes.rollback(sb.id, str(snap.id))
     assert captured_bodies == [{"snapshot_id": str(snap.id)}]
-    assert restored.id == sb.id
-    assert restored.phase == "Pending"
+    assert rolled_back.id == sb.id
+    assert rolled_back.phase == "Pending"
     client.close()
 
 
@@ -422,18 +422,18 @@ def test_sandbox_handle_snapshot_methods(mock_transport):
     listed = sb.snapshots()
     assert len(listed) == 1
 
-    sb.restore(str(pending.id))
+    sb.rollback(str(pending.id))
     fork = sb.fork("handle-fork")
     assert fork.name == "handle-fork"
 
     paths = [path for _, path in captured]
     assert any(path.endswith(f"/sandboxes/{sb.id}/snapshots") for path in paths)
-    assert any(path.endswith(f"/sandboxes/{sb.id}/restore") for path in paths)
+    assert any(path.endswith(f"/sandboxes/{sb.id}/rollback") for path in paths)
     assert any(path.endswith(f"/sandboxes/{sb.id}/fork") for path in paths)
     client.close()
 
 
-def test_sandboxes_create_from_snapshot(mock_transport):
+def test_sandboxes_create_with_restore(mock_transport):
     client = _make_client(mock_transport)
     sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
     snap = client.sandboxes.create_snapshot(sb.id, {"name": "seed"})
@@ -442,17 +442,15 @@ def test_sandboxes_create_from_snapshot(mock_transport):
         {
             "name": "from-snap",
             "sandbox_template_id": "sb-ubuntu-24-04-minimal",
-            "from_snapshot": str(snap.id),
+            "restore": str(snap.id),
         }
     )
     assert restored.name == "from-snap"
     client.close()
 
 
-# --- Lifecycle windows + create-time options ---
-
-
-def _capture_bodies(client) -> list[tuple[str, str, dict | None]]:
+def _capture_requests(client) -> list[tuple[str, str, dict | None]]:
+    """Wrap the client transport, appending (method, path, body) for each call."""
     captured: list[tuple[str, str, dict | None]] = []
     original = client._transport.request
 
@@ -464,9 +462,112 @@ def _capture_bodies(client) -> list[tuple[str, str, dict | None]]:
     return captured
 
 
+# --- In-place resize + live egress update (#31) ---
+
+
+def test_sandboxes_update_resources_in_place(mock_transport):
+    client = _make_client(mock_transport)
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-x"})
+    captured = _capture_requests(client)
+
+    updated = client.sandboxes.update(sb.id, {"resources": {"cpu": 2, "memory_gb": 4}})
+
+    # Same identity, name, and preview URL template are preserved.
+    assert updated.id == sb.id
+    assert updated.name == sb.name
+    assert updated.data.get("preview_url_template") == sb.data.get("preview_url_template")
+
+    method, path, body = captured[-1]
+    assert method == "PATCH"
+    assert path.endswith(f"/sandboxes/{sb.id}")
+    assert body == {"resources": {"cpu": 2, "memory_gb": 4}}
+
+    # A subsequent get reflects the new shape.
+    res = client.sandboxes.get(sb.id).data["resources"]
+    assert res["cpu"] == 2 and res["memory_gb"] == 4
+    client.close()
+
+
+def test_sandboxes_update_egress_convenience_matches_create(mock_transport):
+    client = _make_client(mock_transport)
+    captured = _capture_requests(client)
+
+    created = client.sandboxes.create(
+        {"name": "s1", "sandbox_template_id": "sb-x"}, allow_egress=["github.com"]
+    )
+    create_egress = next(b for (m, _p, b) in captured if m == "POST")["egress"]
+
+    client.sandboxes.update(created.id, {}, allow_egress=["github.com"])
+    update_egress = captured[-1][2]["egress"]
+
+    # Criterion 7: the convenience shape is byte-identical between create and update.
+    assert update_egress == create_egress
+    client.close()
+
+
+def test_sandboxes_update_resources_and_egress_single_patch(mock_transport):
+    client = _make_client(mock_transport)
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-x"})
+    captured = _capture_requests(client)
+
+    client.sandboxes.update(
+        sb.id,
+        {
+            "resources": {"cpu": 2, "memory_gb": 4},
+            "egress": {"mode": "allow_list", "allow": [{"host": "api.github.com"}]},
+        },
+    )
+
+    patches = [(p, b) for (m, p, b) in captured if m == "PATCH"]
+    assert len(patches) == 1
+    _path, body = patches[0]
+    assert "resources" in body and "egress" in body
+    assert body["egress"]["mode"] == "allow_list"
+    client.close()
+
+
+def test_sandboxes_update_empty_raises_without_http(mock_transport):
+    client = _make_client(mock_transport)
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-x"})
+    request_mock = MagicMock(side_effect=client._transport.request)
+    client._transport.request = request_mock
+
+    with pytest.raises(NeevAIError, match="empty body") as ei:
+        client.sandboxes.update(sb.id, {})
+    msg = str(ei.value)
+    assert "resources" in msg and "egress" in msg
+
+    request_mock.assert_not_called()
+    client.close()
+
+
+def test_sandboxes_update_disk_gb_surfaces_server_rejection(mock_transport):
+    client = _make_client(mock_transport)
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-x"})
+    captured = _capture_requests(client)
+
+    # disk_gb is not dropped client-side; the server rejection surfaces unchanged.
+    with pytest.raises(BadRequestError):
+        client.sandboxes.update(sb.id, {"resources": {"disk_gb": 20}})
+    assert captured[-1][2] == {"resources": {"disk_gb": 20}}
+    client.close()
+
+
+def test_sandbox_handle_update_in_place(mock_transport):
+    client = _make_client(mock_transport)
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-x"})
+    same = sb.update({"resources": {"cpu": 2, "memory_gb": 4}})
+    assert same is sb
+    assert sb.data["resources"]["cpu"] == 2 and sb.data["resources"]["memory_gb"] == 4
+    client.close()
+
+
+# --- Lifecycle windows + create-time options (#32) ---
+
+
 def test_sandboxes_create_with_lifecycle_sends_lifecycle(mock_transport):
     client = _make_client(mock_transport)
-    captured = _capture_bodies(client)
+    captured = _capture_requests(client)
     sb = client.sandboxes.create(
         {
             "sandbox_template_id": "sb-x",
@@ -482,7 +583,7 @@ def test_sandboxes_create_with_lifecycle_sends_lifecycle(mock_transport):
 
 def test_sandboxes_create_without_lifecycle_omits_key(mock_transport):
     client = _make_client(mock_transport)
-    captured = _capture_bodies(client)
+    captured = _capture_requests(client)
     client.sandboxes.create({"sandbox_template_id": "sb-x"})
     body = next(b for (m, _p, b) in captured if m == "POST")
     assert "lifecycle" not in body
@@ -491,7 +592,7 @@ def test_sandboxes_create_without_lifecycle_omits_key(mock_transport):
 
 def test_sandboxes_create_byoi_sends_image_and_command(mock_transport):
     client = _make_client(mock_transport)
-    captured = _capture_bodies(client)
+    captured = _capture_requests(client)
     client.sandboxes.create(
         {"image": "docker.io/library/python:3.12", "command": ["sleep", "infinity"]}
     )
@@ -504,7 +605,7 @@ def test_sandboxes_create_byoi_sends_image_and_command(mock_transport):
 def test_sandboxes_keepalive(mock_transport):
     client = _make_client(mock_transport)
     sb = client.sandboxes.create({"sandbox_template_id": "sb-x"})
-    captured = _capture_bodies(client)
+    captured = _capture_requests(client)
     same = client.sandboxes.keepalive(sb.id)
     assert same.id == sb.id
     method, path, _body = captured[-1]
@@ -520,7 +621,7 @@ def test_sandboxes_update_timeout_partial_leaves_others_unchanged(mock_transport
             "lifecycle": {"idle_timeout_seconds": 300, "max_lifetime_seconds": 3600},
         }
     )
-    captured = _capture_bodies(client)
+    captured = _capture_requests(client)
     updated = client.sandboxes.update_timeout(sb.id, {"idle_timeout_seconds": 600})
 
     method, path, body = captured[-1]
@@ -537,7 +638,7 @@ def test_sandboxes_update_timeout_clears_window(mock_transport):
     sb = client.sandboxes.create(
         {"sandbox_template_id": "sb-x", "lifecycle": {"max_lifetime_seconds": 3600}}
     )
-    captured = _capture_bodies(client)
+    captured = _capture_requests(client)
     updated = client.sandboxes.update_timeout(sb.id, {"max_lifetime_seconds": 0})
 
     _method, _path, body = captured[-1]
@@ -563,7 +664,7 @@ def test_sandboxes_update_timeout_invalid_on_idle_raises_without_http(mock_trans
 def test_sandboxes_update_timeout_on_idle_serialized_as_json(mock_transport):
     client = _make_client(mock_transport)
     sb = client.sandboxes.create({"sandbox_template_id": "sb-x"})
-    captured = _capture_bodies(client)
+    captured = _capture_requests(client)
     client.sandboxes.update_timeout(sb.id, {"on_idle": "delete"})
 
     _method, _path, body = captured[-1]
@@ -571,6 +672,34 @@ def test_sandboxes_update_timeout_on_idle_serialized_as_json(mock_transport):
     assert body == {"on_idle": "delete"}
     assert isinstance(body["on_idle"], str)
     client.close()
+
+
+@pytest.mark.asyncio
+async def test_async_sandboxes_update(async_mock_transport):
+    client = AsyncNeevAI(
+        api_key="test", org_id="org1", project_id="proj1", client=async_mock_transport
+    )
+    sb = await client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-x"})
+    updated = await client.sandboxes.update(sb.id, {"resources": {"cpu": 2, "memory_gb": 4}})
+    assert updated.id == sb.id
+    res = (await client.sandboxes.get(sb.id)).data["resources"]
+    assert res["cpu"] == 2 and res["memory_gb"] == 4
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_async_sandbox_handle_update(async_mock_transport):
+    client = AsyncNeevAI(
+        api_key="test", org_id="org1", project_id="proj1", client=async_mock_transport
+    )
+    sb = await client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-x"})
+    same = await sb.update(
+        {"resources": {"cpu": 2, "memory_gb": 4}}, allow_egress=["api.github.com"]
+    )
+    assert same is sb
+    assert sb.data["resources"]["cpu"] == 2 and sb.data["resources"]["memory_gb"] == 4
+    assert [r["host"] for r in sb.data["egress"]["allow"]] == ["api.github.com"]
+    await client.aclose()
 
 
 @pytest.mark.asyncio

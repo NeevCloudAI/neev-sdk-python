@@ -3,15 +3,15 @@ Snapshot, restore, and fork a sandbox's filesystem state.
 
 Writes a marker file, captures it with ``sandbox.snapshot``, modifies the file
 to prove live state changed, then provisions a **new** sandbox from the snapshot
-via ``from_snapshot`` (the recommended rollback pattern). Finally forks the
+via ``restore`` (the recommended recovery pattern). Finally forks the
 restored sandbox to show inherited state.
 
 Restore pattern
 ---------------
 
-This example rolls back by creating a new sandbox with ``from_snapshot`` rather
-than calling ``sandbox.restore()`` in place. In-place restore is available on the
-SDK but may leave an empty workspace on some backends; ``from_snapshot`` create
+This example recovers by creating a new sandbox with ``restore`` rather than
+calling ``sandbox.rollback()`` in place. In-place rollback is available on the
+SDK but may leave an empty workspace on some backends; ``restore`` on create
 is the reliable pattern demonstrated here.
 
 Prerequisites
@@ -40,7 +40,7 @@ Flow
 3. **Snapshot** — call ``sandbox.snapshot({"name": "demo-snap"})`` (returns Pending)
 4. **Poll** — ``wait_for_snapshot`` until status is Ready
 5. **Modify** — overwrite the file with ``modified state`` (source sandbox keeps this)
-6. **Restore** — ``client.sandboxes.create({..., "from_snapshot": snapshot_id})``
+6. **Restore** — ``client.sandboxes.create({..., "restore": snapshot_id})``
 7. **Verify** — print file contents from source (modified) vs restored (original)
 8. **Fork** — ``restored.fork("snapshot-fork")`` and read inherited file contents
 9. **Cleanup** — delete source sandbox, restored sandbox, fork, and snapshot
@@ -171,11 +171,11 @@ def main() -> None:
             print("before restore:")
             print(sandbox.files.read_text(MESSAGE_PATH).strip())
 
-            # --- Roll back by creating a new sandbox from the snapshot ---
+            # --- Restore by creating a new sandbox from the snapshot ---
             restored = client.sandboxes.create(
                 {
                     "sandbox_template_id": TEMPLATE,
-                    "from_snapshot": str(snapshot.id),
+                    "restore": str(snapshot.id),
                 }
             )
             log(f"restored sandbox {restored.id} from snapshot")
