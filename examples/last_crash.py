@@ -102,7 +102,7 @@ def main() -> None:
             # --- Force the OOM. This exec is expected to die with the sandbox. ---
             print("allocating past the memory limit...")
             try:
-                sandbox.exec(["sh", "-c", "head -c 4G /dev/zero | tail -c 1"], timeout_ms=60_000)
+                sandbox.exec(["sh", "-c", "head -c 4G /dev/zero | tail -c 4G"], timeout_ms=60_000)
             except NeevAIError as e:
                 print(f"  exec died as expected: {type(e).__name__}")
 
