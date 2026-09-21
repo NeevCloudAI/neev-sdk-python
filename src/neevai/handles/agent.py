@@ -6,7 +6,7 @@ from collections.abc import Callable, Mapping
 from typing import TYPE_CHECKING, Any, cast
 
 from neevai.errors import NeevAIError
-from neevai.types import AgentData, Scope, UpdateAgentParams
+from neevai.types import AgentData, AgentLastCrash, Scope, UpdateAgentParams
 
 if TYPE_CHECKING:
     from neevai.handles.sandbox import AsyncSandbox, Sandbox
@@ -82,6 +82,17 @@ class Agent:
     def config(self) -> dict[str, Any] | None:
         """Effective agent configuration."""
         return self._state.config
+
+    @property
+    def last_crash(self) -> AgentLastCrash | None:
+        """Most recent unexpected stop, or None if this agent has never had one.
+
+        Records a past event and is not cleared when the agent recovers, so check
+        ``at`` before acting on it. ``storage_reset`` True means the agent came back
+        with an empty filesystem: files under /workspace, and anything installed since
+        create, are gone.
+        """
+        return self._state.last_crash
 
     @property
     def created_at(self) -> str:
@@ -243,6 +254,11 @@ class AsyncAgent:
     @property
     def config(self) -> dict[str, Any] | None:
         return self._state.config
+
+    @property
+    def last_crash(self) -> AgentLastCrash | None:
+        """Most recent unexpected stop, or None if this agent has never had one."""
+        return self._state.last_crash
 
     @property
     def created_at(self) -> str:

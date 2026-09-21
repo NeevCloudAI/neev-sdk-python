@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 __all__ = [
     "AgentData",
+    "AgentLastCrash",
     "AgentListResponse",
     "AgentStatus",
     "AgentTemplate",
@@ -31,6 +32,7 @@ __all__ = [
     "RestoreSandboxRequest",
     "SandboxData",
     "SandboxEgressConfig",
+    "SandboxLastCrash",
     "SandboxLifecycle",
     "SandboxListResponse",
     "SandboxMetricsResponse",
@@ -58,6 +60,9 @@ __all__ = [
 # the rest of the package.
 from neevai.generated.aiagent import (  # noqa: F401
     Agent as _GeneratedAgent,
+)
+from neevai.generated.aiagent import (  # noqa: F401
+    AgentLastCrash as AgentLastCrash,
 )
 from neevai.generated.aiagent import (  # noqa: F401
     AgentStatus as AgentStatus,
@@ -100,6 +105,9 @@ from neevai.generated.aiagent import (  # noqa: F401
 )
 from neevai.generated.aiagent import (  # noqa: F401
     SandboxEgressConfig as SandboxEgressConfig,
+)
+from neevai.generated.aiagent import (  # noqa: F401
+    SandboxLastCrash as SandboxLastCrash,
 )
 from neevai.generated.aiagent import (  # noqa: F401
     SandboxLifecycle as SandboxLifecycle,

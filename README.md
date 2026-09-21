@@ -109,6 +109,24 @@ with NeevAI(api_key="...", org_id="...", project_id="...", region="...") as clie
     client.sandboxes.delete(sandbox.id)
 ```
 
+## Detecting a crash
+
+A sandbox that hits an OOM kill or another unexpected stop is restarted for you, so it
+reads back as `Ready` — but its filesystem may be gone. `last_crash` is how you tell:
+
+```python
+crash = sandbox.last_crash  # None if this sandbox has never crashed
+if crash and crash.storage_reset:
+    # The sandbox restarted with an empty filesystem: files under /workspace,
+    # and anything installed since create, are gone. Re-provision before using it.
+    print(f"{crash.reason} at {crash.at}")
+```
+
+`crash.storage_reset is False` means it restarted with its files intact. The field records
+a past event and is **not** cleared when the sandbox recovers, so check `crash.at` before
+reacting to it. Agents expose the same `agent.last_crash`. See
+[`last_crash.py`](examples/last_crash.py).
+
 ## Network egress
 
 Sandboxes (and agents) are **deny-all by default** — no outbound network. Open egress at
@@ -196,6 +214,7 @@ See [`examples/README.md`](examples/README.md) for the full catalogue and learni
 | [`templates_list.py`](examples/templates_list.py) | List templates → get by id → create sandbox |
 | [`create_agent.py`](examples/create_agent.py) | Agent templates → create agent → sandbox → update/pause/delete |
 | [`sandbox_lifecycle.py`](examples/sandbox_lifecycle.py) | Create → wait → metrics → pause → delete |
+| [`last_crash.py`](examples/last_crash.py) | Force an OOM kill → read `last_crash` → check `storage_reset` |
 | [`snapshot_fork_restore.py`](examples/snapshot_fork_restore.py) | Snapshot → `restore` → fork |
 | [`async_sandbox.py`](examples/async_sandbox.py) | End-to-end `AsyncNeevAI` workflow |
 | [`files_api.py`](examples/files_api.py) | `files.write` / `read_text` / `list` |

@@ -129,6 +129,7 @@ def _make_agent_record(
         "config": req.get("config"),
         "status": "Provisioning",
         "metrics_url": f"https://metrics.example/agents/{aid}",
+        "last_crash": None,
         "created_at": now,
         "updated_at": now,
     }
@@ -160,6 +161,7 @@ def _make_sandbox_record(
         "egress": req.get("egress"),
         "sandbox_template_id": req.get("sandbox_template_id"),
         "created_by": None,
+        "last_crash": None,
         "idle_timeout_seconds": lifecycle.get("idle_timeout_seconds"),
         "max_lifetime_seconds": lifecycle.get("max_lifetime_seconds"),
         "paused_retention_seconds": lifecycle.get("paused_retention_seconds"),

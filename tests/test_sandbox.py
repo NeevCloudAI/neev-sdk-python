@@ -1,6 +1,7 @@
 """Basic sanity tests for the Sandbox handle (sync)."""
 
 import uuid
+from datetime import datetime, timezone
 
 import pytest
 
@@ -37,6 +38,34 @@ def test_sandbox_properties():
     assert sb.connect_url == "https://sbx.example.com"
     assert sb.to_json()["id"] == data["id"]
     assert sb.to_json()["name"] == data["name"]
+
+
+def test_sandbox_last_crash_none_when_never_crashed():
+    sb = Sandbox(None, _sandbox_data())
+    assert sb.last_crash is None
+    assert sb.to_json()["last_crash"] is None
+
+
+@pytest.mark.parametrize("storage_reset", [False, True])
+def test_sandbox_last_crash_populated(storage_reset):
+    sb = Sandbox(
+        None,
+        _sandbox_data(
+            last_crash={
+                "reason": "OOMKilled",
+                "at": "2026-01-01T00:00:00Z",
+                "storage_reset": storage_reset,
+            }
+        ),
+    )
+    crash = sb.last_crash
+    assert crash is not None
+    assert crash.reason == "OOMKilled"
+    # storage_reset distinguishes a crash that wiped /workspace from one that did not.
+    assert crash.storage_reset is storage_reset
+    assert isinstance(crash.at, datetime)
+    assert crash.at == datetime(2026, 1, 1, tzinfo=timezone.utc)
+    assert sb.to_json()["last_crash"]["storage_reset"] is storage_reset
 
 
 def test_wait_until_ready_ready_phase():
