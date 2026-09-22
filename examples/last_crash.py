@@ -69,11 +69,13 @@ MARKER = "/workspace/marker.txt"
 
 
 def _marker_survived(sandbox) -> bool:
-    """True when the pre-crash marker file is still on disk."""
-    try:
-        return sandbox.exec(["sh", "-c", f"test -f {MARKER}"]).exit_code == 0
-    except NeevAIError:
-        return False
+    """True when the pre-crash marker file is still on disk.
+
+    A non-zero exit means the file is gone; ``exec`` does not raise for that. Any
+    NeevAIError here is a failed *check*, not a missing file, so it propagates
+    rather than being reported as agreement with ``storage_reset``.
+    """
+    return sandbox.exec(["sh", "-c", f"test -f {MARKER}"]).exit_code == 0
 
 
 def main() -> None:
