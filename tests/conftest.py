@@ -117,6 +117,11 @@ def _make_agent_record(
     now: str,
     agent_template_id: str,
 ) -> dict[str, Any]:
+    """Build a fake agent record as the API would return it on create.
+
+    ``last_crash`` defaults to None, matching an agent that has never crashed;
+    tests that need a crash override it on the handle.
+    """
     req = body or {}
     return {
         "id": aid,
@@ -143,6 +148,11 @@ def _make_sandbox_record(
     body: dict[str, Any] | None,
     now: str,
 ) -> dict[str, Any]:
+    """Build a fake sandbox record as the API would return it on create.
+
+    ``last_crash`` defaults to None, matching a sandbox that has never crashed;
+    tests that need a crash pass one through the handle instead.
+    """
     req = body or {}
     lifecycle = req.get("lifecycle") or {}
     return {

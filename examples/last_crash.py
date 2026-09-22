@@ -79,6 +79,7 @@ def _marker_survived(sandbox) -> bool:
 
 
 def main() -> None:
+    """Force an OOM, then confirm ``storage_reset`` matches the real filesystem."""
     with NeevAI(
         api_key=os.environ.get("NEEV_API_KEY"),
         org_id=os.environ.get("NEEV_ORG_ID"),

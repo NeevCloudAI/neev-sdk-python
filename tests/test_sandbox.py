@@ -41,6 +41,7 @@ def test_sandbox_properties():
 
 
 def test_sandbox_last_crash_none_when_never_crashed():
+    """A sandbox that has never crashed reports None, on the handle and in to_json()."""
     sb = Sandbox(None, _sandbox_data())
     assert sb.last_crash is None
     assert sb.to_json()["last_crash"] is None
@@ -48,6 +49,7 @@ def test_sandbox_last_crash_none_when_never_crashed():
 
 @pytest.mark.parametrize("storage_reset", [False, True])
 def test_sandbox_last_crash_populated(storage_reset):
+    """last_crash parses reason/at/storage_reset, with ``at`` coerced to a datetime."""
     sb = Sandbox(
         None,
         _sandbox_data(

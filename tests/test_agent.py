@@ -43,6 +43,7 @@ def test_agent_handle_fields(mock_transport):
 
 
 def test_agent_last_crash_none_when_never_crashed(mock_transport):
+    """A freshly created agent reports no crash, on the handle and in to_json()."""
     client = _make_client(mock_transport)
     agent = client.agents.create({"name": "my-agent", "agent_template": "claude-code"})
     assert agent.last_crash is None
@@ -52,6 +53,7 @@ def test_agent_last_crash_none_when_never_crashed(mock_transport):
 
 @pytest.mark.parametrize("storage_reset", [False, True])
 def test_agent_last_crash_populated(mock_transport, storage_reset):
+    """last_crash parses into a typed record and preserves storage_reset either way."""
     client = _make_client(mock_transport)
     created = client.agents.create({"name": "my-agent", "agent_template": "claude-code"})
     agent = Agent(
