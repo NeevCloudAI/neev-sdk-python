@@ -30,6 +30,7 @@ path and run commands, see [`examples/README.md`](../examples/README.md).
 | `client.sandboxes.create_snapshot` | `snapshot_fork_restore.py` (via `sandbox.snapshot`) | `pending = sandbox.snapshot({"name": "demo-snap"})` |
 | `client.sandboxes.get_snapshot` | `snapshot_fork_restore.py` | `snap = client.sandboxes.get_snapshot(snapshot_id)` |
 | `client.sandboxes.delete_snapshot` | `snapshot_fork_restore.py` | `client.sandboxes.delete_snapshot(snapshot_id)` |
+| `sandbox.last_crash` / `agent.last_crash` | `last_crash.py` | `crash = sandbox.last_crash` — `None`, or `reason` / `at` / `storage_reset` |
 | `sandbox.update` | `sandbox_update.py` | `sandbox.update({"resources": {"cpu": 2}}, allow_egress=["api.github.com"])` |
 | `sandbox.snapshot` | `snapshot_fork_restore.py` | `pending = sandbox.snapshot({"name": "demo-snap"})` |
 | `sandbox.fork` | `snapshot_fork_restore.py` | `fork = restored.fork("snapshot-fork")` |
@@ -86,6 +87,7 @@ path and run commands, see [`examples/README.md`](../examples/README.md).
 | Agent lifecycle | `examples/create_agent.py` | List agent templates, create agent, wait, sandbox exec, update, pause, delete |
 | Sandbox lifecycle | `examples/sandbox_lifecycle.py` | Create → wait → metrics → pause → delete |
 | Sandbox in-place update | `examples/sandbox_update.py` | Create → wait → resize → re-scope egress → verify → delete |
+| Crash reporting | `examples/last_crash.py` | Create → mark file → force OOM → poll `last_crash` → check `storage_reset` → delete |
 | Snapshot fork & restore | `examples/snapshot_fork_restore.py` | Write state → snapshot → modify → `restore` create → fork → cleanup |
 | Async workflow | `examples/async_sandbox.py` | `AsyncNeevAI` create → wait → exec → delete |
 | Files API | `examples/files_api.py` | Write, read_text, list (recursive) |

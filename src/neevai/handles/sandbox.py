@@ -14,6 +14,7 @@ from neevai.types import (
     ExecResult,
     ExecStreamEvent,
     SandboxData,
+    SandboxLastCrash,
     SandboxMetricsResponse,
     SandboxPort,
     Scope,
@@ -111,6 +112,17 @@ class Sandbox:
     def connect_url(self) -> str | None:
         """Direct address of the sandbox runtime, or None if not ready/configured."""
         return self._state.connect_url
+
+    @property
+    def last_crash(self) -> SandboxLastCrash | None:
+        """Most recent unexpected stop, or None if this sandbox has never had one.
+
+        Records a past event and is not cleared when the sandbox recovers, so check
+        ``at`` before acting on it. ``storage_reset`` True means the sandbox came back
+        with an empty filesystem: files under /workspace, and anything installed since
+        create, are gone.
+        """
+        return self._state.last_crash
 
     @property
     def data(self) -> dict[str, Any]:
@@ -550,6 +562,11 @@ class AsyncSandbox:
     @property
     def connect_url(self) -> str | None:
         return self._state.connect_url
+
+    @property
+    def last_crash(self) -> SandboxLastCrash | None:
+        """Most recent unexpected stop, or None if this sandbox has never had one."""
+        return self._state.last_crash
 
     @property
     def data(self) -> dict[str, Any]:

@@ -71,12 +71,14 @@ Everything in `neevai.__all__`:
 | `AgentTemplatePage` / `AsyncAgentTemplatePage` | dataclass | `resources/agent_templates.py` |
 | `ListAgentTemplatesParams` | dataclass | `resources/agent_templates.py` |
 | `AgentData` | model | `types.py` |
+| `AgentLastCrash` | model | generated |
 | `AgentStatus` | enum | generated |
 | `CreateAgentParams` | model alias | generated → `CreateAgentRequest` |
 | `UpdateAgentParams` | model alias | generated → `UpdateAgentRequest` |
 | `AgentListResponse` | model | `types.py` |
 | `AgentTemplate` | model | generated |
 | `AgentTemplateListResponse` | model | generated |
+| `SandboxLastCrash` | model | generated |
 | `SandboxConnection` | class | `runtime/connection.py` |
 | `AsyncSandboxConnection` | class | `runtime/connection.py` |
 | `SandboxFiles` | class | `runtime/connection.py` |
@@ -103,6 +105,8 @@ Types exported from `neevai.types.__all__`:
 | `CreateSandboxParams` | model alias | `generated/aiagent.py` → `CreateSandboxRequest` |
 | `EnvVar` | model | generated |
 | `SandboxData` | model | `types.py` subclass of generated `Sandbox` with `phase: str` |
+| `SandboxLastCrash` | model | generated |
+| `AgentLastCrash` | model | generated |
 | `SandboxListResponse` | model | `types.py` (`items: list[SandboxData]`) |
 | `SandboxTemplate` | model | generated |
 | `SandboxTemplateListResponse` | model | generated |
@@ -630,6 +634,7 @@ in-memory state mirroring the last API response.
 | `sandbox_id` | `str` | Backing sandbox UUID |
 | `agent_template_id` | `str` | Catalogue template id (e.g. `ag-claude-code`) |
 | `config` | `dict \| None` | Effective merged configuration |
+| `last_crash` | `AgentLastCrash \| None` | Most recent unexpected stop; `storage_reset=True` means it restarted with an empty filesystem. `None` if it never crashed. |
 | `data` | `dict[str, Any]` | Full record snapshot |
 
 ### `agent.wait_until_ready(timeout_ms=120000, poll_interval_ms=2000, on_poll=None)`
@@ -671,6 +676,7 @@ mirroring the last API response. Call `refresh()` to sync from the server.
 | `phase` | `str` | OpenAPI steady states: `"Pending"`, `"Ready"`, `"NotReady"`, `"Unknown"`, `"Paused"`. API may also return transitional values (e.g. `"Pausing"`, `"Resuming"`) not in the spec enum; SDK accepts any phase string. |
 | `replicas` | `int` | `0` or `1` |
 | `connect_url` | `str \| None` | Regional runtime URL (available when ready) |
+| `last_crash` | `SandboxLastCrash \| None` | Most recent unexpected stop; `storage_reset=True` means it restarted with an empty filesystem. `None` if it never crashed. |
 | `data` | `dict[str, Any]` | Full record snapshot |
 
 ### `sandbox.refresh()`
@@ -1425,8 +1431,20 @@ Subclass of generated `Agent` with relaxed `status: str`.
 | `sandbox_id` | `UUID` | yes |
 | `config` | `dict \| None` | no |
 | `status` | `str` | yes |
+| `last_crash` | `AgentLastCrash \| None` | no (most recent unexpected stop; records a past event) |
 | `created_at` | `datetime` | yes |
 | `updated_at` | `datetime` | yes |
+
+### `AgentLastCrash`
+
+The most recent unexpected stop of the agent (`null` if it never had one). Records a
+past event and is not cleared on recovery, so read `at` before acting on it.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `reason` | `str` | yes (e.g. `OOMKilled`) |
+| `at` | `datetime` | yes (when the stop was detected) |
+| `storage_reset` | `bool` | yes (`true` = the agent restarted with an empty filesystem: files under `/workspace`, and anything installed since create, are gone) |
 
 ### `AgentTemplate`
 
@@ -1547,7 +1565,7 @@ past event and is not cleared on recovery, so read `at` before acting on it.
 | ----- | ---- | -------- |
 | `reason` | `str` | yes (e.g. `OOMKilled`) |
 | `at` | `datetime` | yes (when the stop was detected) |
-| `storage_reset` | `bool` | yes (`true` = restarted with an empty filesystem) |
+| `storage_reset` | `bool` | yes (`true` = the sandbox restarted with an empty filesystem: files under `/workspace`, and anything installed since create, are gone) |
 
 ### `SandboxLifecycle`
 

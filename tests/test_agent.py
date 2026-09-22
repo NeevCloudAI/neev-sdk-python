@@ -2,11 +2,13 @@
 
 import json
 import uuid
+from datetime import datetime
 
 import pytest
 
 from neevai.client import NeevAI
 from neevai.errors import NeevAIError
+from neevai.handles.agent import Agent
 
 
 def _make_client(mock_transport) -> NeevAI:
@@ -37,6 +39,41 @@ def test_agent_handle_fields(mock_transport):
     assert agent.config is None
     assert agent.created_at
     assert agent.updated_at
+    client.close()
+
+
+def test_agent_last_crash_none_when_never_crashed(mock_transport):
+    """A freshly created agent reports no crash, on the handle and in to_json()."""
+    client = _make_client(mock_transport)
+    agent = client.agents.create({"name": "my-agent", "agent_template": "claude-code"})
+    assert agent.last_crash is None
+    assert agent.to_json()["last_crash"] is None
+    client.close()
+
+
+@pytest.mark.parametrize("storage_reset", [False, True])
+def test_agent_last_crash_populated(mock_transport, storage_reset):
+    """last_crash parses into a typed record and preserves storage_reset either way."""
+    client = _make_client(mock_transport)
+    created = client.agents.create({"name": "my-agent", "agent_template": "claude-code"})
+    agent = Agent(
+        None,
+        {
+            **created.data,
+            "last_crash": {
+                "reason": "OOMKilled",
+                "at": "2026-01-01T00:00:00Z",
+                "storage_reset": storage_reset,
+            },
+        },
+    )
+    crash = agent.last_crash
+    assert crash is not None
+    assert crash.reason == "OOMKilled"
+    # storage_reset distinguishes a crash that wiped /workspace from one that did not.
+    assert crash.storage_reset is storage_reset
+    assert isinstance(crash.at, datetime)
+    assert agent.to_json()["last_crash"]["storage_reset"] is storage_reset
     client.close()
 
 

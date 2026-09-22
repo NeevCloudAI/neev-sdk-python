@@ -115,7 +115,7 @@ Returned by `create()`, `get()`, `list().items`, etc.
 
 | API | Kind |
 | --- | ---- |
-| `id`, `name`, `phase`, `replicas`, `connect_url`, `data` | properties |
+| `id`, `name`, `phase`, `replicas`, `connect_url`, `last_crash`, `data` | properties |
 | `refresh()` | method |
 | `update(params, *, allow_internet=None, allow_egress=None)` | method — in-place resize / egress re-scope; updates state in place |
 | `wait_until_ready(timeout_ms=120000, ...)` | method — polls the API until `Ready` |
@@ -133,7 +133,7 @@ Returned by `client.agents.create()`, `get()`, `list().items`, etc.
 
 | API | Kind |
 | --- | ---- |
-| `id`, `name`, `status`, `sandbox_id`, `agent_template_id`, `config`, `data` | properties |
+| `id`, `name`, `status`, `sandbox_id`, `agent_template_id`, `config`, `last_crash`, `data` | properties |
 | `refresh()` / `update(params)` | methods |
 | `wait_until_ready(timeout_ms=120000, poll_interval_ms=2000, on_poll=None)` | method — polls until `Ready`; fails fast on `Failed` / `Paused` |
 | `pause()` / `resume()` / `delete()` | methods |
