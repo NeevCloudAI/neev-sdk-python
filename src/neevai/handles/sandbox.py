@@ -173,13 +173,12 @@ class Sandbox:
         self._state = next_state._state
         return self
 
-    def pause(self, *, preserve_memory: bool | None = None) -> Sandbox:
+    def pause(self) -> Sandbox:
         """Pauses the sandbox (scales to 0 replicas) and updates this handle in place."""
         if self.sandboxes is None:
             raise NeevAIError("Cannot pause a sandbox handle with no client context.")
         next_state = self.sandboxes.pause(
             self.id,
-            preserve_memory=preserve_memory,
             org_id=self.scope.org_id if self.scope else None,
             project_id=self.scope.project_id if self.scope else None,
         )
@@ -614,12 +613,11 @@ class AsyncSandbox:
         self._state = next_state._state
         return self
 
-    async def pause(self, *, preserve_memory: bool | None = None) -> AsyncSandbox:
+    async def pause(self) -> AsyncSandbox:
         if self.sandboxes is None:
             raise NeevAIError("Cannot pause a sandbox handle with no client context.")
         next_state = await self.sandboxes.pause(
             self.id,
-            preserve_memory=preserve_memory,
             org_id=self.scope.org_id if self.scope else None,
             project_id=self.scope.project_id if self.scope else None,
         )

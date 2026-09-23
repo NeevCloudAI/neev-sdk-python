@@ -29,7 +29,7 @@ Subcommands
 | ``create`` | Provision a new sandbox | ``--name``, ``--template-id``, ``--wait`` |
 | ``list`` | Paginated sandbox list | ``--page``, ``--limit``, ``--name``, ``--status`` |
 | ``get`` | Fetch one sandbox by ID | — |
-| ``pause`` | Scale to 0 replicas | ``--preserve-memory`` / ``--no-preserve-memory`` |
+| ``pause`` | Scale to 0 replicas | — |
 | ``resume`` | Scale back to 1 replica | — |
 | ``delete`` | Permanently remove | — |
 | ``metrics`` | Query health metrics | ``--from``, ``--to``, ``--step`` |
@@ -150,10 +150,7 @@ def _cmd_get(client: NeevAI, args: argparse.Namespace) -> None:
 
 def _cmd_pause(client: NeevAI, args: argparse.Namespace) -> None:
     """Pause a sandbox (scale to 0 replicas)."""
-    pause_kwargs: dict[str, Any] = {}
-    if args.preserve_memory is not None:
-        pause_kwargs["preserve_memory"] = args.preserve_memory
-    sandbox = client.sandboxes.pause(args.sandbox_id, **pause_kwargs)
+    sandbox = client.sandboxes.pause(args.sandbox_id)
     _print_sandbox(sandbox, as_json=args.json)
 
 
@@ -222,13 +219,6 @@ def _build_parser() -> argparse.ArgumentParser:
 
     pause = subparsers.add_parser("pause", help="Pause a sandbox (scale to 0 replicas).")
     pause.add_argument("sandbox_id", help="Sandbox UUID.")
-    pause.add_argument(
-        "--preserve-memory",
-        dest="preserve_memory",
-        action=argparse.BooleanOptionalAction,
-        default=None,
-        help="Capture FS+memory snapshot before pause (server default: true).",
-    )
 
     resume = subparsers.add_parser("resume", help="Resume a paused sandbox.")
     resume.add_argument("sandbox_id", help="Sandbox UUID.")

@@ -306,13 +306,13 @@ client.sandboxes.update(sandbox.id, {}, allow_egress=["api.github.com"])
 
 **Example:** [`sandbox_update.py`](../examples/sandbox_update.py)
 
-### `client.sandboxes.pause(id, *, preserve_memory=None, org_id=None, project_id=None)`
+### `client.sandboxes.pause(id, *, org_id=None, project_id=None)`
 
 Scales the sandbox to 0 replicas. Lifecycle phase becomes `Paused`. Pause always
 snapshots the sandbox's full state (process memory + filesystem) before shutting
-down, so a resume restores exactly where it left off. `preserve_memory` was
-dropped from `PauseSandboxRequest` in the spec; the kwarg is retained for
-backward compatibility but is now a no-op on the wire.
+down, so a resume restores exactly where it left off. The request body is empty:
+`preserve_memory` was dropped from `PauseSandboxRequest` and the kwarg is gone
+with it, so there is no opt-out and no volume-only pause.
 
 **Returns:** Updated `Sandbox` handle (not `None`).
 
@@ -727,14 +727,14 @@ def log_progress(sb: Sandbox) -> None:
 sandbox.wait_until_ready(on_poll=log_progress)
 ```
 
-### `sandbox.pause(preserve_memory=None)` / `sandbox.resume()` / `sandbox.delete()`
+### `sandbox.pause()` / `sandbox.resume()` / `sandbox.delete()`
 
 Convenience wrappers that delegate to `client.sandboxes` and update handle state in
 place (except `delete`, which removes the remote resource).
 
 Both `pause()` and `resume()` return the updated `Sandbox` handle. Pause always
-snapshots full state before shutdown; the `preserve_memory` kwarg is retained for
-backward compatibility but is now a no-op (dropped from `PauseSandboxRequest`):
+snapshots full state before shutdown; the `preserve_memory` kwarg was dropped
+along with the field itself (`PauseSandboxRequest` carries no fields):
 
 ```python
 sandbox = sandbox.pause()   # phase → Paused, replicas → 0
