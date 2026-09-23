@@ -309,7 +309,6 @@ class Sandboxes:
         self,
         id: str,
         *,
-        preserve_memory: bool | None = None,
         org_id: str | None = None,
         project_id: str | None = None,
     ) -> Sandbox:
@@ -319,10 +318,7 @@ class Sandboxes:
         scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
         path = f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes/{id}/pause"
 
-        body: dict[str, Any] = {}
-        if preserve_memory is not None:
-            body["preserve_memory"] = preserve_memory
-        raw = self._client._transport.request("POST", path, body=body)
+        raw = self._client._transport.request("POST", path, body={})
         data = coerce_model(SandboxData, raw)
         return Sandbox(self, data, scope)
 
@@ -691,7 +687,6 @@ class AsyncSandboxes:
         self,
         id: str,
         *,
-        preserve_memory: bool | None = None,
         org_id: str | None = None,
         project_id: str | None = None,
     ) -> AsyncSandbox:
@@ -701,10 +696,7 @@ class AsyncSandboxes:
         scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
         path = f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes/{id}/pause"
 
-        body: dict[str, Any] = {}
-        if preserve_memory is not None:
-            body["preserve_memory"] = preserve_memory
-        raw = await self._client._transport.request("POST", path, body=body)
+        raw = await self._client._transport.request("POST", path, body={})
         data = coerce_model(SandboxData, raw)
         return AsyncSandbox(self, data, scope)
 

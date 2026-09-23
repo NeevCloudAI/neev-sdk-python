@@ -237,7 +237,7 @@ def test_sandboxes_pause_accepts_pausing_transitional_phase(mock_transport, monk
     client.close()
 
 
-def test_sandboxes_pause_sends_empty_json_body_when_preserve_memory_omitted(mock_transport):
+def test_sandboxes_pause_sends_an_empty_json_body(mock_transport):
     client = _make_client(mock_transport)
     sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
 
@@ -255,21 +255,13 @@ def test_sandboxes_pause_sends_empty_json_body_when_preserve_memory_omitted(mock
     client.close()
 
 
-def test_sandboxes_pause_sends_preserve_memory_when_set(mock_transport):
+def test_sandboxes_pause_rejects_the_removed_preserve_memory_kwarg(mock_transport):
+    """A caller still passing the dropped flag gets a TypeError, not a silently ignored pause."""
     client = _make_client(mock_transport)
     sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
 
-    captured_bodies: list[dict | None] = []
-    original_request = client._transport.request
-
-    def capturing_request(method, path, query=None, body=None):
-        captured_bodies.append(body)
-        return original_request(method, path, query=query, body=body)
-
-    client._transport.request = capturing_request  # type: ignore[method-assign]
-
-    client.sandboxes.pause(sb.id, preserve_memory=True)
-    assert captured_bodies == [{"preserve_memory": True}]
+    with pytest.raises(TypeError):
+        client.sandboxes.pause(sb.id, preserve_memory=True)  # type: ignore[call-arg]
     client.close()
 
 
@@ -699,6 +691,32 @@ async def test_async_sandbox_handle_update(async_mock_transport):
     assert same is sb
     assert sb.data["resources"]["cpu"] == 2 and sb.data["resources"]["memory_gb"] == 4
     assert [r["host"] for r in sb.data["egress"]["allow"]] == ["api.github.com"]
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_async_sandboxes_pause_sends_an_empty_json_body(async_mock_transport):
+    """The async pause lost the kwarg too, so it must not reach for a body field either."""
+    client = AsyncNeevAI(
+        api_key="test", org_id="org1", project_id="proj1", client=async_mock_transport
+    )
+    sb = await client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-x"})
+
+    captured_bodies: list[dict | None] = []
+    original_request = client._transport.request
+
+    async def capturing_request(method, path, query=None, body=None):
+        captured_bodies.append(body)
+        return await original_request(method, path, query=query, body=body)
+
+    client._transport.request = capturing_request  # type: ignore[method-assign]
+
+    paused = await client.sandboxes.pause(sb.id)
+    assert paused.replicas == 0
+    assert captured_bodies == [{}]
+
+    with pytest.raises(TypeError):
+        await client.sandboxes.pause(sb.id, preserve_memory=True)  # type: ignore[call-arg]
     await client.aclose()
 
 

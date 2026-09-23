@@ -40,7 +40,7 @@ Details: [`api-inventory.md` → Client](./api-inventory.md#client)
 | `list(page=None, limit=None, org_id=None, project_id=None)` | `SandboxPage` | Lists sandboxes with pagination in the resolved org/project scope. |
 | `get(id, org_id=None, project_id=None)` | `Sandbox` | Fetches the current record for a sandbox by ID. |
 | `update(id, params, org_id=None, project_id=None, *, allow_internet=None, allow_egress=None)` | `Sandbox` | In-place update of `resources` (cpu/memory) and/or `egress`. Resize keeps the ID/name/preview URLs and does not restart; `disk_gb` is not resizable and the server rejects a change. `allow_internet` / `allow_egress` are the same egress convenience as `create`. Rejects `{}` locally, naming both fields. |
-| `pause(id, preserve_memory=None, org_id=None, project_id=None)` | `Sandbox` | Scales a sandbox to 0 replicas (Paused state). Optional `preserve_memory` request body (server default `true`). |
+| `pause(id, org_id=None, project_id=None)` | `Sandbox` | Scales a sandbox to 0 replicas (Paused state). Sends an empty body; a pause always captures full state, so a resume picks up where it left off. |
 | `resume(id, org_id=None, project_id=None)` | `Sandbox` | Scales a sandbox back to 1 replica toward Ready. |
 | `keepalive(id, org_id=None, project_id=None)` | `Sandbox` | Resets the sandbox's idle timer (POST `.../keepalive`). |
 | `update_timeout(id, params, org_id=None, project_id=None)` | `Sandbox` | Changes idle/lifetime windows (PUT `.../timeout`); only the windows passed change, `0` turns one off. |
@@ -119,7 +119,7 @@ Returned by `create()`, `get()`, `list().items`, etc.
 | `refresh()` | method |
 | `update(params, *, allow_internet=None, allow_egress=None)` | method — in-place resize / egress re-scope; updates state in place |
 | `wait_until_ready(timeout_ms=120000, ...)` | method — polls the API until `Ready` |
-| `pause(preserve_memory=None)` / `resume()` | methods |
+| `pause()` / `resume()` | methods |
 | `keepalive()` / `update_timeout(params)` | methods — reset idle timer / change lifecycle windows |
 | `snapshot(params=None)` / `snapshots()` | methods |
 | `rollback(snapshot_id)` / `fork(name)` | methods |
@@ -225,7 +225,7 @@ Minimal one-liners for each public API. Runnable examples link to repo paths.
 | `client.sandboxes.list(...)` | `page = client.sandboxes.list(name="web", status="Paused")` | `page = await client.sandboxes.list(name="web", status="Paused")` | [sandbox_lifecycle_controller.py](../examples/sandbox_lifecycle_controller.py) |
 | `client.sandboxes.get(id)` | `sandbox = client.sandboxes.get(sandbox_id)` | `sandbox = await client.sandboxes.get(sandbox_id)` | [sandbox_lifecycle_controller.py](../examples/sandbox_lifecycle_controller.py) |
 | `client.sandboxes.update(id, params, *, allow_internet, allow_egress)` | `client.sandboxes.update(id, {"resources": {"cpu": 2}})` | `await client.sandboxes.update(id, {"resources": {"cpu": 2}})` | [sandbox_update.py](../examples/sandbox_update.py) |
-| `client.sandboxes.pause(id, preserve_memory=None)` | `sandbox = client.sandboxes.pause(sandbox_id, preserve_memory=True)` | `sandbox = await client.sandboxes.pause(sandbox_id, preserve_memory=True)` | [sandbox_lifecycle_controller.py](../examples/sandbox_lifecycle_controller.py) |
+| `client.sandboxes.pause(id)` | `sandbox = client.sandboxes.pause(sandbox_id)` | `sandbox = await client.sandboxes.pause(sandbox_id)` | [sandbox_lifecycle_controller.py](../examples/sandbox_lifecycle_controller.py) |
 | `client.sandboxes.resume(id)` | `sandbox = client.sandboxes.resume(sandbox_id)` | `sandbox = await client.sandboxes.resume(sandbox_id)` | [sandbox_lifecycle_controller.py](../examples/sandbox_lifecycle_controller.py) |
 | `client.sandboxes.keepalive(id)` | `client.sandboxes.keepalive(sandbox_id)` | `await client.sandboxes.keepalive(sandbox_id)` | [sandbox_lifecycle_windows.py](../examples/sandbox_lifecycle_windows.py) |
 | `client.sandboxes.update_timeout(id, params)` | `client.sandboxes.update_timeout(sandbox_id, {"idle_timeout_seconds": 300})` | `await client.sandboxes.update_timeout(sandbox_id, {"idle_timeout_seconds": 300})` | [sandbox_lifecycle_windows.py](../examples/sandbox_lifecycle_windows.py) |
@@ -254,7 +254,7 @@ Minimal one-liners for each public API. Runnable examples link to repo paths.
 | `sandbox.refresh()` | `sandbox.refresh()` | `await sandbox.refresh()` | — |
 | `sandbox.update(params, *, allow_internet, allow_egress)` | `sandbox.update({"resources": {"cpu": 2}}, allow_egress=["api.github.com"])` | `await sandbox.update({"resources": {"cpu": 2}})` | [sandbox_update.py](../examples/sandbox_update.py) |
 | `sandbox.wait_until_ready(...)` | `sandbox.wait_until_ready(timeout_ms=120_000)` | `await sandbox.wait_until_ready()` | [sandbox_lifecycle.py](../examples/sandbox_lifecycle.py) |
-| `sandbox.pause(preserve_memory=None)` | `sandbox.pause(preserve_memory=True)` | `await sandbox.pause(preserve_memory=True)` | [sandbox_lifecycle.py](../examples/sandbox_lifecycle.py) |
+| `sandbox.pause()` | `sandbox.pause()` | `await sandbox.pause()` | [sandbox_lifecycle.py](../examples/sandbox_lifecycle.py) |
 | `sandbox.resume()` | `sandbox.resume()` | `await sandbox.resume()` | — |
 | `sandbox.keepalive()` | `sandbox.keepalive()` | `await sandbox.keepalive()` | [sandbox_lifecycle_windows.py](../examples/sandbox_lifecycle_windows.py) |
 | `sandbox.update_timeout(params)` | `sandbox.update_timeout({"idle_timeout_seconds": 300, "max_lifetime_seconds": 0})` | `await sandbox.update_timeout({"idle_timeout_seconds": 300})` | [sandbox_lifecycle_windows.py](../examples/sandbox_lifecycle_windows.py) |
