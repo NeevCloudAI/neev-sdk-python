@@ -105,7 +105,7 @@ def _yield_exec_frame_events(
         status = REASON_STATUS.get(frame.reason_code, 500)
         raise error_from_status(
             status,
-            {"error": frame.reason_code, "details": frame.message},
+            {"code": frame.reason_code, "message": frame.message},
             None,
         )
 

@@ -2,9 +2,13 @@
 Serve something from inside a sandbox and get a preview URL for its port.
 
 ``sandbox.get_url(port)`` exposes the port and returns its public,
-credential-free preview URL, waiting until the gateway has provisioned the route
-before it returns. Ports are private until you expose them; ``list_ports`` shows
+credential-free preview URL, waiting until the URL is reachable before it
+returns. Ports are private until you expose them; ``list_ports`` shows
 what's exposed and ``revoke_port`` stops serving one.
+
+The URL needs no credential: an unguessable slug in it is the only thing gating
+it, so treat it as a secret. If it leaks, expose the same port with a new
+``slug`` — that replaces the slug and breaks the old URL.
 
 This starts a tiny web server on port 3000 and prints its preview URL — open
 that URL to reach the server.
@@ -12,8 +16,8 @@ that URL to reach the server.
 Workspace paths
 ---------------
 
-File paths are **workspace-relative** (for example ``index.html``). The sandbox
-runtime rejects absolute paths.
+File paths are relative to the workspace (for example ``index.html``) or absolute
+within it; the sandbox refuses a path outside the workspace.
 
 Prerequisites
 -------------
@@ -35,8 +39,9 @@ Flow
 1. **Create & wait** — provision a sandbox and block on ``wait_until_ready``
 2. **Serve** — write ``index.html`` and start ``busybox httpd`` on port 3000
 3. **Expose** — ``get_url(3000)`` returns the preview URL once it is routable
-4. **List / revoke** — show exposed ports, then stop serving the port
-5. **Delete** — remove the sandbox in a ``finally`` block
+4. **Rotate** — re-expose the port with a fresh slug; the old URL stops working
+5. **List / revoke** — show exposed ports, then stop serving the port
+6. **Delete** — remove the sandbox in a ``finally`` block
 
 Run::
 
@@ -47,6 +52,8 @@ Run::
 from __future__ import annotations
 
 import os
+import secrets
+import string
 import sys
 
 from neevai import NeevAI
@@ -79,6 +86,13 @@ def main() -> None:
             url = sandbox.get_url(PORT)
             print(f"preview URL: {url}")
             print(f"exposed ports: {[p.port for p in sandbox.list_ports()]}")
+
+            # Rotate the URL: a new slug (8 lowercase letters/digits) replaces the old one.
+            new_slug = "".join(
+                secrets.choice(string.ascii_lowercase + string.digits) for _ in range(8)
+            )
+            rotated = sandbox.expose_port(PORT, slug=new_slug)
+            print(f"rotated preview URL: {rotated.preview_url} (old URL no longer works)")
 
             # Stop serving the port when you're done with it.
             sandbox.revoke_port(PORT)

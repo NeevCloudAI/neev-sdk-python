@@ -10,6 +10,7 @@ from neevai.resources.sandboxes import (
     DEFAULT_PORT_WAIT_TIMEOUT_MS,
 )
 from neevai.types import (
+    AuditTrail,
     CreateSnapshotParams,
     ExecResult,
     ExecStreamEvent,
@@ -43,8 +44,8 @@ DEFAULT_RUNTIME_PROBE_TIMEOUT_MS = 5_000
 def _wait_timeout_message(sandbox: Sandbox | AsyncSandbox, timeout_ms: int) -> str:
     return (
         f"Sandbox {sandbox.id} did not become Ready within {timeout_ms}ms "
-        f"(phase: {sandbox.phase}, replicas: {sandbox.replicas}, "
-        f"connect_url: {sandbox.connect_url or '<none>'})."
+        f"(phase: {sandbox.phase}, addressable: {sandbox.addressable}, "
+        f"replicas: {sandbox.replicas}, connect_url: {sandbox.connect_url or '<none>'})."
     )
 
 
@@ -105,7 +106,7 @@ class Sandbox:
 
     @property
     def replicas(self) -> int:
-        """Desired replica count (0 when paused, 1 when running)."""
+        """0 while the sandbox is paused, 1 while it is running."""
         return int(_state_as_json(self._state)["replicas"])
 
     @property
@@ -114,13 +115,19 @@ class Sandbox:
         return self._state.connect_url
 
     @property
+    def addressable(self) -> bool:
+        """Whether the sandbox can be reached yet; briefly False right after create."""
+        return self._state.addressable is not False
+
+    @property
     def last_crash(self) -> SandboxLastCrash | None:
         """Most recent unexpected stop, or None if this sandbox has never had one.
 
         Records a past event and is not cleared when the sandbox recovers, so check
         ``at`` before acting on it. ``storage_reset`` True means the sandbox came back
         with an empty filesystem: files under /workspace, and anything installed since
-        create, are gone.
+        create, are gone. Rolling back to a snapshot taken before that stop brings the
+        files back and clears this once the rollback has completed.
         """
         return self._state.last_crash
 
@@ -174,7 +181,7 @@ class Sandbox:
         return self
 
     def pause(self) -> Sandbox:
-        """Pauses the sandbox (scales to 0 replicas) and updates this handle in place."""
+        """Pauses the sandbox, keeping its state, and updates this handle in place."""
         if self.sandboxes is None:
             raise NeevAIError("Cannot pause a sandbox handle with no client context.")
         next_state = self.sandboxes.pause(
@@ -187,7 +194,7 @@ class Sandbox:
         return self
 
     def resume(self) -> Sandbox:
-        """Resumes the sandbox (scales to 1 replica) and updates this handle in place."""
+        """Resumes a paused sandbox and updates this handle in place."""
         if self.sandboxes is None:
             raise NeevAIError("Cannot resume a sandbox handle with no client context.")
         next_state = self.sandboxes.resume(
@@ -252,8 +259,12 @@ class Sandbox:
             project_id=self.scope.project_id if self.scope else None,
         )
 
-    def expose_port(self, port: int) -> SandboxPort:
-        """Exposes a port for credential-free preview URLs and returns it with its URL."""
+    def expose_port(self, port: int, *, slug: str | None = None) -> SandboxPort:
+        """Exposes a port for credential-free preview URLs and returns it with its URL.
+
+        Treat the URL as a secret: its slug is the only thing gating it. Omit ``slug``
+        for a random one; a different ``slug`` on an exposed port rotates the URL.
+        """
         if self.sandboxes is None:
             raise NeevAIError("Cannot expose a port on a sandbox handle with no client context.")
         return self.sandboxes.expose_port(
@@ -261,6 +272,7 @@ class Sandbox:
             port,
             org_id=self.scope.org_id if self.scope else None,
             project_id=self.scope.project_id if self.scope else None,
+            slug=slug,
         )
 
     def list_ports(self) -> list[SandboxPort]:
@@ -290,8 +302,13 @@ class Sandbox:
         wait_until_ready: bool = True,
         timeout_ms: int = DEFAULT_PORT_WAIT_TIMEOUT_MS,
         poll_interval_ms: int = DEFAULT_PORT_POLL_INTERVAL_MS,
+        *,
+        slug: str | None = None,
     ) -> str:
-        """Exposes a port and returns its preview URL, waiting until it is routable by default."""
+        """Exposes a port and returns its preview URL, waiting until it is routable by default.
+
+        ``slug`` is forwarded to ``expose_port``: omit it for a random one.
+        """
         if self.sandboxes is None:
             raise NeevAIError("Cannot get a URL on a sandbox handle with no client context.")
         return self.sandboxes.get_port_url(
@@ -300,6 +317,33 @@ class Sandbox:
             wait_until_ready=wait_until_ready,
             timeout_ms=timeout_ms,
             poll_interval_ms=poll_interval_ms,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+            slug=slug,
+        )
+
+    def audit(
+        self,
+        *,
+        from_: str | None = None,
+        to: str | None = None,
+        cursor: str | None = None,
+        limit: int | None = None,
+    ) -> AuditTrail:
+        """Reads one page of this sandbox's command audit trail, newest first.
+
+        Pass the previous page's ``next_cursor`` as ``cursor`` to read older records.
+        """
+        if self.sandboxes is None:
+            raise NeevAIError(
+                "Cannot read the audit trail of a sandbox handle with no client context."
+            )
+        return self.sandboxes.audit(
+            self.id,
+            from_=from_,
+            to=to,
+            cursor=cursor,
+            limit=limit,
             org_id=self.scope.org_id if self.scope else None,
             project_id=self.scope.project_id if self.scope else None,
         )
@@ -359,7 +403,7 @@ class Sandbox:
         poll_interval_ms: int = DEFAULT_POLL_INTERVAL_MS,
         on_poll: Callable[[Sandbox], None] | None = None,
     ) -> Sandbox:
-        """Polls until the sandbox reaches the Ready phase.
+        """Polls until the sandbox reaches the Ready phase and is addressable.
 
         Fails fast if Paused, or throws NeevAIError if the timeout is reached first.
         """
@@ -367,7 +411,7 @@ class Sandbox:
         while True:
             if on_poll is not None:
                 on_poll(self)
-            if self.phase == "Ready":
+            if self.phase == "Ready" and self.addressable:
                 return self
             if self.phase == "Paused":
                 raise NeevAIError(
@@ -563,6 +607,11 @@ class AsyncSandbox:
         return self._state.connect_url
 
     @property
+    def addressable(self) -> bool:
+        """Whether the sandbox can be reached yet; briefly False right after create."""
+        return self._state.addressable is not False
+
+    @property
     def last_crash(self) -> SandboxLastCrash | None:
         """Most recent unexpected stop, or None if this sandbox has never had one."""
         return self._state.last_crash
@@ -690,8 +739,12 @@ class AsyncSandbox:
             project_id=self.scope.project_id if self.scope else None,
         )
 
-    async def expose_port(self, port: int) -> SandboxPort:
-        """Exposes a port for credential-free preview URLs and returns it with its URL."""
+    async def expose_port(self, port: int, *, slug: str | None = None) -> SandboxPort:
+        """Exposes a port for credential-free preview URLs and returns it with its URL.
+
+        Treat the URL as a secret: its slug is the only thing gating it. Omit ``slug``
+        for a random one; a different ``slug`` on an exposed port rotates the URL.
+        """
         if self.sandboxes is None:
             raise NeevAIError("Cannot expose a port on a sandbox handle with no client context.")
         return await self.sandboxes.expose_port(
@@ -699,6 +752,7 @@ class AsyncSandbox:
             port,
             org_id=self.scope.org_id if self.scope else None,
             project_id=self.scope.project_id if self.scope else None,
+            slug=slug,
         )
 
     async def list_ports(self) -> list[SandboxPort]:
@@ -728,8 +782,13 @@ class AsyncSandbox:
         wait_until_ready: bool = True,
         timeout_ms: int = DEFAULT_PORT_WAIT_TIMEOUT_MS,
         poll_interval_ms: int = DEFAULT_PORT_POLL_INTERVAL_MS,
+        *,
+        slug: str | None = None,
     ) -> str:
-        """Exposes a port and returns its preview URL, waiting until it is routable by default."""
+        """Exposes a port and returns its preview URL, waiting until it is routable by default.
+
+        ``slug`` is forwarded to ``expose_port``: omit it for a random one.
+        """
         if self.sandboxes is None:
             raise NeevAIError("Cannot get a URL on a sandbox handle with no client context.")
         return await self.sandboxes.get_port_url(
@@ -738,6 +797,33 @@ class AsyncSandbox:
             wait_until_ready=wait_until_ready,
             timeout_ms=timeout_ms,
             poll_interval_ms=poll_interval_ms,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+            slug=slug,
+        )
+
+    async def audit(
+        self,
+        *,
+        from_: str | None = None,
+        to: str | None = None,
+        cursor: str | None = None,
+        limit: int | None = None,
+    ) -> AuditTrail:
+        """Reads one page of this sandbox's command audit trail, newest first.
+
+        Pass the previous page's ``next_cursor`` as ``cursor`` to read older records.
+        """
+        if self.sandboxes is None:
+            raise NeevAIError(
+                "Cannot read the audit trail of a sandbox handle with no client context."
+            )
+        return await self.sandboxes.audit(
+            self.id,
+            from_=from_,
+            to=to,
+            cursor=cursor,
+            limit=limit,
             org_id=self.scope.org_id if self.scope else None,
             project_id=self.scope.project_id if self.scope else None,
         )
@@ -799,7 +885,7 @@ class AsyncSandbox:
         while True:
             if on_poll is not None:
                 on_poll(self)
-            if self.phase == "Ready":
+            if self.phase == "Ready" and self.addressable:
                 return self
             if self.phase == "Paused":
                 raise NeevAIError(

@@ -351,3 +351,31 @@ async def test_async_files_stat_and_watch():
     assert events[0].type == "write"
     assert events[0].entry is not None and events[0].entry.name == "f.txt"
     await conn.aclose()
+
+
+def test_runtime_error_carries_reason_code_as_code():
+    transport = RuntimeTransport(
+        connect_url="https://sbx.example.com",
+        api_key="test",
+        timeout_ms=5000,
+        client=httpx.Client(transport=ExecStreamMockTransport([])),
+    )
+    with pytest.raises(NotFoundError) as exc:
+        transport.request("GET", "/v1/nonexistent")
+    assert exc.value.code == "not_found"
+    assert "missing" in str(exc.value)
+
+
+def test_exec_stream_error_frame_carries_reason_code_as_code():
+    frames = [{"type": "error", "reason_code": "permission_denied", "message": "denied"}]
+    conn = SandboxConnection(
+        connect_url="https://sbx.example.com",
+        api_key="test",
+        timeout_ms=5000,
+        client=httpx.Client(transport=ExecStreamMockTransport(frames)),
+    )
+    with pytest.raises(PermissionDeniedError) as exc:
+        list(conn.exec_stream("whoami"))
+    assert exc.value.code == "permission_denied"
+    assert "denied" in str(exc.value)
+    conn.close()

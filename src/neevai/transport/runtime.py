@@ -112,6 +112,40 @@ class RuntimeTransport:
 
             raise APIConnectionError("Failed to reach the sandbox runtime during stream") from e
 
+    def stream_bytes(
+        self,
+        method: str,
+        path: str,
+        headers: dict[str, str] | None = None,
+        body: Any | None = None,
+    ) -> Generator[bytes, None, None]:
+        """Streams the raw response body in chunks, without buffering it whole."""
+        url = f"{self.connect_url}/{path.lstrip('/')}"
+        req_headers = self._auth_headers()
+        if headers:
+            req_headers.update(headers)
+
+        try:
+            with self.client.stream(
+                method=method,
+                url=url,
+                headers=req_headers,
+                json=body,
+                timeout=self.timeout,
+            ) as response:
+                if not response.is_success:
+                    response.read()
+                    raise self._runtime_error(response)
+                yield from response.iter_bytes()
+        except httpx.TimeoutException as e:
+            from neevai.errors import APITimeoutError
+
+            raise APITimeoutError("Sandbox runtime request timed out during stream") from e
+        except httpx.RequestError as e:
+            from neevai.errors import APIConnectionError
+
+            raise APIConnectionError("Failed to reach the sandbox runtime during stream") from e
+
     def _runtime_error(self, response: httpx.Response) -> Exception:
         text = response.text
         body = None
@@ -119,14 +153,11 @@ class RuntimeTransport:
             try:
                 parsed = response.json()
                 body = {
-                    "error": parsed.get("reason_code", ""),
-                    "details": parsed.get("message", ""),
+                    "code": parsed.get("reason_code", ""),
+                    "message": parsed.get("message", ""),
                 }
             except ValueError:
-                body = {
-                    "error": "",
-                    "details": text,
-                }
+                body = {"details": text}
         request_id = response.headers.get("x-request-id")
         return error_from_status(response.status_code, body, request_id)
 
@@ -236,6 +267,41 @@ class AsyncRuntimeTransport:
 
             raise APIConnectionError("Failed to reach the sandbox runtime during stream") from e
 
+    async def stream_bytes(
+        self,
+        method: str,
+        path: str,
+        headers: dict[str, str] | None = None,
+        body: Any | None = None,
+    ) -> AsyncGenerator[bytes, None]:
+        """Streams the raw response body in chunks, without buffering it whole."""
+        url = f"{self.connect_url}/{path.lstrip('/')}"
+        req_headers = self._auth_headers()
+        if headers:
+            req_headers.update(headers)
+
+        try:
+            async with self.client.stream(
+                method=method,
+                url=url,
+                headers=req_headers,
+                json=body,
+                timeout=self.timeout,
+            ) as response:
+                if not response.is_success:
+                    await response.aread()
+                    raise self._runtime_error(response)
+                async for chunk in response.aiter_bytes():
+                    yield chunk
+        except httpx.TimeoutException as e:
+            from neevai.errors import APITimeoutError
+
+            raise APITimeoutError("Sandbox runtime request timed out during stream") from e
+        except httpx.RequestError as e:
+            from neevai.errors import APIConnectionError
+
+            raise APIConnectionError("Failed to reach the sandbox runtime during stream") from e
+
     def _runtime_error(self, response: httpx.Response) -> Exception:
         text = response.text
         body = None
@@ -243,13 +309,10 @@ class AsyncRuntimeTransport:
             try:
                 parsed = response.json()
                 body = {
-                    "error": parsed.get("reason_code", ""),
-                    "details": parsed.get("message", ""),
+                    "code": parsed.get("reason_code", ""),
+                    "message": parsed.get("message", ""),
                 }
             except ValueError:
-                body = {
-                    "error": "",
-                    "details": text,
-                }
+                body = {"details": text}
         request_id = response.headers.get("x-request-id")
         return error_from_status(response.status_code, body, request_id)

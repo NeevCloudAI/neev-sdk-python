@@ -269,9 +269,19 @@ Key points:
   accepts requests before `exec`, `files`, or `processes`.
 - `sandbox.pause()` and `sandbox.resume()` return updated `Sandbox` handles (they do
   not return `None`).
-- Always call `wait_until_ready()` before runtime operations; for supervised
-  processes, also probe with `sandbox.processes.list()` (see
-  [Supervised processes](#supervised-processes)).
+- Always call `wait_until_ready()` before runtime operations: it waits for
+  `phase == "Ready"` and for the sandbox to be addressable, which a new sandbox
+  briefly is not. For supervised processes, also probe with
+  `sandbox.processes.list()` (see [Supervised processes](#supervised-processes)).
+- Sandboxes and agents can be fetched by name as well as by id:
+  `client.sandboxes.get("my-sandbox")`.
+- `sandbox.files.write` sends content up to 1 MiB in one request and anything
+  larger in resumable chunks; `files.upload_file` / `files.download_file` move
+  local files without holding them in memory. See
+  [`upload_download.py`](../examples/upload_download.py).
+- Errors carry a machine-readable `code` (for example `not_found` or
+  `sandbox_quota_exceeded`); branch on it rather than on the message. See
+  [Errors](./api-inventory.md#errors).
 
 **Examples:** [`sandbox_lifecycle.py`](../examples/sandbox_lifecycle.py),
 [`files_api.py`](../examples/files_api.py)
@@ -348,7 +358,8 @@ long-running workers, log streaming, and process pools. Before calling
 
 1. Poll `sandbox.refresh()` until `connect_url` is set (may appear before
    `phase == "Ready"`).
-2. Call `sandbox.wait_until_ready()` until `phase == "Ready"`.
+2. Call `sandbox.wait_until_ready()` until `phase == "Ready"` and the sandbox is
+   addressable.
 3. Probe the sandbox runtime with `sandbox.processes.list()` — retry transient
    `502` / `503` / `504` until the sandbox accepts requests.
 

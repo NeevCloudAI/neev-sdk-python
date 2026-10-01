@@ -7,10 +7,19 @@ from typing import TYPE_CHECKING, Any
 
 from neevai._egress import build_egress, prepare_update_body
 from neevai._parse import coerce_model, coerce_params
+from neevai.generated.aiagent import SandboxPortList
+from neevai.resources.sandboxes import (
+    DEFAULT_PORT_POLL_INTERVAL_MS,
+    DEFAULT_PORT_WAIT_TIMEOUT_MS,
+    _await_for_preview_url,
+    _wait_for_preview_url,
+)
 from neevai.types import (
     AgentData,
     AgentListResponse,
+    AuditTrail,
     CreateAgentParams,
+    SandboxPort,
     UpdateAgentParams,
 )
 
@@ -150,7 +159,10 @@ class Agents:
         org_id: str | None = None,
         project_id: str | None = None,
     ) -> Agent:
-        """Retrieves details of a specific agent."""
+        """Retrieves details of a specific agent by its id or its name.
+
+        Names are unique within a project, so either identifies one agent.
+        """
         from neevai.handles.agent import Agent
 
         scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
@@ -168,11 +180,15 @@ class Agents:
         allow_internet: bool | None = None,
         allow_egress: builtins.list[str] | None = None,
     ) -> Agent:
-        """Updates mutable agent fields (``resources`` and/or ``egress``) in place.
+        """Updates mutable agent fields (resources, egress, idle window) in place.
 
         ``allow_internet=True`` opens all egress (0.0.0.0/0 and ::/0); ``allow_egress``
         allows specific hosts (FQDN or CIDR). An explicit ``egress`` in ``params`` takes
-        precedence over both. At least one of ``resources`` or ``egress`` must result.
+        precedence over both. ``egress_add`` / ``egress_remove`` edit the existing
+        allow-list in place instead (removals apply first) and cannot be combined with
+        ``egress`` or the convenience flags. ``idle_timeout_seconds`` sets the idle
+        window; 0 removes the limit. At least one of ``resources``, ``egress``,
+        ``egress_add``, ``egress_remove`` or ``idle_timeout_seconds`` must result.
         """
         from neevai.handles.agent import Agent
 
@@ -225,6 +241,140 @@ class Agents:
         raw = self._client._transport.request("POST", f"{_agents_path(scope)}/{id}/resume")
         data = coerce_model(AgentData, raw)
         return Agent(self, data, scope)
+
+    def keepalive(
+        self,
+        id: str,
+        org_id: str | None = None,
+        project_id: str | None = None,
+    ) -> Agent:
+        """Resets an agent's idle timer, keeping a busy agent running.
+
+        Call it periodically while work is in progress, for example once per agent turn.
+        """
+        from neevai.handles.agent import Agent
+
+        scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
+        raw = self._client._transport.request("POST", f"{_agents_path(scope)}/{id}/keepalive")
+        data = coerce_model(AgentData, raw)
+        return Agent(self, data, scope)
+
+    def rollback(
+        self,
+        id: str,
+        snapshot_id: str,
+        org_id: str | None = None,
+        project_id: str | None = None,
+    ) -> Agent:
+        """Rolls an agent's backing sandbox back in place to a snapshot.
+
+        The snapshot must belong to a sandbox in the same project.
+        """
+        from neevai.handles.agent import Agent
+
+        scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
+        raw = self._client._transport.request(
+            "POST",
+            f"{_agents_path(scope)}/{id}/rollback",
+            body={"snapshot_id": snapshot_id},
+        )
+        data = coerce_model(AgentData, raw)
+        return Agent(self, data, scope)
+
+    def audit(
+        self,
+        id: str,
+        *,
+        from_: str | None = None,
+        to: str | None = None,
+        cursor: str | None = None,
+        limit: int | None = None,
+        org_id: str | None = None,
+        project_id: str | None = None,
+    ) -> AuditTrail:
+        """Reads one page of the command audit trail for an agent.
+
+        Same shape and recording rules as the sandbox trail, newest first. The
+        response's ``sandbox_id`` is the sandbox backing the agent, not the agent id.
+        Pass the previous page's ``next_cursor`` as ``cursor`` to read older records.
+        """
+        scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
+        query: dict[str, Any] = {}
+        if from_ is not None:
+            query["from"] = from_
+        if to is not None:
+            query["to"] = to
+        if cursor is not None:
+            query["cursor"] = cursor
+        if limit is not None:
+            query["limit"] = limit
+
+        raw = self._client._transport.request(
+            "GET", f"{_agents_path(scope)}/{id}/audit", query=query
+        )
+        return coerce_model(AuditTrail, raw)
+
+    def expose_port(
+        self,
+        id: str,
+        port: int,
+        org_id: str | None = None,
+        project_id: str | None = None,
+        *,
+        slug: str | None = None,
+    ) -> SandboxPort:
+        """Exposes an agent port for credential-free preview URLs and returns it with its URL.
+
+        The URL needs no credential: its slug is the only thing gating it, so treat it
+        as a secret. Omit ``slug`` and a random, unguessable one is generated. Passing a
+        different ``slug`` (8 lowercase letters/digits) for an already exposed port
+        replaces it and breaks the previous URL — use that to rotate a leaked URL.
+        """
+        scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
+        body: dict[str, Any] = {"port": port}
+        if slug is not None:
+            body["slug"] = slug
+        raw = self._client._transport.request(
+            "POST", f"{_agents_path(scope)}/{id}/ports", body=body
+        )
+        return coerce_model(SandboxPort, raw)
+
+    def list_ports(
+        self, id: str, org_id: str | None = None, project_id: str | None = None
+    ) -> builtins.list[SandboxPort]:
+        """Lists the ports currently exposed for this agent's preview URLs."""
+        scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
+        raw = self._client._transport.request("GET", f"{_agents_path(scope)}/{id}/ports")
+        return coerce_model(SandboxPortList, raw).ports
+
+    def revoke_port(
+        self, id: str, port: int, org_id: str | None = None, project_id: str | None = None
+    ) -> None:
+        """Revokes a previously exposed agent preview port (revoking an unexposed port is a no-op)."""
+        scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
+        self._client._transport.request("DELETE", f"{_agents_path(scope)}/{id}/ports/{port}")
+
+    def get_port_url(
+        self,
+        id: str,
+        port: int,
+        wait_until_ready: bool = True,
+        timeout_ms: int = DEFAULT_PORT_WAIT_TIMEOUT_MS,
+        poll_interval_ms: int = DEFAULT_PORT_POLL_INTERVAL_MS,
+        org_id: str | None = None,
+        project_id: str | None = None,
+        *,
+        slug: str | None = None,
+    ) -> str:
+        """Exposes an agent port and returns its preview URL, waiting until it is routable by default.
+
+        ``slug`` is forwarded to ``expose_port``: omit it for a random one.
+        """
+        exposed = self.expose_port(id, port, org_id=org_id, project_id=project_id, slug=slug)
+        if not wait_until_ready:
+            return exposed.preview_url
+        _wait_for_preview_url(exposed.preview_url, timeout_ms, poll_interval_ms)
+        return exposed.preview_url
 
 
 class AsyncAgents:
@@ -308,7 +458,10 @@ class AsyncAgents:
         org_id: str | None = None,
         project_id: str | None = None,
     ) -> AsyncAgent:
-        """Retrieves details of a specific agent asynchronously."""
+        """Retrieves details of a specific agent by its id or its name asynchronously.
+
+        Names are unique within a project, so either identifies one agent.
+        """
         from neevai.handles.agent import AsyncAgent
 
         scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
@@ -326,11 +479,15 @@ class AsyncAgents:
         allow_internet: bool | None = None,
         allow_egress: builtins.list[str] | None = None,
     ) -> AsyncAgent:
-        """Updates mutable agent fields (``resources`` and/or ``egress``) in place asynchronously.
+        """Updates mutable agent fields (resources, egress, idle window) in place asynchronously.
 
         ``allow_internet=True`` opens all egress (0.0.0.0/0 and ::/0); ``allow_egress``
         allows specific hosts (FQDN or CIDR). An explicit ``egress`` in ``params`` takes
-        precedence over both. At least one of ``resources`` or ``egress`` must result.
+        precedence over both. ``egress_add`` / ``egress_remove`` edit the existing
+        allow-list in place instead (removals apply first) and cannot be combined with
+        ``egress`` or the convenience flags. ``idle_timeout_seconds`` sets the idle
+        window; 0 removes the limit. At least one of ``resources``, ``egress``,
+        ``egress_add``, ``egress_remove`` or ``idle_timeout_seconds`` must result.
         """
         from neevai.handles.agent import AsyncAgent
 
@@ -383,3 +540,137 @@ class AsyncAgents:
         raw = await self._client._transport.request("POST", f"{_agents_path(scope)}/{id}/resume")
         data = coerce_model(AgentData, raw)
         return AsyncAgent(self, data, scope)
+
+    async def keepalive(
+        self,
+        id: str,
+        org_id: str | None = None,
+        project_id: str | None = None,
+    ) -> AsyncAgent:
+        """Resets an agent's idle timer, keeping a busy agent running asynchronously.
+
+        Call it periodically while work is in progress, for example once per agent turn.
+        """
+        from neevai.handles.agent import AsyncAgent
+
+        scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
+        raw = await self._client._transport.request("POST", f"{_agents_path(scope)}/{id}/keepalive")
+        data = coerce_model(AgentData, raw)
+        return AsyncAgent(self, data, scope)
+
+    async def rollback(
+        self,
+        id: str,
+        snapshot_id: str,
+        org_id: str | None = None,
+        project_id: str | None = None,
+    ) -> AsyncAgent:
+        """Rolls an agent's backing sandbox back in place to a snapshot asynchronously.
+
+        The snapshot must belong to a sandbox in the same project.
+        """
+        from neevai.handles.agent import AsyncAgent
+
+        scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
+        raw = await self._client._transport.request(
+            "POST",
+            f"{_agents_path(scope)}/{id}/rollback",
+            body={"snapshot_id": snapshot_id},
+        )
+        data = coerce_model(AgentData, raw)
+        return AsyncAgent(self, data, scope)
+
+    async def audit(
+        self,
+        id: str,
+        *,
+        from_: str | None = None,
+        to: str | None = None,
+        cursor: str | None = None,
+        limit: int | None = None,
+        org_id: str | None = None,
+        project_id: str | None = None,
+    ) -> AuditTrail:
+        """Reads one page of the command audit trail for an agent asynchronously.
+
+        Same shape and recording rules as the sandbox trail, newest first. The
+        response's ``sandbox_id`` is the sandbox backing the agent, not the agent id.
+        Pass the previous page's ``next_cursor`` as ``cursor`` to read older records.
+        """
+        scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
+        query: dict[str, Any] = {}
+        if from_ is not None:
+            query["from"] = from_
+        if to is not None:
+            query["to"] = to
+        if cursor is not None:
+            query["cursor"] = cursor
+        if limit is not None:
+            query["limit"] = limit
+
+        raw = await self._client._transport.request(
+            "GET", f"{_agents_path(scope)}/{id}/audit", query=query
+        )
+        return coerce_model(AuditTrail, raw)
+
+    async def expose_port(
+        self,
+        id: str,
+        port: int,
+        org_id: str | None = None,
+        project_id: str | None = None,
+        *,
+        slug: str | None = None,
+    ) -> SandboxPort:
+        """Exposes an agent port for credential-free preview URLs and returns it with its URL.
+
+        The URL needs no credential: its slug is the only thing gating it, so treat it
+        as a secret. Omit ``slug`` and a random, unguessable one is generated. Passing a
+        different ``slug`` (8 lowercase letters/digits) for an already exposed port
+        replaces it and breaks the previous URL — use that to rotate a leaked URL.
+        """
+        scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
+        body: dict[str, Any] = {"port": port}
+        if slug is not None:
+            body["slug"] = slug
+        raw = await self._client._transport.request(
+            "POST", f"{_agents_path(scope)}/{id}/ports", body=body
+        )
+        return coerce_model(SandboxPort, raw)
+
+    async def list_ports(
+        self, id: str, org_id: str | None = None, project_id: str | None = None
+    ) -> builtins.list[SandboxPort]:
+        """Lists the ports currently exposed for this agent's preview URLs."""
+        scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
+        raw = await self._client._transport.request("GET", f"{_agents_path(scope)}/{id}/ports")
+        return coerce_model(SandboxPortList, raw).ports
+
+    async def revoke_port(
+        self, id: str, port: int, org_id: str | None = None, project_id: str | None = None
+    ) -> None:
+        """Revokes a previously exposed agent preview port (revoking an unexposed port is a no-op)."""
+        scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
+        await self._client._transport.request("DELETE", f"{_agents_path(scope)}/{id}/ports/{port}")
+
+    async def get_port_url(
+        self,
+        id: str,
+        port: int,
+        wait_until_ready: bool = True,
+        timeout_ms: int = DEFAULT_PORT_WAIT_TIMEOUT_MS,
+        poll_interval_ms: int = DEFAULT_PORT_POLL_INTERVAL_MS,
+        org_id: str | None = None,
+        project_id: str | None = None,
+        *,
+        slug: str | None = None,
+    ) -> str:
+        """Exposes an agent port and returns its preview URL, waiting until it is routable by default.
+
+        ``slug`` is forwarded to ``expose_port``: omit it for a random one.
+        """
+        exposed = await self.expose_port(id, port, org_id=org_id, project_id=project_id, slug=slug)
+        if not wait_until_ready:
+            return exposed.preview_url
+        await _await_for_preview_url(exposed.preview_url, timeout_ms, poll_interval_ms)
+        return exposed.preview_url

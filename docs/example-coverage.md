@@ -27,6 +27,10 @@ path and run commands, see [`examples/README.md`](../examples/README.md).
 | `client.sandboxes.update_timeout` / `sandbox.update_timeout` | `sandbox_lifecycle_windows.py` | `sandbox.update_timeout({"idle_timeout_seconds": 300, "max_lifetime_seconds": 0})` |
 | `client.sandboxes.delete` | `sandbox_lifecycle_controller.py` | `client.sandboxes.delete(sandbox_id)` |
 | `client.sandboxes.metrics` | `sandbox_lifecycle_controller.py` | `metrics = client.sandboxes.metrics(sandbox_id)` |
+| `client.sandboxes.audit` / `sandbox.audit` | `audit_trail.py` | `trail = sandbox.audit(limit=20)` — then `cursor=trail.next_cursor` |
+| `client.sandboxes.update` (`egress_add` / `egress_remove`) | `update_resize_egress.py` | `sandbox.update({"egress_add": {"allow": [{"host": "pypi.org"}]}})` |
+| `sandbox.expose_port` / `.list_ports` / `.revoke_port` / `.get_url` | `preview_ports.py` | `url = sandbox.get_url(3000)`; `sandbox.expose_port(3000, slug=new_slug)` rotates it |
+| `sandbox.addressable` | — | `sandbox.addressable` — `wait_until_ready()` waits for it |
 | `client.sandboxes.create_snapshot` | `snapshot_fork_restore.py` (via `sandbox.snapshot`) | `pending = sandbox.snapshot({"name": "demo-snap"})` |
 | `client.sandboxes.get_snapshot` | `snapshot_fork_restore.py` | `snap = client.sandboxes.get_snapshot(snapshot_id)` |
 | `client.sandboxes.delete_snapshot` | `snapshot_fork_restore.py` | `client.sandboxes.delete_snapshot(snapshot_id)` |
@@ -42,6 +46,11 @@ path and run commands, see [`examples/README.md`](../examples/README.md).
 | `client.agents.update` | `create_agent.py` | `agent = client.agents.update(agent.id, {"resources": {...}})` |
 | `client.agents.pause` / `.resume` | — | `agent = client.agents.pause(agent_id)` / `client.agents.resume(agent_id)` |
 | `client.agents.delete` | `create_agent.py` | `client.agents.delete(agent_id)` |
+| `client.agents.keepalive` / `agent.keepalive` | `agent_ports_audit.py` | `agent.keepalive()` |
+| `client.agents.rollback` / `agent.rollback` | — | `agent.rollback(snapshot_id)` |
+| `agent.expose_port` / `.list_ports` / `.revoke_port` / `.get_url` | `agent_ports_audit.py` | `port = agent.expose_port(3000, slug=random_slug())` |
+| `client.agents.audit` / `agent.audit` | `agent_ports_audit.py` | `trail = agent.audit(limit=20)` |
+| `agent.idle_timeout_seconds` | `agent_ports_audit.py` | `print(agent.idle_timeout_seconds)` |
 | `client.agent_templates.list` | `create_agent.py` | `page = client.agent_templates.list()` |
 | `client.agent_templates.get` | — | `tpl = client.agent_templates.get(template_id)` |
 | `agent.wait_until_ready` | `create_agent.py` | `agent.wait_until_ready(timeout_ms=120_000)` |
@@ -70,6 +79,9 @@ path and run commands, see [`examples/README.md`](../examples/README.md).
 | `sandbox.files.read` | `agent_patterns/utils/agent_loop.py` | `data = sandbox.files.read("path.txt")` |
 | `sandbox.files.read_text` | `files_api.py`, `snapshot_fork_restore.py` | `text = sandbox.files.read_text("demo/message.txt")` |
 | `sandbox.files.list` | `files_api.py` | `entries = sandbox.files.list("demo", recursive=True)` |
+| `sandbox.files.upload_file` | `upload_download.py` | `sandbox.files.upload_file(source, "payload.bin", on_progress=show_progress)` |
+| `sandbox.files.upload` | — | `sandbox.files.upload("big.bin", data, chunk_size=512 << 10)` — `write()` uses it above 1 MiB |
+| `sandbox.files.download_file` | `upload_download.py` | `sandbox.files.download_file("payload.bin", copy)` → `{"bytes_written": n}` |
 | `sandbox.metrics` | `sandbox_lifecycle.py`, `sandbox_metrics.py` | `metrics = sandbox.metrics()` |
 | `sandbox.pause` | `sandbox_lifecycle.py` | `sandbox.pause()` |
 | `sandbox.delete` | all examples that create sandboxes | `sandbox.delete()` / `await sandbox.delete()` |
@@ -91,6 +103,11 @@ path and run commands, see [`examples/README.md`](../examples/README.md).
 | Snapshot fork & restore | `examples/snapshot_fork_restore.py` | Write state → snapshot → modify → `restore` create → fork → cleanup |
 | Async workflow | `examples/async_sandbox.py` | `AsyncNeevAI` create → wait → exec → delete |
 | Files API | `examples/files_api.py` | Write, read_text, list (recursive) |
+| Upload & download | `examples/upload_download.py` | Chunked `upload_file` with progress → `download_file` → compare sizes |
+| Preview ports | `examples/preview_ports.py` | Serve a port → `get_url` → `list_ports` → rotate the slug → `revoke_port` |
+| Resize & egress edits | `examples/update_resize_egress.py` | Resize + re-scope egress in one update → `egress_add` / `egress_remove` |
+| Audit trail | `examples/audit_trail.py` | Run commands → page through `sandbox.audit()` |
+| Agent ports & audit | `examples/agent_ports_audit.py` | Agent preview port with slug → rotate → `keepalive` → `audit` → revoke |
 | Streaming exec | `examples/streaming_exec.py` | `exec_stream` with progress output |
 | Processes lifecycle | `examples/processes.py` | Create → connect_url wait → Ready → runtime probe → start → follow → logs → list → kill → wait |
 | Process pool | `examples/process_pool.py` | Create → connect_url wait → Ready → runtime probe → parallel start → list → kill_all → wait |

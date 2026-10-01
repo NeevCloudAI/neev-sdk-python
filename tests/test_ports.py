@@ -131,3 +131,60 @@ async def test_async_get_url_no_wait(async_mock_transport):
     url = await sb.get_url(8080, wait_until_ready=False)
     assert url.startswith("https://8080-")
     await client.aclose()
+
+
+def test_expose_port_returns_a_slug_and_keeps_it_when_omitted(mock_transport):
+    client = _client(mock_transport)
+    sb = _new_sandbox(client)
+    first = sb.expose_port(8080)
+    assert len(first.slug) == 8
+    assert first.slug in first.preview_url
+    assert sb.expose_port(8080).slug == first.slug
+    client.close()
+
+
+def test_expose_port_with_a_new_slug_rotates_the_url(mock_transport):
+    client = _client(mock_transport)
+    sb = _new_sandbox(client)
+    old = sb.expose_port(8080)
+    rotated = sb.expose_port(8080, slug="rot8te00")
+    assert rotated.slug == "rot8te00"
+    assert rotated.preview_url != old.preview_url
+    assert [p.slug for p in sb.list_ports()] == ["rot8te00"]
+    client.close()
+
+
+def test_slug_is_sent_only_when_given(mock_transport):
+    client = _client(mock_transport)
+    sb = _new_sandbox(client)
+    bodies: list = []
+    original = client._transport.request
+
+    def capturing(method, path, query=None, body=None):
+        bodies.append(body)
+        return original(method, path, query=query, body=body)
+
+    client._transport.request = capturing  # type: ignore[method-assign]
+    client.sandboxes.expose_port(sb.id, 8080)
+    client.sandboxes.expose_port(sb.id, 8080, slug="abcd1234")
+    sb.get_url(8080, wait_until_ready=False, slug="efgh5678")
+    assert bodies == [
+        {"port": 8080},
+        {"port": 8080, "slug": "abcd1234"},
+        {"port": 8080, "slug": "efgh5678"},
+    ]
+    client.close()
+
+
+@pytest.mark.asyncio
+async def test_async_expose_port_and_get_url_forward_slug(async_mock_transport):
+    client = AsyncNeevAI(
+        api_key="test", org_id="org1", project_id="proj1", client=async_mock_transport
+    )
+    sb = await client.sandboxes.create(
+        {"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"}
+    )
+    assert (await sb.expose_port(8080, slug="abcd1234")).slug == "abcd1234"
+    url = await sb.get_url(8080, wait_until_ready=False, slug="efgh5678")
+    assert "efgh5678" in url
+    await client.aclose()

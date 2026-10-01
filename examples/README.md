@@ -108,13 +108,18 @@ uses the **platform agents API** — not the model-driven patterns in Tier 2.
 | [`create_agent.py`](./create_agent.py) | `agent_templates.list`, `agents.create`, `wait_until_ready`, `sandbox()`, `update`, `pause`, `delete` | `uv run python examples/create_agent.py` |
 | [`sandbox_lifecycle.py`](./sandbox_lifecycle.py) | `sandboxes.create`, `wait_until_ready`, `metrics`, `pause`, `delete` | `uv run python examples/sandbox_lifecycle.py` |
 | [`sandbox_update.py`](./sandbox_update.py) | `sandboxes.update` / `sandbox.update` — in-place resize, then live egress re-scope via `allow_egress` | `uv run python examples/sandbox_update.py` |
+| [`update_resize_egress.py`](./update_resize_egress.py) | `sandbox.update` — resize + re-scope egress in one call, then `egress_add` / `egress_remove` to edit the allow-list in place | `uv run python examples/update_resize_egress.py` |
+| [`e2e_live_update.py`](./e2e_live_update.py) | Live PASS/FAIL check of a combined resize + egress `update` against the real API | `uv run python examples/e2e_live_update.py` |
 | [`sandbox_lifecycle_windows.py`](./sandbox_lifecycle_windows.py) | `create` with `lifecycle`, `keepalive` loop, `update_timeout` (change + clear windows) | `uv run python examples/sandbox_lifecycle_windows.py` |
 | [`last_crash.py`](./last_crash.py) | `sandbox.last_crash` — force an OOM, poll for the crash, check `storage_reset` against a marker file | `uv run python examples/last_crash.py` |
 | [`byoi_create.py`](./byoi_create.py) | BYOI `create` with `image` + `command`, `wait_until_ready`, `exec`, `delete` | `uv run python examples/byoi_create.py` |
 | [`snapshot_fork_restore.py`](./snapshot_fork_restore.py) | `snapshot`, `get_snapshot`, `create` with `restore`, `fork`, `delete_snapshot` | `uv run python examples/snapshot_fork_restore.py` |
 | [`async_sandbox.py`](./async_sandbox.py) | `AsyncNeevAI`, `sandboxes.create`, `wait_until_ready`, `exec`, `delete` | `uv run python examples/async_sandbox.py` |
 | [`files_api.py`](./files_api.py) | `files.write`, `read_text`, `list(recursive=True)` | `uv run python examples/files_api.py` |
-| [`preview_ports.py`](./preview_ports.py) | `get_url(port)` — serve on a port, get its preview URL, `list_ports`, `revoke_port` | `uv run python examples/preview_ports.py` |
+| [`preview_ports.py`](./preview_ports.py) | `get_url(port)` — serve on a port, get its preview URL, rotate its slug, `list_ports`, `revoke_port` | `uv run python examples/preview_ports.py` |
+| [`upload_download.py`](./upload_download.py) | `files.upload_file` with progress, `files.download_file`, compare sizes | `uv run python examples/upload_download.py` |
+| [`audit_trail.py`](./audit_trail.py) | `sandbox.audit()` — run commands, then page through the audit trail | `uv run python examples/audit_trail.py` |
+| [`agent_ports_audit.py`](./agent_ports_audit.py) | Agent `expose_port(slug=...)`, `keepalive`, `audit` | `uv run python examples/agent_ports_audit.py` |
 | [`pty.py`](./pty.py) | `pty.create(...)` — interactive PTY over WebSocket: `on_data`, `send_input`, `wait` | `uv run python examples/pty.py` |
 | [`ssh_tunnel.py`](./ssh_tunnel.py) | `sandbox.ssh()` over a BYOI image — exec, `rsync` upload, and `ssh -L` port-forward through one tunnel | `uv run python examples/ssh_tunnel.py` |
 | [`streaming_exec.py`](./streaming_exec.py) | `exec_stream` — stdout/stderr streamed line-by-line | `uv run python examples/streaming_exec.py` |
@@ -327,7 +332,7 @@ uv run python examples/workflow_examples/browser_agent.py --query "AI"
 
 ## Notes
 
-- Sandbox file paths are **workspace-relative** — the sandbox rejects absolute paths.
+- Sandbox file paths are relative to the workspace or absolute within it — the sandbox refuses paths outside it.
 - Standard minimal templates ship `sh` only (no `bash`, no `python3`); `sh -c`
   works on every template. `run_python` needs a python-capable template.
 - Python examples call `wait_until_ready()` explicitly before `exec` / `exec_stream`

@@ -11,7 +11,7 @@ Restore pattern
 
 This example recovers by creating a new sandbox with ``restore`` rather than
 calling ``sandbox.rollback()`` in place. In-place rollback is available on the
-SDK but may leave an empty workspace on some backends; ``restore`` on create
+SDK but can come back with an empty workspace; ``restore`` on create
 is the reliable pattern demonstrated here.
 
 Prerequisites

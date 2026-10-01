@@ -8,9 +8,9 @@ tree, and deletes the sandbox.
 Workspace paths
 ---------------
 
-All file paths are **workspace-relative** (for example ``demo/hello.txt``).
-The sandbox runtime rejects absolute paths — use paths relative to the workspace
-root, not ``/tmp/...`` or ``/home/...``.
+File paths are relative to the workspace (for example ``demo/hello.txt``) or
+absolute within it. A path outside the workspace, such as ``/tmp/...`` or
+``/home/...``, is refused by the sandbox.
 
 Prerequisites
 -------------
