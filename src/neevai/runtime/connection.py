@@ -1,7 +1,9 @@
+import os
 from collections.abc import AsyncIterator, Iterator
 
 import httpx
 
+from neevai.runtime import _upload
 from neevai.runtime._stream import (
     _aiter_exec_stream_events,
     _aiter_watch_events,
@@ -9,6 +11,7 @@ from neevai.runtime._stream import (
     _iter_watch_events,
     _prepare_argv,
 )
+from neevai.runtime._upload import ProgressCallback, UploadData
 from neevai.runtime.schemas import (
     FileEntryResponse,
     FileExistsResponse,
@@ -57,10 +60,19 @@ class SandboxFiles:
         self._conn = connection
 
     def write(self, path: str, content: str | bytes, cwd: str | None = None) -> dict[str, int]:
-        """Writes data to a file in the sandbox, returning the bytes written."""
+        """Writes data to a file in the sandbox, returning the bytes written.
+
+        Paths may be relative to the workspace or absolute within it. Content larger
+        than 1 MiB, more than one request carries, is sent with ``upload`` in chunks.
+        """
         if isinstance(content, str):
             content = content.encode("utf-8")
+        if len(content) > _upload.SINGLE_WRITE_MAX_BYTES:
+            return self.upload(path, content, cwd=cwd)
+        return self._write_once(path, content, cwd)
 
+    def _write_once(self, path: str, content: bytes, cwd: str | None) -> dict[str, int]:
+        """Writes ``content`` in a single request."""
         response = self._conn._transport.request(
             method="POST",
             path="/v1/files/write",
@@ -70,6 +82,59 @@ class SandboxFiles:
         )
         parsed = FileWriteResponse.model_validate(response.json())
         return {"bytes_written": parsed.bytes_written}
+
+    def upload(
+        self,
+        path: str,
+        data: UploadData,
+        *,
+        chunk_size: int | None = None,
+        cwd: str | None = None,
+        on_progress: ProgressCallback | None = None,
+    ) -> dict[str, int]:
+        """Uploads a file of any size in chunks, returning the bytes written.
+
+        ``data`` is bytes, str (UTF-8), or a seekable binary file object, which is read
+        one chunk at a time and never held whole in memory. ``chunk_size`` is 1 MiB by
+        default (the most one request can carry) and may be 64 KiB to 1 MiB. A chunk lost to a dropped connection or a
+        brief outage resumes from the last byte the sandbox received.
+        ``on_progress(bytes_sent, total_bytes)`` is called after each accepted chunk.
+        A failed upload is discarded on the sandbox before the error is raised.
+        """
+        return _upload.upload(
+            self._conn._transport, self._write_once, path, data, chunk_size, cwd, on_progress
+        )
+
+    def upload_file(
+        self,
+        local_path: str | os.PathLike[str],
+        remote_path: str,
+        *,
+        chunk_size: int | None = None,
+        cwd: str | None = None,
+        on_progress: ProgressCallback | None = None,
+    ) -> dict[str, int]:
+        """Uploads a local file to ``remote_path`` in chunks (see ``upload``)."""
+        with open(os.fspath(local_path), "rb") as handle:
+            return self.upload(
+                remote_path, handle, chunk_size=chunk_size, cwd=cwd, on_progress=on_progress
+            )
+
+    def download_file(
+        self,
+        remote_path: str,
+        local_path: str | os.PathLike[str],
+        *,
+        cwd: str | None = None,
+    ) -> dict[str, int]:
+        """Streams a sandbox file to a local path and returns ``{"bytes_written": n}``.
+
+        The file is written beside ``local_path`` and moved into place once complete,
+        so a failed download leaves no partial file.
+        """
+        return {
+            "bytes_written": _upload.download(self._conn._transport, remote_path, local_path, cwd)
+        }
 
     def read(self, path: str, cwd: str | None = None) -> bytes:
         """Reads a file from the sandbox and returns its raw binary bytes."""
@@ -264,10 +329,19 @@ class AsyncSandboxFiles:
     async def write(
         self, path: str, content: str | bytes, cwd: str | None = None
     ) -> dict[str, int]:
-        """Writes data to a file asynchronously, returning the bytes written."""
+        """Writes data to a file asynchronously, returning the bytes written.
+
+        Paths may be relative to the workspace or absolute within it. Content larger
+        than 1 MiB, more than one request carries, is sent with ``upload`` in chunks.
+        """
         if isinstance(content, str):
             content = content.encode("utf-8")
+        if len(content) > _upload.SINGLE_WRITE_MAX_BYTES:
+            return await self.upload(path, content, cwd=cwd)
+        return await self._write_once(path, content, cwd)
 
+    async def _write_once(self, path: str, content: bytes, cwd: str | None) -> dict[str, int]:
+        """Writes ``content`` in a single request."""
         response = await self._conn._transport.request(
             method="POST",
             path="/v1/files/write",
@@ -277,6 +351,46 @@ class AsyncSandboxFiles:
         )
         parsed = FileWriteResponse.model_validate(response.json())
         return {"bytes_written": parsed.bytes_written}
+
+    async def upload(
+        self,
+        path: str,
+        data: UploadData,
+        *,
+        chunk_size: int | None = None,
+        cwd: str | None = None,
+        on_progress: ProgressCallback | None = None,
+    ) -> dict[str, int]:
+        """Uploads a file of any size in chunks asynchronously (see ``SandboxFiles.upload``)."""
+        return await _upload.aupload(
+            self._conn._transport, self._write_once, path, data, chunk_size, cwd, on_progress
+        )
+
+    async def upload_file(
+        self,
+        local_path: str | os.PathLike[str],
+        remote_path: str,
+        *,
+        chunk_size: int | None = None,
+        cwd: str | None = None,
+        on_progress: ProgressCallback | None = None,
+    ) -> dict[str, int]:
+        """Uploads a local file to ``remote_path`` in chunks asynchronously."""
+        with open(os.fspath(local_path), "rb") as handle:
+            return await self.upload(
+                remote_path, handle, chunk_size=chunk_size, cwd=cwd, on_progress=on_progress
+            )
+
+    async def download_file(
+        self,
+        remote_path: str,
+        local_path: str | os.PathLike[str],
+        *,
+        cwd: str | None = None,
+    ) -> dict[str, int]:
+        """Streams a sandbox file to a local path asynchronously; no partial file on failure."""
+        written = await _upload.adownload(self._conn._transport, remote_path, local_path, cwd)
+        return {"bytes_written": written}
 
     async def read(self, path: str, cwd: str | None = None) -> bytes:
         """Reads a file asynchronously, returning its raw binary bytes."""

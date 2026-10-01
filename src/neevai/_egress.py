@@ -19,9 +19,9 @@ def build_egress(
 ) -> dict[str, Any] | None:
     """Map the ``allow_internet`` / ``allow_egress`` convenience to an egress policy.
 
-    ``allow_internet`` emits BOTH the ``allow_internet`` gate AND explicit ``0.0.0.0/0``
-    and ``::/0`` routes, because the gate alone is a server-side no-op — the routes are
-    what actually open egress. ``allow_egress`` allows specific hosts (FQDN or CIDR).
+    ``allow_internet`` sets the ``allow_internet`` flag and also lists ``0.0.0.0/0`` and
+    ``::/0`` as allowed hosts, so all outbound traffic is allowed. ``allow_egress`` allows
+    specific hosts (FQDN or CIDR).
     Returns ``None`` when neither is set, so the platform/template default applies.
     """
     if not allow_internet and not allow_egress:
@@ -46,7 +46,9 @@ def prepare_update_body(
     Applies the ``allow_internet`` / ``allow_egress`` convenience (unless an explicit
     ``egress`` is already set), validates against ``param_type``, and serialises with
     ``mode="json"`` so the egress policy is byte-identical to what ``create`` sends.
-    Raises before any request when neither ``resources`` nor ``egress`` is present.
+    Raises before any request when the body is empty, or when a full ``egress``
+    replacement (explicit or from the convenience) is combined with ``egress_add`` /
+    ``egress_remove``, which edit the existing allow-list instead.
     """
     if isinstance(params, Mapping):
         raw: dict[str, Any] = dict(params)
@@ -58,8 +60,16 @@ def prepare_update_body(
             raw["egress"] = egress
     body = coerce_params(param_type, raw).model_dump(mode="json", exclude_unset=True)
     if not body:
+        fields = ", ".join(f"`{name}`" for name in param_type.model_fields)
         raise NeevAIError(
-            f"{param_type.__name__} must include at least one of `resources` or `egress`; "
+            f"{param_type.__name__} must include at least one of {fields}; "
             "empty body is not allowed."
+        )
+    if body.get("egress") is not None and (
+        body.get("egress_add") is not None or body.get("egress_remove") is not None
+    ):
+        raise NeevAIError(
+            "`egress` replaces the whole policy and cannot be combined with `egress_add` or "
+            "`egress_remove`; `allow_internet` / `allow_egress` set `egress` too."
         )
     return body

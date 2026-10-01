@@ -19,7 +19,7 @@ For install and first scripts, see [`getting-started.md`](./getting-started.md).
 ## Lifecycle
 
 Lifecycle APIs manage sandboxes, agents, agent templates, and sandbox
-templates via the platform gateway. All sync symbols have async counterparts
+templates through the Neev API. All sync symbols have async counterparts
 (`AsyncNeevAI`, `AsyncSandboxes`, `AsyncAgents`, etc.) — add `await` and use
 `async with` / `aclose()` where noted.
 
@@ -38,14 +38,17 @@ Details: [`api-inventory.md` → Client](./api-inventory.md#client)
 | ------ | ------- | ------- |
 | `create(params, org_id=None, project_id=None, *, allow_internet=None, allow_egress=None)` | `Sandbox` | Creates a new sandbox. `allow_internet=True` / `allow_egress=[...]` open egress (deny-all by default; explicit `egress` wins). Optional `restore` in params provisions from a snapshot. |
 | `list(page=None, limit=None, org_id=None, project_id=None)` | `SandboxPage` | Lists sandboxes with pagination in the resolved org/project scope. |
-| `get(id, org_id=None, project_id=None)` | `Sandbox` | Fetches the current record for a sandbox by ID. |
-| `update(id, params, org_id=None, project_id=None, *, allow_internet=None, allow_egress=None)` | `Sandbox` | In-place update of `resources` (cpu/memory) and/or `egress`. Resize keeps the ID/name/preview URLs and does not restart; `disk_gb` is not resizable and the server rejects a change. `allow_internet` / `allow_egress` are the same egress convenience as `create`. Rejects `{}` locally, naming both fields. |
-| `pause(id, org_id=None, project_id=None)` | `Sandbox` | Scales a sandbox to 0 replicas (Paused state). Sends an empty body; a pause always captures full state, so a resume picks up where it left off. |
-| `resume(id, org_id=None, project_id=None)` | `Sandbox` | Scales a sandbox back to 1 replica toward Ready. |
+| `get(id, org_id=None, project_id=None)` | `Sandbox` | Fetches the current record for a sandbox by ID or name. |
+| `update(id, params, org_id=None, project_id=None, *, allow_internet=None, allow_egress=None)` | `Sandbox` | In-place update of `resources` (cpu/memory) and/or `egress`. Resize keeps the ID/name/preview URLs and does not restart; `disk_gb` is not resizable and the server rejects a change. `allow_internet` / `allow_egress` are the same egress convenience as `create`. `egress_add` / `egress_remove` edit the allow-list in place (not combinable with `egress`). Rejects `{}` locally, naming every field. |
+| `pause(id, org_id=None, project_id=None)` | `Sandbox` | Stops a sandbox and keeps its state (Paused). Sends an empty body; a pause always captures full state, so a resume picks up where it left off. |
+| `resume(id, org_id=None, project_id=None)` | `Sandbox` | Starts a paused sandbox again, toward Ready. |
 | `keepalive(id, org_id=None, project_id=None)` | `Sandbox` | Resets the sandbox's idle timer (POST `.../keepalive`). |
 | `update_timeout(id, params, org_id=None, project_id=None)` | `Sandbox` | Changes idle/lifetime windows (PUT `.../timeout`); only the windows passed change, `0` turns one off. |
 | `delete(id, org_id=None, project_id=None)` | `None` | Permanently deletes a sandbox. |
 | `metrics(id, from_=None, to=None, step=None, ...)` | `SandboxMetricsResponse` | Queries live health metrics over an optional time range. |
+| `audit(id, *, from_=None, to=None, cursor=None, limit=None, ...)` | `AuditTrail` | One page of the command audit trail, newest first; page with `next_cursor`. |
+| `expose_port(id, port, ..., *, slug=None)` / `list_ports(id)` / `revoke_port(id, port)` | `SandboxPort` / `list[SandboxPort]` / `None` | Preview ports. A new `slug` on an exposed port rotates its URL. |
+| `get_port_url(id, port, wait_until_ready=True, ..., *, slug=None)` | `str` | Exposes a port and returns its preview URL once routable. |
 | `create_snapshot(id, params=None, ...)` | `Snapshot` | Creates a filesystem snapshot (returns immediately with status Pending). |
 | `list_snapshots(id, page=None, limit=None, ...)` | `list[Snapshot]` | Lists snapshots for a sandbox (unwraps pagination items). |
 | `get_snapshot(snapshot_id, ...)` | `Snapshot` | Fetches snapshot metadata by project-scoped ID. |
@@ -73,8 +76,8 @@ restored = client.sandboxes.create({
 restored.wait_until_ready()
 ```
 
-In-place `sandbox.rollback(snapshot_id)` is also available but may leave an empty
-workspace on some backends. See
+In-place `sandbox.rollback(snapshot_id)` is also available but can come back with an
+empty workspace. See
 [`snapshot_fork_restore.py`](../examples/snapshot_fork_restore.py).
 
 ### `client.templates`
@@ -82,7 +85,7 @@ workspace on some backends. See
 | Method | Returns | Summary |
 | ------ | ------- | ------- |
 | `list(page=None, limit=None)` | `TemplatePage` | Lists available sandbox templates with pagination. |
-| `get(template_id)` | `SandboxTemplate` | Fetches a single sandbox template by ID. |
+| `get(template_id)` | `SandboxTemplate` | Fetches a single sandbox template by ID. Templates carry an optional display `icon`. |
 
 ### `client.agents`
 
@@ -90,8 +93,11 @@ workspace on some backends. See
 | ------ | ------- | ------- |
 | `create(params, org_id=None, project_id=None, *, allow_internet=None, allow_egress=None)` | `Agent` | Creates an agent from a catalogue template name (`agent_template`). `allow_internet=True` / `allow_egress=[...]` open egress (deny-all by default; explicit `egress` wins). |
 | `list(page=None, limit=None, org_id=None, project_id=None)` | `AgentPage` | Lists agents with pagination in the resolved org/project scope. |
-| `get(id, org_id=None, project_id=None)` | `Agent` | Fetches the current record for an agent by ID. |
-| `update(id, params, org_id=None, project_id=None, *, allow_internet=None, allow_egress=None)` | `Agent` | In-place update of egress and/or cpu/memory (`resources`; defaults & bounds in [Agent resources](./api-inventory.md#agent-resources)). `allow_internet` / `allow_egress` are the same egress convenience as `create`. Rejects `{}` locally, naming both fields. |
+| `get(id, org_id=None, project_id=None)` | `Agent` | Fetches the current record for an agent by ID or name. |
+| `update(id, params, org_id=None, project_id=None, *, allow_internet=None, allow_egress=None)` | `Agent` | In-place update of egress, cpu/memory (`resources`; defaults & bounds in [Agent resources](./api-inventory.md#agent-resources)) and `idle_timeout_seconds`. `allow_internet` / `allow_egress` are the same egress convenience as `create`; `egress_add` / `egress_remove` edit the allow-list in place. Rejects `{}` locally, naming every field. |
+| `keepalive(id, ...)` / `rollback(id, snapshot_id, ...)` | `Agent` | Resets the idle timer / rolls the backing sandbox back to a snapshot. |
+| `expose_port` / `list_ports` / `revoke_port` / `get_port_url` | as on `client.sandboxes` | Agent preview ports, same signatures. |
+| `audit(id, *, from_=None, to=None, cursor=None, limit=None, ...)` | `AuditTrail` | The agent's command audit trail. |
 | `pause(id, org_id=None, project_id=None)` | `Agent` | Pauses the agent and its backing sandbox. |
 | `resume(id, org_id=None, project_id=None)` | `Agent` | Resumes a paused agent. |
 | `delete(id, org_id=None, project_id=None)` | `None` | Permanently deletes an agent (HTTP 204, no body). |
@@ -115,16 +121,18 @@ Returned by `create()`, `get()`, `list().items`, etc.
 
 | API | Kind |
 | --- | ---- |
-| `id`, `name`, `phase`, `replicas`, `connect_url`, `last_crash`, `data` | properties |
+| `id`, `name`, `phase`, `replicas`, `connect_url`, `addressable`, `last_crash`, `data` | properties |
 | `refresh()` | method |
-| `update(params, *, allow_internet=None, allow_egress=None)` | method — in-place resize / egress re-scope; updates state in place |
-| `wait_until_ready(timeout_ms=120000, ...)` | method — polls the API until `Ready` |
+| `update(params, *, allow_internet=None, allow_egress=None)` | method — in-place resize / egress re-scope (`egress_add` / `egress_remove` edit the allow-list); updates state in place |
+| `wait_until_ready(timeout_ms=120000, ...)` | method — polls the API until `Ready` and addressable |
 | `pause()` / `resume()` | methods |
 | `keepalive()` / `update_timeout(params)` | methods — reset idle timer / change lifecycle windows |
 | `snapshot(params=None)` / `snapshots()` | methods |
 | `rollback(snapshot_id)` / `fork(name)` | methods |
 | `delete()` | method |
 | `metrics(from_=None, to=None, step=None)` | method |
+| `audit(*, from_=None, to=None, cursor=None, limit=None)` | method |
+| `expose_port(port, *, slug=None)` / `list_ports()` / `revoke_port(port)` / `get_url(port, ..., *, slug=None)` | methods — preview ports |
 | `to_json()` | method |
 
 ### Agent handle (lifecycle)
@@ -133,10 +141,12 @@ Returned by `client.agents.create()`, `get()`, `list().items`, etc.
 
 | API | Kind |
 | --- | ---- |
-| `id`, `name`, `status`, `sandbox_id`, `agent_template_id`, `config`, `last_crash`, `data` | properties |
-| `refresh()` / `update(params)` | methods |
+| `id`, `name`, `status`, `sandbox_id`, `agent_template_id`, `config`, `last_crash`, `idle_timeout_seconds`, `data` | properties |
+| `refresh()` / `update(params, *, allow_internet=None, allow_egress=None)` | methods |
 | `wait_until_ready(timeout_ms=120000, poll_interval_ms=2000, on_poll=None)` | method — polls until `Ready`; fails fast on `Failed` / `Paused` |
 | `pause()` / `resume()` / `delete()` | methods |
+| `keepalive()` / `rollback(snapshot_id)` / `audit(...)` | methods |
+| `expose_port(port, *, slug=None)` / `list_ports()` / `revoke_port(port)` / `get_url(port, ..., *, slug=None)` | methods — preview ports |
 | `sandbox()` | method — backing `Sandbox` handle for runtime `exec`, `files`, and `processes` |
 | `to_json()` | method |
 
@@ -191,10 +201,19 @@ Details: [`api-inventory.md` → Processes API](./api-inventory.md#processes-api
 
 | Method | Returns | Summary |
 | ------ | ------- | ------- |
-| `write(path, content, cwd=None)` | `dict` (`bytes_written`) | Writes string or bytes to a sandbox file path. |
+| `write(path, content, cwd=None)` | `dict` (`bytes_written`) | Writes string or bytes to a sandbox file path; over 1 MiB goes through `upload`. |
+| `upload(path, data, *, chunk_size=None, cwd=None, on_progress=None)` | `dict` (`bytes_written`) | Chunked, resumable upload of bytes, str, or a seekable file object. |
+| `upload_file(local_path, remote_path, *, chunk_size=None, cwd=None, on_progress=None)` | `dict` (`bytes_written`) | Uploads a local file with `upload`. |
+| `download_file(remote_path, local_path, *, cwd=None)` | `{"bytes_written": int}` | Streams a sandbox file to disk; no partial file on failure. |
 | `read(path, cwd=None)` | `bytes` | Reads a sandbox file and returns raw binary content. |
 | `read_text(path, cwd=None)` | `str` | Reads a sandbox file and decodes it as UTF-8 text. |
 | `list(path, cwd=None, recursive=False, max_count=None)` | `list[FileEntry]` | Lists directory entries at a path, optionally recursive. |
+| `stat(path, cwd=None)` / `exists(path, cwd=None)` | `FileEntry` / `bool` | Metadata for one path / whether it exists. |
+| `mkdir(path, cwd=None)` / `move(source, destination, cwd=None)` / `remove(path, cwd=None, recursive=False)` | `FileEntry` / `FileEntry` / `None` | Create a directory, move or rename, delete. |
+| `watch(path, cwd=None, recursive=False, timeout_ms=None)` | `Iterator[WatchEvent]` | Streams filesystem change events. |
+
+Paths are relative to the workspace or absolute within it; a path outside the
+workspace is refused.
 
 ### Low-level connection types
 
@@ -225,12 +244,15 @@ Minimal one-liners for each public API. Runnable examples link to repo paths.
 | `client.sandboxes.list(...)` | `page = client.sandboxes.list(name="web", status="Paused")` | `page = await client.sandboxes.list(name="web", status="Paused")` | [sandbox_lifecycle_controller.py](../examples/sandbox_lifecycle_controller.py) |
 | `client.sandboxes.get(id)` | `sandbox = client.sandboxes.get(sandbox_id)` | `sandbox = await client.sandboxes.get(sandbox_id)` | [sandbox_lifecycle_controller.py](../examples/sandbox_lifecycle_controller.py) |
 | `client.sandboxes.update(id, params, *, allow_internet, allow_egress)` | `client.sandboxes.update(id, {"resources": {"cpu": 2}})` | `await client.sandboxes.update(id, {"resources": {"cpu": 2}})` | [sandbox_update.py](../examples/sandbox_update.py) |
+| `client.sandboxes.update(id, {"egress_add": ...})` | `client.sandboxes.update(id, {"egress_add": {"allow": [{"host": "pypi.org"}]}})` | `await client.sandboxes.update(id, {"egress_remove": {"allow": [{"host": "pypi.org"}]}})` | [update_resize_egress.py](../examples/update_resize_egress.py) |
 | `client.sandboxes.pause(id)` | `sandbox = client.sandboxes.pause(sandbox_id)` | `sandbox = await client.sandboxes.pause(sandbox_id)` | [sandbox_lifecycle_controller.py](../examples/sandbox_lifecycle_controller.py) |
 | `client.sandboxes.resume(id)` | `sandbox = client.sandboxes.resume(sandbox_id)` | `sandbox = await client.sandboxes.resume(sandbox_id)` | [sandbox_lifecycle_controller.py](../examples/sandbox_lifecycle_controller.py) |
 | `client.sandboxes.keepalive(id)` | `client.sandboxes.keepalive(sandbox_id)` | `await client.sandboxes.keepalive(sandbox_id)` | [sandbox_lifecycle_windows.py](../examples/sandbox_lifecycle_windows.py) |
 | `client.sandboxes.update_timeout(id, params)` | `client.sandboxes.update_timeout(sandbox_id, {"idle_timeout_seconds": 300})` | `await client.sandboxes.update_timeout(sandbox_id, {"idle_timeout_seconds": 300})` | [sandbox_lifecycle_windows.py](../examples/sandbox_lifecycle_windows.py) |
 | `client.sandboxes.delete(id)` | `client.sandboxes.delete(sandbox_id)` | `await client.sandboxes.delete(sandbox_id)` | [sandbox_lifecycle_controller.py](../examples/sandbox_lifecycle_controller.py) |
 | `client.sandboxes.metrics(id, ...)` | `metrics = client.sandboxes.metrics(sandbox_id)` | `metrics = await client.sandboxes.metrics(sandbox_id)` | [sandbox_lifecycle_controller.py](../examples/sandbox_lifecycle_controller.py) |
+| `client.sandboxes.audit(id, ...)` | `trail = client.sandboxes.audit(sandbox_id, limit=50)` | `trail = await client.sandboxes.audit(sandbox_id, limit=50)` | [audit_trail.py](../examples/audit_trail.py) |
+| `client.sandboxes.expose_port(id, port, ..., *, slug)` | `p = client.sandboxes.expose_port(sandbox_id, 3000)` | `p = await client.sandboxes.expose_port(sandbox_id, 3000)` | [preview_ports.py](../examples/preview_ports.py) |
 | `client.sandboxes.create_snapshot(id, ...)` | `snap = client.sandboxes.create_snapshot(sb.id, {"name": "demo"})` | `snap = await client.sandboxes.create_snapshot(sb.id, {"name": "demo"})` | [snapshot_fork_restore.py](../examples/snapshot_fork_restore.py) (via `sandbox.snapshot`) |
 | `client.sandboxes.list_snapshots(id)` | `snaps = client.sandboxes.list_snapshots(sb.id)` | `snaps = await client.sandboxes.list_snapshots(sb.id)` | — |
 | `client.sandboxes.get_snapshot(id)` | `snap = client.sandboxes.get_snapshot(snap_id)` | `snap = await client.sandboxes.get_snapshot(snap_id)` | [snapshot_fork_restore.py](../examples/snapshot_fork_restore.py) |
@@ -245,6 +267,10 @@ Minimal one-liners for each public API. Runnable examples link to repo paths.
 | `client.agents.update(id, params)` | `agent = client.agents.update(id, {"resources": {...}})` | `agent = await client.agents.update(id, {...})` | [create_agent.py](../examples/create_agent.py) |
 | `client.agents.pause(id)` / `.resume(id)` | `agent = client.agents.pause(agent_id)` / `client.agents.resume(agent_id)` | `agent = await client.agents.pause(agent_id)` / `await client.agents.resume(agent_id)` | [create_agent.py](../examples/create_agent.py) (pause via handle) |
 | `client.agents.delete(id)` | `client.agents.delete(agent_id)` | `await client.agents.delete(agent_id)` | [create_agent.py](../examples/create_agent.py) |
+| `client.agents.keepalive(id)` | `client.agents.keepalive(agent_id)` | `await client.agents.keepalive(agent_id)` | [agent_ports_audit.py](../examples/agent_ports_audit.py) |
+| `client.agents.rollback(id, snapshot_id)` | `client.agents.rollback(agent_id, snap_id)` | `await client.agents.rollback(agent_id, snap_id)` | — |
+| `client.agents.expose_port(id, port, ..., *, slug)` | `p = client.agents.expose_port(agent_id, 3000)` | `p = await client.agents.expose_port(agent_id, 3000)` | [agent_ports_audit.py](../examples/agent_ports_audit.py) |
+| `client.agents.audit(id, ...)` | `trail = client.agents.audit(agent_id, limit=50)` | `trail = await client.agents.audit(agent_id, limit=50)` | [agent_ports_audit.py](../examples/agent_ports_audit.py) |
 | `client.agent_templates.list(...)` | `page = client.agent_templates.list()` | `page = await client.agent_templates.list()` | [create_agent.py](../examples/create_agent.py) |
 | `client.agent_templates.get(id)` | `tpl = client.agent_templates.get(template_id)` | `tpl = await client.agent_templates.get(template_id)` | — |
 | `client.raw.request(...)` | `data = client.raw.request("GET", path, query={...})` | `data = await client.raw.request("GET", path, query={...})` | [raw_request.py](../examples/raw_request.py) |
@@ -264,7 +290,10 @@ Minimal one-liners for each public API. Runnable examples link to repo paths.
 | `sandbox.fork(name)` | `fork = sandbox.fork("fork-name")` | `fork = await sandbox.fork("fork-name")` | [snapshot_fork_restore.py](../examples/snapshot_fork_restore.py) |
 | `sandbox.delete()` | `sandbox.delete()` | `await sandbox.delete()` | [sandbox_lifecycle.py](../examples/sandbox_lifecycle.py) |
 | `sandbox.metrics(...)` | `metrics = sandbox.metrics()` | `metrics = await sandbox.metrics()` | [sandbox_metrics.py](../examples/sandbox_metrics.py) |
+| `sandbox.audit(...)` | `trail = sandbox.audit(limit=50)` | `trail = await sandbox.audit(limit=50)` | [audit_trail.py](../examples/audit_trail.py) |
+| `sandbox.addressable` | `print(sandbox.addressable)` | `print(sandbox.addressable)` | — |
 | `sandbox.expose_port(port)` | `p = sandbox.expose_port(8080)` | `p = await sandbox.expose_port(8080)` | [preview_ports.py](../examples/preview_ports.py) |
+| `sandbox.expose_port(port, slug=...)` | `p = sandbox.expose_port(8080, slug="k3x9q2ab")` (rotates the URL) | `p = await sandbox.expose_port(8080, slug="k3x9q2ab")` | [preview_ports.py](../examples/preview_ports.py) |
 | `sandbox.list_ports()` | `ports = sandbox.list_ports()` | `ports = await sandbox.list_ports()` | [preview_ports.py](../examples/preview_ports.py) |
 | `sandbox.revoke_port(port)` | `sandbox.revoke_port(8080)` | `await sandbox.revoke_port(8080)` | [preview_ports.py](../examples/preview_ports.py) |
 | `sandbox.get_url(port, ...)` | `url = sandbox.get_url(8080)` | `url = await sandbox.get_url(8080)` | [preview_ports.py](../examples/preview_ports.py) |
@@ -277,6 +306,10 @@ Minimal one-liners for each public API. Runnable examples link to repo paths.
 | `agent.sandbox()` | `sandbox = agent.sandbox()` — then `exec` / `files` / `processes` | `sandbox = await agent.sandbox()` | [create_agent.py](../examples/create_agent.py) |
 | `agent.update(params)` | `agent.update({"resources": {...}})` | `await agent.update({...})` | [create_agent.py](../examples/create_agent.py) |
 | `agent.pause()` / `.resume()` / `.delete()` | `agent.pause(); agent.resume(); agent.delete()` | `await agent.pause(); await agent.resume(); await agent.delete()` | [create_agent.py](../examples/create_agent.py) (pause/delete; resume via handle API) |
+| `agent.keepalive()` / `.rollback(snapshot_id)` | `agent.keepalive()` | `await agent.keepalive()` | [agent_ports_audit.py](../examples/agent_ports_audit.py) |
+| `agent.expose_port(port, *, slug)` / `.list_ports()` / `.revoke_port(port)` / `.get_url(port)` | `p = agent.expose_port(3000)` | `p = await agent.expose_port(3000)` | [agent_ports_audit.py](../examples/agent_ports_audit.py) |
+| `agent.audit(...)` | `trail = agent.audit(limit=50)` | `trail = await agent.audit(limit=50)` | [agent_ports_audit.py](../examples/agent_ports_audit.py) |
+| `agent.idle_timeout_seconds` | `print(agent.idle_timeout_seconds)` | same | — |
 | `agent.to_json()` | `agent.to_json()` | `agent.to_json()` | — |
 
 ### Runtime
@@ -295,6 +328,9 @@ Minimal one-liners for each public API. Runnable examples link to repo paths.
 | `sandbox.processes.kill(...)` | `proc.kill(signal=Signal.TERM)` | `await proc.kill(signal=Signal.TERM)` | [processes.py](../examples/processes.py) |
 | `sandbox.processes.kill_all(...)` | `count = sandbox.processes.kill_all()` | `count = await sandbox.processes.kill_all()` | [process_pool.py](../examples/process_pool.py) |
 | `sandbox.files.write(...)` | `sandbox.files.write("path.txt", "content")` | `await sandbox.files.write("path.txt", "content")` | [files_api.py](../examples/files_api.py), [snapshot_fork_restore.py](../examples/snapshot_fork_restore.py) |
+| `sandbox.files.upload(...)` | `sandbox.files.upload("big.bin", data, on_progress=cb)` | `await sandbox.files.upload("big.bin", data)` | [upload_download.py](../examples/upload_download.py) |
+| `sandbox.files.upload_file(...)` | `sandbox.files.upload_file("local.bin", "remote.bin")` | `await sandbox.files.upload_file("local.bin", "remote.bin")` | [upload_download.py](../examples/upload_download.py) |
+| `sandbox.files.download_file(...)` | `sandbox.files.download_file("remote.bin", "copy.bin")` | `await sandbox.files.download_file("remote.bin", "copy.bin")` | [upload_download.py](../examples/upload_download.py) |
 | `sandbox.files.read(...)` | `data = sandbox.files.read("path.txt")` | `data = await sandbox.files.read("path.txt")` | [agent_loop.py](../examples/agent_patterns/utils/agent_loop.py) |
 | `sandbox.files.read_text(...)` | `text = sandbox.files.read_text("path.txt")` | `text = await sandbox.files.read_text("path.txt")` | [files_api.py](../examples/files_api.py), [snapshot_fork_restore.py](../examples/snapshot_fork_restore.py) |
 | `sandbox.files.list(...)` | `entries = sandbox.files.list("dir", recursive=True)` | `entries = await sandbox.files.list("dir", recursive=True)` | [files_api.py](../examples/files_api.py) |

@@ -303,3 +303,47 @@ async def test_async_sandbox_handle_keepalive_and_update_timeout(async_mock_tran
     assert same is sb
     assert sb.data["idle_timeout_seconds"] == 42
     await client.aclose()
+
+
+def test_addressable_defaults_to_true_when_absent():
+    assert Sandbox(None, _sandbox_data()).addressable is True
+    assert Sandbox(None, _sandbox_data(addressable=False)).addressable is False
+
+
+def test_wait_until_ready_waits_until_addressable(monkeypatch):
+    states = iter([_sandbox_data(addressable=False), _sandbox_data(addressable=True)])
+    sb = Sandbox(None, _sandbox_data(addressable=False))
+    refreshes = {"count": 0}
+
+    def fake_refresh(self):
+        refreshes["count"] += 1
+        self._state = Sandbox(None, next(states))._state
+        return self
+
+    monkeypatch.setattr(Sandbox, "refresh", fake_refresh)
+    assert sb.wait_until_ready(timeout_ms=1_000, poll_interval_ms=1) is sb
+    assert sb.addressable is True
+    assert refreshes["count"] == 2
+
+
+def test_wait_until_ready_timeout_mentions_addressable(monkeypatch):
+    sb = Sandbox(None, _sandbox_data(addressable=False))
+    monkeypatch.setattr(Sandbox, "refresh", lambda self: self)
+    with pytest.raises(NeevAIError, match="addressable: False"):
+        sb.wait_until_ready(timeout_ms=5, poll_interval_ms=1)
+
+
+@pytest.mark.asyncio
+async def test_async_wait_until_ready_waits_until_addressable(monkeypatch):
+    from neevai.handles.sandbox import AsyncSandbox
+
+    states = iter([_sandbox_data(addressable=True)])
+    sb = AsyncSandbox(None, _sandbox_data(addressable=False))
+
+    async def fake_refresh(self):
+        self._state = AsyncSandbox(None, next(states))._state
+        return self
+
+    monkeypatch.setattr(AsyncSandbox, "refresh", fake_refresh)
+    assert await sb.wait_until_ready(timeout_ms=1_000, poll_interval_ms=1) is sb
+    assert sb.addressable is True

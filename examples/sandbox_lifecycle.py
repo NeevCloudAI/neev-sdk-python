@@ -28,10 +28,10 @@ Flow
 ----
 
 1. **Create** — call ``client.sandboxes.create`` with the template
-2. **Wait** — block on ``sandbox.wait_until_ready``, printing phase/replica
-   updates on each poll
+2. **Wait** — block on ``sandbox.wait_until_ready``, printing phase/replicas
+   on each poll
 3. **Metrics** — call ``sandbox.metrics()`` and list available metric series
-4. **Pause** — scale the sandbox to zero replicas via ``sandbox.pause()``
+4. **Pause** — stop the sandbox, keeping its state, via ``sandbox.pause()``
 5. **Delete** — remove the sandbox with ``sandbox.delete()``
 
 Stdout / stderr

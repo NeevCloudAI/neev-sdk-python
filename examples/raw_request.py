@@ -10,7 +10,7 @@ When to use raw.request
 ``client.raw.request(method, path)`` is an escape hatch for the API
 endpoints without typed SDK wrappers. It returns parsed JSON (or ``None`` for
 204 No Content). Prefer typed resources such as ``client.templates`` or
-``client.sandboxes`` when they exist; use ``raw.request`` for new or internal
+``client.sandboxes`` when they exist; use ``raw.request`` for new
 API paths, custom query parameters, or prototyping before wrappers land.
 
 Prerequisites

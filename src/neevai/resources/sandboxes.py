@@ -14,6 +14,7 @@ from neevai._parse import coerce_model, coerce_params
 from neevai.errors import NeevAIError
 from neevai.generated.aiagent import SandboxPortList
 from neevai.types import (
+    AuditTrail,
     CreateSandboxParams,
     CreateSnapshotParams,
     SandboxData,
@@ -33,7 +34,7 @@ DEFAULT_PORT_POLL_INTERVAL_MS = 2_000
 
 
 def _preview_url_reachable(url: str, timeout_ms: float) -> bool:
-    """Probes a preview URL; True once the gateway routes it (stops returning a 403/404)."""
+    """Probes a preview URL; True once it is reachable (stops returning a 403/404)."""
     try:
         resp = httpx.get(url, follow_redirects=False, timeout=timeout_ms / 1000.0)
     except (httpx.HTTPError, httpx.InvalidURL):
@@ -63,7 +64,7 @@ def _validate_wait_args(timeout_ms: int, poll_interval_ms: int) -> None:
 
 
 def _wait_for_preview_url(url: str, timeout_ms: int, poll_interval_ms: int) -> None:
-    """Polls a preview URL until the gateway routes it; raises on timeout."""
+    """Polls a preview URL until it is reachable; raises on timeout."""
     _validate_wait_args(timeout_ms, poll_interval_ms)
     deadline = (time.time() * 1000.0) + timeout_ms
     while True:
@@ -264,7 +265,10 @@ class Sandboxes:
         org_id: str | None = None,
         project_id: str | None = None,
     ) -> Sandbox:
-        """Retrieves details of a specific sandbox."""
+        """Retrieves details of a specific sandbox by its id or its name.
+
+        Names are unique within a project, so either identifies one sandbox.
+        """
         from neevai.handles.sandbox import Sandbox
 
         scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
@@ -284,15 +288,18 @@ class Sandboxes:
         allow_internet: bool | None = None,
         allow_egress: builtins.list[str] | None = None,
     ) -> Sandbox:
-        """Updates a running sandbox in place (``resources`` and/or ``egress``).
+        """Updates a running sandbox in place (``resources`` and/or egress).
 
         ``resources`` (cpu/memory) are resized on the running sandbox without a
         restart; ``disk_gb`` is not resizable in place and is rejected by the server if
         changed. ``egress`` replaces the policy in full and takes effect for new
         connections with no restart. ``allow_internet=True`` opens all egress
         (0.0.0.0/0 and ::/0); ``allow_egress`` allows specific hosts (FQDN or CIDR); an
-        explicit ``egress`` in ``params`` takes precedence. At least one of
-        ``resources`` or ``egress`` must result.
+        explicit ``egress`` in ``params`` takes precedence. ``egress_add`` /
+        ``egress_remove`` edit the existing allow-list in place instead, leaving other
+        rules untouched (removals apply first, so one call can swap a host); they cannot
+        be combined with ``egress`` or the convenience flags. At least one of
+        ``resources``, ``egress``, ``egress_add`` or ``egress_remove`` must result.
         """
         from neevai.handles.sandbox import Sandbox
 
@@ -312,7 +319,7 @@ class Sandboxes:
         org_id: str | None = None,
         project_id: str | None = None,
     ) -> Sandbox:
-        """Scales a sandbox to 0 replicas, putting it in Paused state."""
+        """Pauses a sandbox, keeping its state; its phase becomes Paused."""
         from neevai.handles.sandbox import Sandbox
 
         scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
@@ -328,7 +335,7 @@ class Sandboxes:
         org_id: str | None = None,
         project_id: str | None = None,
     ) -> Sandbox:
-        """Scales a sandbox back to 1 replica, moving it back towards Ready."""
+        """Resumes a paused sandbox, moving it back towards Ready."""
         from neevai.handles.sandbox import Sandbox
 
         scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
@@ -416,13 +423,65 @@ class Sandboxes:
         raw = self._client._transport.request("GET", path, query=query)
         return coerce_model(SandboxMetricsResponse, raw)
 
+    def audit(
+        self,
+        id: str,
+        *,
+        from_: str | None = None,
+        to: str | None = None,
+        cursor: str | None = None,
+        limit: int | None = None,
+        org_id: str | None = None,
+        project_id: str | None = None,
+    ) -> AuditTrail:
+        """Reads one page of the command audit trail for a sandbox.
+
+        Records what ran inside the sandbox, newest first: terminal commands, SSH,
+        process and file operations, each with the credential it ran under and how it
+        ended. Only program names are recorded, never their arguments. ``from_`` /
+        ``to`` (RFC3339) default to the last 24 hours; ``window_truncated`` is true when
+        ``from_`` reaches past the retained trail. Pass the previous page's
+        ``next_cursor`` as ``cursor`` to read older records; no ``next_cursor`` means
+        the window is exhausted.
+        """
+        scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
+        path = f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes/{id}/audit"
+
+        query: dict[str, Any] = {}
+        if from_ is not None:
+            query["from"] = from_
+        if to is not None:
+            query["to"] = to
+        if cursor is not None:
+            query["cursor"] = cursor
+        if limit is not None:
+            query["limit"] = limit
+
+        raw = self._client._transport.request("GET", path, query=query)
+        return coerce_model(AuditTrail, raw)
+
     def expose_port(
-        self, id: str, port: int, org_id: str | None = None, project_id: str | None = None
+        self,
+        id: str,
+        port: int,
+        org_id: str | None = None,
+        project_id: str | None = None,
+        *,
+        slug: str | None = None,
     ) -> SandboxPort:
-        """Exposes a port for credential-free preview URLs and returns it with its URL."""
+        """Exposes a port for credential-free preview URLs and returns it with its URL.
+
+        The URL needs no credential: its slug is the only thing gating it, so treat it
+        as a secret. Omit ``slug`` and a random, unguessable one is generated. Passing a
+        different ``slug`` (8 lowercase letters/digits) for an already exposed port
+        replaces it and breaks the previous URL — use that to rotate a leaked URL.
+        """
         scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
         path = f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes/{id}/ports"
-        raw = self._client._transport.request("POST", path, body={"port": port})
+        body: dict[str, Any] = {"port": port}
+        if slug is not None:
+            body["slug"] = slug
+        raw = self._client._transport.request("POST", path, body=body)
         return coerce_model(SandboxPort, raw)
 
     def list_ports(
@@ -454,9 +513,14 @@ class Sandboxes:
         poll_interval_ms: int = DEFAULT_PORT_POLL_INTERVAL_MS,
         org_id: str | None = None,
         project_id: str | None = None,
+        *,
+        slug: str | None = None,
     ) -> str:
-        """Exposes a port and returns its preview URL, waiting until it is routable by default."""
-        exposed = self.expose_port(id, port, org_id=org_id, project_id=project_id)
+        """Exposes a port and returns its preview URL, waiting until it is routable by default.
+
+        ``slug`` is forwarded to ``expose_port``: omit it for a random one.
+        """
+        exposed = self.expose_port(id, port, org_id=org_id, project_id=project_id, slug=slug)
         if not wait_until_ready:
             return exposed.preview_url
         _wait_for_preview_url(exposed.preview_url, timeout_ms, poll_interval_ms)
@@ -642,7 +706,10 @@ class AsyncSandboxes:
         org_id: str | None = None,
         project_id: str | None = None,
     ) -> AsyncSandbox:
-        """Retrieves details of a specific sandbox asynchronously."""
+        """Retrieves details of a specific sandbox by its id or its name asynchronously.
+
+        Names are unique within a project, so either identifies one sandbox.
+        """
         from neevai.handles.sandbox import AsyncSandbox
 
         scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
@@ -662,15 +729,18 @@ class AsyncSandboxes:
         allow_internet: bool | None = None,
         allow_egress: builtins.list[str] | None = None,
     ) -> AsyncSandbox:
-        """Updates a running sandbox in place (``resources`` and/or ``egress``) asynchronously.
+        """Updates a running sandbox in place (``resources`` and/or egress) asynchronously.
 
         ``resources`` (cpu/memory) are resized on the running sandbox without a
         restart; ``disk_gb`` is not resizable in place and is rejected by the server if
         changed. ``egress`` replaces the policy in full and takes effect for new
         connections with no restart. ``allow_internet=True`` opens all egress
         (0.0.0.0/0 and ::/0); ``allow_egress`` allows specific hosts (FQDN or CIDR); an
-        explicit ``egress`` in ``params`` takes precedence. At least one of
-        ``resources`` or ``egress`` must result.
+        explicit ``egress`` in ``params`` takes precedence. ``egress_add`` /
+        ``egress_remove`` edit the existing allow-list in place instead, leaving other
+        rules untouched (removals apply first, so one call can swap a host); they cannot
+        be combined with ``egress`` or the convenience flags. At least one of
+        ``resources``, ``egress``, ``egress_add`` or ``egress_remove`` must result.
         """
         from neevai.handles.sandbox import AsyncSandbox
 
@@ -690,7 +760,7 @@ class AsyncSandboxes:
         org_id: str | None = None,
         project_id: str | None = None,
     ) -> AsyncSandbox:
-        """Scales a sandbox to 0 replicas asynchronously."""
+        """Pauses a sandbox asynchronously, keeping its state."""
         from neevai.handles.sandbox import AsyncSandbox
 
         scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
@@ -706,7 +776,7 @@ class AsyncSandboxes:
         org_id: str | None = None,
         project_id: str | None = None,
     ) -> AsyncSandbox:
-        """Scales a sandbox back to 1 replica asynchronously."""
+        """Resumes a paused sandbox asynchronously."""
         from neevai.handles.sandbox import AsyncSandbox
 
         scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
@@ -794,13 +864,65 @@ class AsyncSandboxes:
         raw = await self._client._transport.request("GET", path, query=query)
         return coerce_model(SandboxMetricsResponse, raw)
 
+    async def audit(
+        self,
+        id: str,
+        *,
+        from_: str | None = None,
+        to: str | None = None,
+        cursor: str | None = None,
+        limit: int | None = None,
+        org_id: str | None = None,
+        project_id: str | None = None,
+    ) -> AuditTrail:
+        """Reads one page of the command audit trail for a sandbox asynchronously.
+
+        Records what ran inside the sandbox, newest first: terminal commands, SSH,
+        process and file operations, each with the credential it ran under and how it
+        ended. Only program names are recorded, never their arguments. ``from_`` /
+        ``to`` (RFC3339) default to the last 24 hours; ``window_truncated`` is true when
+        ``from_`` reaches past the retained trail. Pass the previous page's
+        ``next_cursor`` as ``cursor`` to read older records; no ``next_cursor`` means
+        the window is exhausted.
+        """
+        scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
+        path = f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes/{id}/audit"
+
+        query: dict[str, Any] = {}
+        if from_ is not None:
+            query["from"] = from_
+        if to is not None:
+            query["to"] = to
+        if cursor is not None:
+            query["cursor"] = cursor
+        if limit is not None:
+            query["limit"] = limit
+
+        raw = await self._client._transport.request("GET", path, query=query)
+        return coerce_model(AuditTrail, raw)
+
     async def expose_port(
-        self, id: str, port: int, org_id: str | None = None, project_id: str | None = None
+        self,
+        id: str,
+        port: int,
+        org_id: str | None = None,
+        project_id: str | None = None,
+        *,
+        slug: str | None = None,
     ) -> SandboxPort:
-        """Exposes a port for credential-free preview URLs and returns it with its URL."""
+        """Exposes a port for credential-free preview URLs and returns it with its URL.
+
+        The URL needs no credential: its slug is the only thing gating it, so treat it
+        as a secret. Omit ``slug`` and a random, unguessable one is generated. Passing a
+        different ``slug`` (8 lowercase letters/digits) for an already exposed port
+        replaces it and breaks the previous URL — use that to rotate a leaked URL.
+        """
         scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
         path = f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes/{id}/ports"
-        raw = await self._client._transport.request("POST", path, body={"port": port})
+        body: dict[str, Any] = {"port": port}
+        if slug is not None:
+            body["slug"] = slug
+        raw = await self._client._transport.request("POST", path, body=body)
         return coerce_model(SandboxPort, raw)
 
     async def list_ports(
@@ -832,9 +954,14 @@ class AsyncSandboxes:
         poll_interval_ms: int = DEFAULT_PORT_POLL_INTERVAL_MS,
         org_id: str | None = None,
         project_id: str | None = None,
+        *,
+        slug: str | None = None,
     ) -> str:
-        """Exposes a port and returns its preview URL, waiting until it is routable by default."""
-        exposed = await self.expose_port(id, port, org_id=org_id, project_id=project_id)
+        """Exposes a port and returns its preview URL, waiting until it is routable by default.
+
+        ``slug`` is forwarded to ``expose_port``: omit it for a random one.
+        """
+        exposed = await self.expose_port(id, port, org_id=org_id, project_id=project_id, slug=slug)
         if not wait_until_ready:
             return exposed.preview_url
         await _await_for_preview_url(exposed.preview_url, timeout_ms, poll_interval_ms)

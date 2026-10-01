@@ -1,9 +1,5 @@
 from typing import Any
 
-from pydantic import ValidationError as PydanticValidationError
-
-from neevai.generated.aiagent import ErrorResponse
-
 
 class NeevAIError(Exception):
     """Base exception for all errors raised by the NeevAI SDK."""
@@ -29,7 +25,13 @@ class APITimeoutError(APIConnectionError):
 
 
 class APIError(NeevAIError):
-    """Raised for any non-2xx HTTP response returned by the NeevAI API."""
+    """Raised for any non-2xx HTTP response returned by the NeevAI API.
+
+    ``code`` is the machine-readable classification of the failure (for example
+    ``not_found`` or ``sandbox_quota_exceeded``); branch on it rather than on the
+    message text, which may be reworded. ``scope`` names which limit was hit when a
+    quota refuses the request (for example ``organization`` or ``project``).
+    """
 
     def __init__(
         self,
@@ -42,9 +44,11 @@ class APIError(NeevAIError):
     ):
         self.status_code = status_code
         self.body = body
-        parsed = _parse_error_body(body)
-        self.code = parsed.error if parsed else (body.get("error") if body else None)
-        self.details = parsed.details if parsed else (body.get("details") if body else None)
+        self.code = _str_field(body, "code")
+        self.scope = _str_field(body, "scope")
+        # `message` carries the readable text; `error` is the older field with the same text.
+        self._text = _str_field(body, "message") or _str_field(body, "error")
+        self.details = _str_field(body, "details")
         self.request_id = request_id
         self.request_method = request_method
         self.request_url = request_url
@@ -54,15 +58,25 @@ class APIError(NeevAIError):
         parts = [f"HTTP {self.status_code}"]
         if self.code:
             parts.append(self.code)
+        if self._text:
+            parts.append(self._text)
         if self.details:
             parts.append(f"({self.details})")
-        elif self.body:
+        elif self.body and not (self.code or self._text):
             parts.append(f"(body: {self.body})")
         if self.request_method and self.request_url:
             parts.append(f"[{self.request_method} {self.request_url}]")
         if self.request_id:
             parts.append(f"[request-id: {self.request_id}]")
         return " ".join(parts)
+
+
+def _str_field(body: dict[str, Any] | None, key: str) -> str | None:
+    """Returns ``body[key]`` when it is a non-empty string, else ``None``."""
+    if not body:
+        return None
+    value = body.get(key)
+    return value if isinstance(value, str) and value else None
 
 
 class BadRequestError(APIError):
@@ -119,13 +133,10 @@ class InternalServerError(APIError):
     pass
 
 
-def _parse_error_body(body: dict[str, Any] | None) -> ErrorResponse | None:
-    if not body:
-        return None
-    try:
-        return ErrorResponse.model_validate(body)
-    except PydanticValidationError:
-        return None
+class ServiceUnavailableError(InternalServerError):
+    """503 - The service is temporarily unavailable; retry shortly."""
+
+    pass
 
 
 def error_from_status(
@@ -155,6 +166,8 @@ def error_from_status(
         return PreconditionFailedError(status_code, body, request_id, **kwargs)
     elif status_code == 429:
         return RateLimitError(status_code, body, request_id, **kwargs)
+    elif status_code == 503:
+        return ServiceUnavailableError(status_code, body, request_id, **kwargs)
     elif status_code == 504:
         return DeadlineExceededError(status_code, body, request_id, **kwargs)
     elif status_code >= 500:

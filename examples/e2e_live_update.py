@@ -1,18 +1,18 @@
 """
 LIVE end-to-end check for in-place resize + live egress update (sandbox).
 
-This is the criterion the mock suite cannot cover: it runs against the real
-backend and specifically exercises the **combined** ``resources + egress``
-PATCH that AIPLATFORM-1896 is about (a bundled update briefly reverting the new
-egress policy). It is a standalone script (not part of the mock pytest suite) so
-it only ever touches the backend when you run it deliberately.
+This is the check the mocked test suite cannot cover: it runs against the real
+Neev API and exercises a **combined** ``resources + egress`` update, verifying
+that the new egress policy takes effect and stays in effect. It is a standalone
+script (not part of the mocked pytest suite), so it only creates a real sandbox
+when you run it deliberately.
 
-Run it from a network that can actually reach the API (VPN / allow-listed host)::
+Run it with your project credentials::
 
-    NEEV_API_KEY=...            # key scoped for the AGENT/SANDBOX API
+    NEEV_API_KEY=...            # project API key
     NEEV_ORG_ID=org-...
     NEEV_PROJECT_ID=prj-...     # a real project id, distinct from the org id
-    NEEV_BASE_URL=https://api.dev.ai.neevcloud.com/agent
+    NEEV_BASE_URL=...           # optional; defaults to the public Neev API
     NEEV_SANDBOX_TEMPLATE_ID=sb-ubuntu-26-04-minimal   # optional
     uv run python examples/e2e_live_update.py
 
@@ -22,11 +22,11 @@ What it verifies
 ----------------
 1. One combined ``update(resources=…, allow_egress=…)`` emits exactly ONE PATCH
    to ``/sandboxes/{id}`` whose body carries both ``resources`` and ``egress``.
-2. ID, name, and preview-URL template are unchanged after the update.
+2. ID, name, and connect URL are unchanged after the update.
 3. The resize is reflected by a fresh ``get``.
-4. The new egress policy PERSISTS across repeated reads (the AIPLATFORM-1896
-   guard — a brief revert would be caught here).
-5. The sandbox does not restart: it stays ``Ready`` with ``replicas == 1`` and
+4. The new egress policy PERSISTS across repeated reads (a brief revert
+   would be caught here).
+5. The sandbox does not restart: it stays ``Ready`` and running and
    grows no new ``last_crash``.
 6. Real allow/deny behaviour from inside the sandbox: a connection to the
    allowed host succeeds and one to a non-allowed host fails (best-effort — only
@@ -43,7 +43,7 @@ from neevai import NeevAI
 from neevai.errors import NeevAIError
 
 TEMPLATE = os.environ.get("NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-minimal")
-REGION = os.environ.get("NEEV_REGION")  # optional; some backends require it at create
+REGION = os.environ.get("NEEV_REGION")  # optional region for create
 WAIT_TIMEOUT_MS = int(os.environ.get("NEEVAI_WAIT_TIMEOUT_MS", "300000"))
 ALLOWED_HOST = "api.github.com"
 BLOCKED_HOST = "example.com"
@@ -78,7 +78,7 @@ def main() -> int:
         sandbox = client.sandboxes.create(create_params)
         sandbox.wait_until_ready(timeout_ms=WAIT_TIMEOUT_MS)
         before_id, before_name = sandbox.id, sandbox.name
-        before_preview = sandbox.data.get("preview_url_template")
+        before_connect = sandbox.connect_url
         print(f"ready {before_id} (name={before_name})")
 
         # --- The combined single PATCH: resize AND re-scope egress at once ---
@@ -105,10 +105,7 @@ def main() -> int:
         # --- Identity is preserved ---
         check("id unchanged", sandbox.id == before_id)
         check("name unchanged", sandbox.name == before_name)
-        check(
-            "preview URL template unchanged",
-            sandbox.data.get("preview_url_template") == before_preview,
-        )
+        check("connect URL unchanged", sandbox.connect_url == before_connect)
 
         # --- Resize reflected by a fresh get ---
         got = client.sandboxes.get(before_id)
@@ -117,10 +114,10 @@ def main() -> int:
             "resize reflected by get", res.get("cpu") == 2 and res.get("memory_gb") == 4, str(res)
         )
 
-        # --- No restart: still Ready, replicas 1, no new crash ---
+        # --- No restart: still Ready and running, no new crash ---
         check("still Ready after update", got.phase == "Ready", got.phase)
         check(
-            "replicas still 1 (not paused/restarted)",
+            "still running (not paused or restarted)",
             got.data.get("replicas") == 1,
             str(got.data.get("replicas")),
         )
@@ -130,7 +127,7 @@ def main() -> int:
             str(got.data.get("last_crash")),
         )
 
-        # --- AIPLATFORM-1896 guard: egress must PERSIST, not briefly revert ---
+        # --- Egress must PERSIST, not briefly revert ---
         def egress_hosts(sb_data: dict) -> list[str]:
             eg = sb_data.get("egress") or {}
             return [r.get("host") for r in (eg.get("allow") or [])]
@@ -193,7 +190,7 @@ def main() -> int:
     if _failures:
         print(f"E2E FAILED — {len(_failures)} check(s): {_failures}")
         return 1
-    print("E2E PASSED — combined resize+egress verified against the live backend")
+    print("E2E PASSED — combined resize+egress verified against the live API")
     return 0
 
 

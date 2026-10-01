@@ -1,14 +1,15 @@
 """
 Create a sandbox scoped to GitHub egress, then update it in place: resize its
 cpu/memory and re-scope egress to Google in a single update() call (one PATCH
-carrying both), without recreating the sandbox or losing its id.
+carrying both), without recreating the sandbox or losing its id. Finally edit the
+allow-list in place with ``egress_add`` / ``egress_remove``, leaving the other rules
+untouched.
 
 Python equivalent of examples/update-resize-egress.ts in the JS SDK.
 
 Run with (targets the Neev API from your NEEV_* environment):
 
     NEEV_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=... \
-        NEEV_BASE_URL=https://aiagent.dev.ai.neevcloud.com \
         uv run python examples/update_resize_egress.py
 """
 
@@ -44,10 +45,20 @@ def main() -> None:
         "egress: github.com -> google.com"
     )
 
-    # A fresh get confirms the resize landed and the new egress policy is intact —
-    # the exact combined-PATCH path AIPLATFORM-1896 concerns (egress must not revert).
+    # A fresh get confirms the resize landed and the new egress policy is intact.
     fresh = neev.sandboxes.get(sandbox.id)
     print(f"confirmed resources: {fresh.data.get('resources')}, egress: {fresh.data.get('egress')}")
+
+    # Edit the allow-list in place: add PyPI on 443 only and drop Google, without
+    # restating the rest of the policy. Removals apply first, so one call can swap a
+    # host. These cannot be combined with a full `egress` or `allow_egress`.
+    sandbox.update(
+        {
+            "egress_add": {"allow": [{"host": "pypi.org", "ports": [443]}]},
+            "egress_remove": {"allow": [{"host": "google.com"}]},
+        }
+    )
+    print(f"edited egress in place: {sandbox.data.get('egress')}")
 
     sandbox.delete()
     print("cleaned up")

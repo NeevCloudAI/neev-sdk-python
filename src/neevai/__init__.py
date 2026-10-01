@@ -16,6 +16,7 @@ from neevai.errors import (
     PermissionDeniedError,
     PreconditionFailedError,
     RateLimitError,
+    ServiceUnavailableError,
 )
 from neevai.handles import Agent, AsyncAgent, AsyncSandbox, Sandbox
 from neevai.resources.agent_templates import (
@@ -42,11 +43,15 @@ from neevai.types import (
     AgentStatus,
     AgentTemplate,
     AgentTemplateListResponse,
+    AuditRecord,
+    AuditTrail,
     CreateAgentParams,
     CreateSnapshotParams,
     ProcessInfo,
     ProcessLogsPage,
     ProcessStatus,
+    SandboxEgressRule,
+    SandboxEgressRules,
     SandboxLastCrash,
     Scope,
     Signal,
@@ -80,6 +85,10 @@ __all__ = [
     "AgentTemplate",
     "AgentTemplateListResponse",
     "SandboxLastCrash",
+    "SandboxEgressRule",
+    "SandboxEgressRules",
+    "AuditRecord",
+    "AuditTrail",
     "SandboxConnection",
     "AsyncSandboxConnection",
     "SandboxFiles",
@@ -110,4 +119,5 @@ __all__ = [
     "RateLimitError",
     "DeadlineExceededError",
     "InternalServerError",
+    "ServiceUnavailableError",
 ]

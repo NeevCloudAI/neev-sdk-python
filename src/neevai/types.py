@@ -10,6 +10,8 @@ __all__ = [
     "AgentStatus",
     "AgentTemplate",
     "AgentTemplateListResponse",
+    "AuditRecord",
+    "AuditTrail",
     "CreateAgentParams",
     "CreateSandboxParams",
     "CreateSnapshotParams",
@@ -32,6 +34,8 @@ __all__ = [
     "RestoreSandboxRequest",
     "SandboxData",
     "SandboxEgressConfig",
+    "SandboxEgressRule",
+    "SandboxEgressRules",
     "SandboxLastCrash",
     "SandboxLifecycle",
     "SandboxListResponse",
@@ -74,6 +78,12 @@ from neevai.generated.aiagent import (  # noqa: F401
     AgentTemplateListResponse as AgentTemplateListResponse,
 )
 from neevai.generated.aiagent import (  # noqa: F401
+    AuditRecord as AuditRecord,
+)
+from neevai.generated.aiagent import (  # noqa: F401
+    AuditTrailResponse as AuditTrail,
+)
+from neevai.generated.aiagent import (  # noqa: F401
     CreateAgentRequest as CreateAgentParams,
 )
 from neevai.generated.aiagent import (  # noqa: F401
@@ -105,6 +115,12 @@ from neevai.generated.aiagent import (  # noqa: F401
 )
 from neevai.generated.aiagent import (  # noqa: F401
     SandboxEgressConfig as SandboxEgressConfig,
+)
+from neevai.generated.aiagent import (  # noqa: F401
+    SandboxEgressRule as SandboxEgressRule,
+)
+from neevai.generated.aiagent import (  # noqa: F401
+    SandboxEgressRules as SandboxEgressRules,
 )
 from neevai.generated.aiagent import (  # noqa: F401
     SandboxLastCrash as SandboxLastCrash,
@@ -150,7 +166,7 @@ from neevai.generated.aiagent import (  # noqa: F401
 )
 
 # Steady-state phases from the OpenAPI spec, plus transitional values the API may
-# return during pause/resume reconciliation (not listed in the spec enum).
+# return while a pause or resume is in progress (not listed in the spec enum).
 SandboxPhase = Literal[
     "Pending", "Ready", "NotReady", "Unknown", "Pausing", "Paused", "RestoreFailed", "Resuming"
 ]

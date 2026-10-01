@@ -3,7 +3,7 @@
 
 Each ``specs/<service>.yaml`` (or ``$NEEV_PUBLIC_SPECS/<service>.yaml``)
 produces ``src/neevai/generated/<service>.py`` via datamodel-code-generator.
-Specs are migrated into ``specs/`` from the backend services one at a time;
+Specs are added to ``specs/`` one service at a time;
 dropping a new file here and re-running this script is all that is needed
 to make a service's types available for a hand-written wrapper.
 

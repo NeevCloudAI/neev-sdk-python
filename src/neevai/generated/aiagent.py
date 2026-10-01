@@ -19,9 +19,44 @@ from pydantic import (
 )
 
 
+class Code(Enum):
+    unauthorized = "unauthorized"
+    forbidden = "forbidden"
+    not_found = "not_found"
+    method_not_allowed = "method_not_allowed"
+    unsupported_media_type = "unsupported_media_type"
+    validation_error = "validation_error"
+    bad_request = "bad_request"
+    conflict = "conflict"
+    too_early = "too_early"
+    service_unavailable = "service_unavailable"
+    internal_server_error = "internal_server_error"
+    phone_verification_required = "phone_verification_required"
+    kyc_verification_required = "kyc_verification_required"
+    kyc_verification_required_by_owner = "kyc_verification_required_by_owner"
+    sandbox_quota_exceeded = "sandbox_quota_exceeded"
+    agent_quota_exceeded = "agent_quota_exceeded"
+
+
 class ErrorResponse(BaseModel):
-    error: str
+    error: str = Field(
+        ...,
+        deprecated=True,
+        description="Deprecated: read `message` instead. Carries the same text and is kept\nso existing clients keep working.\n",
+    )
+    message: str | None = Field(
+        None,
+        description="A human-readable description of what went wrong, suitable for showing\nto the caller.\n",
+    )
     details: str | None = None
+    code: Code | None = Field(
+        None,
+        description="A machine-readable classification of the failure. Branch on this rather\nthan on the message text, which may be reworded at any time.\n",
+    )
+    scope: str | None = Field(
+        None,
+        description="Optional scope indicating which limit was hit, e.g., `organization` or `project`.\n",
+    )
 
 
 class EnvVar(BaseModel):
@@ -97,10 +132,15 @@ class SandboxLastCrash(BaseModel):
 
 class ExposePortRequest(BaseModel):
     port: conint(ge=1, le=65535) = Field(..., description="User port to expose for preview URLs.")
+    slug: constr(pattern=r"^[a-z0-9]{8}$") | None = Field(
+        None,
+        description="Optional slug for this port's preview URL: exactly 8 lowercase letters\nand digits. Omit it and a random one is generated, which is what makes\nthe URL unguessable. Supplying one on a port that is already exposed\nreplaces its slug and breaks the previous URL — that is how you rotate a\npreview URL that has leaked.\n\nA slug you choose is a name, not a secret. Anyone who guesses it reaches\nthe port, so pick a random slug for anything you would not publish.\n",
+    )
 
 
 class SandboxPort(BaseModel):
     port: int = Field(..., description="The exposed user port.")
+    slug: str = Field(..., description="The slug gating this port's preview URL.")
     preview_url: str = Field(..., description="Public credential-free preview URL for this port.")
 
 
@@ -197,7 +237,7 @@ class RestoreSandboxRequest(BaseModel):
 class ForkSandboxRequest(BaseModel):
     name: constr(pattern=r"^[a-z]([-a-z0-9]*[a-z0-9])?$", min_length=1, max_length=63) = Field(
         ...,
-        description="Name for the new forked sandbox. Must be unique within the project,\nand a valid DNS name: lowercase alphanumeric characters or '-',\nstarting with a letter, ending with an alphanumeric, max 63 characters.\n",
+        description="Name for the new forked sandbox. Must be unique within the project,\nand a valid DNS name: lowercase alphanumeric characters or '-',\nstarting with a letter, ending with an alphanumeric, max 63 characters.\nIt may not be formatted as a UUID, because a sandbox can also be\naddressed by name and such a name would be read as an id.\n",
     )
 
 
@@ -216,8 +256,25 @@ class SandboxEgressRule(BaseModel):
         extra="forbid",
     )
     host: str = Field(..., description="IP address, CIDR block, or domain name")
-    ports: list[int] | None = None
-    protocol: Protocol | None = None
+    ports: list[conint(ge=1, le=65535)] | None = Field(
+        None,
+        description="Destination ports allowed on this host. Omit to allow every port.\n",
+    )
+    protocol: Protocol | None = Field(
+        None,
+        description="Transport protocol allowed on this host. Defaults to TCP when\n`ports` is set. Given without `ports`, every port of this protocol\nis allowed. Omit both to allow every port and protocol.\n",
+    )
+
+
+class SandboxEgressRules(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    allow: list[SandboxEgressRule] = Field(
+        ...,
+        description="Egress rules to add to, or remove from, the existing allow-list.",
+        min_length=1,
+    )
 
 
 class SandboxTemplateCategory(Enum):
@@ -235,6 +292,10 @@ class SandboxTemplate(BaseModel):
     id: constr(pattern=r"^sb-[a-zA-Z0-9-]+$")
     name: str
     description: str
+    icon: str | None = Field(
+        None,
+        description="Display icon for the template (e.g. an SVG document) served as a string; null when the template has no icon.",
+    )
     category: SandboxTemplateCategory
     status: SandboxTemplateStatus
     created_at: AwareDatetime
@@ -269,6 +330,67 @@ class ConnectTokenResponse(BaseModel):
         description="Signed connect token, presented as a bearer credential when calling the sandbox directly.",
     )
     expires_in: int = Field(..., description="Token lifetime in seconds.")
+
+
+class Outcome(Enum):
+    success = "success"
+    error = "error"
+
+
+class AuditRecord(BaseModel):
+    at: AwareDatetime = Field(..., description="When the operation was recorded.")
+    id: str = Field(..., description="Stable id of this record, unique within the trail.")
+    tool: str = Field(
+        ...,
+        description="The operation, such as `pty_command`, `ssh`, `exec`, `process.start` or `fs.read`.",
+    )
+    command: str | None = Field(
+        None,
+        description="The program that ran, without its arguments. Absent on operations that run no program, such as a file read. Reads `[redacted]` where the program name could not be established. A terminal command interrupted with Ctrl-C is prefixed `[Ctrl-C]`.",
+    )
+    target: str | None = Field(
+        None,
+        description="What the operation acted on — the file path it read or wrote, or the process it named. A move carries both paths as `source -> destination`. Absent where the operation names nothing, and truncated with a trailing `...` if unusually long.",
+    )
+    outcome: Outcome
+    reason_code: str | None = Field(
+        None,
+        description="Why it ended that way: `ok`, `permission_denied`, `internal`.",
+    )
+    request_id: str | None = Field(
+        None, description="Correlates the record to the request that caused it."
+    )
+    caller_source: str | None = Field(
+        None,
+        description="The credential the operation was made under. It identifies a credential, not a person.",
+    )
+    pty_id: str | None = Field(
+        None, description="The terminal a `pty_command` belongs to. Absent otherwise."
+    )
+    seq: int | None = Field(
+        None,
+        description="Ordinal within that terminal. Absent outside a `pty_command`.",
+    )
+    duration_ms: int | None = None
+
+
+class AuditTrailResponse(BaseModel):
+    sandbox_id: UUID = Field(
+        ...,
+        description="The sandbox the records came from. For an agent trail this is the sandbox backing the agent, not the agent id.",
+    )
+    from_: AwareDatetime = Field(..., alias="from")
+    to: AwareDatetime
+    retention_days: int = Field(..., description="How many days of trail are available.")
+    window_truncated: bool = Field(
+        ...,
+        description="True when the requested window reaches further back than the available trail, so it begins later than asked.",
+    )
+    next_cursor: str | None = Field(
+        None,
+        description="Pass as `cursor` for the next page. Absent when the window is exhausted.",
+    )
+    records: list[AuditRecord]
 
 
 class SandboxMetricsResponse(BaseModel):
@@ -312,6 +434,13 @@ class AgentConnectResponse(BaseModel):
     expires_at: AwareDatetime = Field(..., description="Absolute expiry of the ticket.")
 
 
+class RollbackAgentRequest(BaseModel):
+    snapshot_id: UUID = Field(
+        ...,
+        description="UUID of the snapshot to restore the agent's backing sandbox from.\n",
+    )
+
+
 class Status(Enum):
     active = "active"
     deprecated = "deprecated"
@@ -328,7 +457,7 @@ class SandboxEgressConfig(BaseModel):
     )
     allow_internet: bool | None = Field(
         False,
-        description="Escape hatch: if true, allows 0.0.0.0/0 (the entire internet). Strictly audit-logged.",
+        description="Escape hatch: if true, allows all outbound traffic (0.0.0.0/0 and ::/0). Applies only in allow_list mode; deny_all ignores it.",
     )
     allow: list[SandboxEgressRule] | None = Field(
         None, description="List of egress rules for host/IP destinations to allow."
@@ -336,6 +465,10 @@ class SandboxEgressConfig(BaseModel):
 
 
 class Agent(BaseModel):
+    idle_timeout_seconds: int | None = Field(
+        None,
+        description="Idle window in seconds for the agent's backing sandbox; 0 when the\nagent has no idle limit, null when it uses the account default.\n",
+    )
     id: UUID
     org_id: str
     project_id: str
@@ -372,13 +505,18 @@ class Agent(BaseModel):
 class CreateAgentRequest(BaseModel):
     name: constr(pattern=r"^[a-z]([-a-z0-9]*[a-z0-9])?$", min_length=1, max_length=63) = Field(
         ...,
-        description="Agent name. Must be a valid DNS name: lowercase alphanumeric\ncharacters or '-', starting with a letter, ending with an\nalphanumeric, max 63 characters.\n",
+        description="Agent name. Must be a valid DNS name: lowercase alphanumeric\ncharacters or '-', starting with a letter, ending with an\nalphanumeric, max 63 characters. It may not be formatted as a UUID,\nbecause an agent can also be addressed by name and such a name would\nbe read as an id.\n",
         examples=["my-agent"],
     )
     agent_template: constr(min_length=1) = Field(
         ...,
         description="Catalogue template name (e.g. claude-code). The server validates the\ntemplate exists and is active, then provisions the agent from it.\n",
         examples=["claude-code"],
+    )
+    idle_timeout_seconds: conint(ge=0) | None = Field(
+        None,
+        description="Act on the agent after this many seconds without activity, which by\ndefault pauses it. Omit to use the account default, or send 0 for no\nidle limit, which keeps the agent consuming quota until it is deleted.\n",
+        examples=[900],
     )
     region: str | None = Field(
         None,
@@ -403,13 +541,26 @@ class UpdateAgentRequest(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
+    idle_timeout_seconds: conint(ge=0) | None = Field(
+        None,
+        description="New idle window in seconds, applied to the agent's backing sandbox.\n0 removes the idle limit, so the agent runs until it is deleted.\n",
+        examples=[900],
+    )
     resources: SandboxResources | None = Field(
         None,
         description="New cpu/memory sizing, resized in place on the running sandbox. Only the\nfields provided change. disk_gb is not resizable in place and is\nrejected if supplied with a different value.\n",
     )
     egress: SandboxEgressConfig | None = Field(
         None,
-        description="Network egress policy update for the agent's backing sandbox.\n",
+        description="Network egress policy for the agent's backing sandbox. Replaces the\nexisting policy in full.\n",
+    )
+    egress_add: SandboxEgressRules | None = Field(
+        None,
+        description="Destinations to add to the existing allow-list, leaving every other\nrule in place. Adding a host already allowed replaces its ports and\nprotocol. Rejected with `egress`, and rejected when the current mode\nis deny_all — switch the mode with `egress` first.\n",
+    )
+    egress_remove: SandboxEgressRules | None = Field(
+        None,
+        description="Destinations to drop from the existing allow-list, leaving every\nother rule in place. Removing a host that is not allowed is a no-op.\nApplied before `egress_add`, so one call can swap a destination.\n",
     )
 
 
@@ -468,13 +619,13 @@ class Sandbox(BaseModel):
     command: list[str] | None = None
     resources: SandboxResources | None = None
     phase: SandboxPhase
+    addressable: bool | None = Field(
+        None,
+        description="Whether the sandbox can be reached by name yet. Briefly false after a sandbox is created; a call made before it turns true is refused and is worth retrying.",
+    )
     connect_url: str | None = Field(
         None,
         description="Public URL the SDK calls (API key + X-Sandbox-Id). null when not configured.",
-    )
-    preview_url_template: str | None = Field(
-        None,
-        description="Template for a public preview URL with {port} left for getUrl({port}) to fill client-side. null when not configured.",
     )
     replicas: conint(ge=0, le=1) = Field(..., description="0 = paused, 1 = running.")
     egress: SandboxEgressConfig | None = None
@@ -516,7 +667,7 @@ class CreateSandboxRequest1(BaseModel):
     name: constr(pattern=r"^[a-z]([-a-z0-9]*[a-z0-9])?$", min_length=1, max_length=63) | None = (
         Field(
             None,
-            description="Sandbox name. Optional — when omitted, the server generates one (a\n\"sandbox-\" prefix plus a short random suffix). When provided, must be\na valid DNS name: lowercase alphanumeric characters or '-', starting\nwith a letter, ending with an alphanumeric, max 63 characters.\n",
+            description="Sandbox name. Optional — when omitted, the server generates one (a\n\"sandbox-\" prefix plus a short random suffix). When provided, must be\na valid DNS name: lowercase alphanumeric characters or '-', starting\nwith a letter, ending with an alphanumeric, max 63 characters. It may\nnot be formatted as a UUID, because a sandbox can also be addressed by\nname and such a name would be read as an id.\n",
             examples=["my-sandbox"],
         )
     )
@@ -564,7 +715,7 @@ class CreateSandboxRequest2(BaseModel):
     name: constr(pattern=r"^[a-z]([-a-z0-9]*[a-z0-9])?$", min_length=1, max_length=63) | None = (
         Field(
             None,
-            description="Sandbox name. Optional — when omitted, the server generates one (a\n\"sandbox-\" prefix plus a short random suffix). When provided, must be\na valid DNS name: lowercase alphanumeric characters or '-', starting\nwith a letter, ending with an alphanumeric, max 63 characters.\n",
+            description="Sandbox name. Optional — when omitted, the server generates one (a\n\"sandbox-\" prefix plus a short random suffix). When provided, must be\na valid DNS name: lowercase alphanumeric characters or '-', starting\nwith a letter, ending with an alphanumeric, max 63 characters. It may\nnot be formatted as a UUID, because a sandbox can also be addressed by\nname and such a name would be read as an id.\n",
             examples=["my-sandbox"],
         )
     )
@@ -609,7 +760,7 @@ class CreateSandboxRequest3(BaseModel):
     name: constr(pattern=r"^[a-z]([-a-z0-9]*[a-z0-9])?$", min_length=1, max_length=63) | None = (
         Field(
             None,
-            description="Sandbox name. Optional — when omitted, the server generates one (a\n\"sandbox-\" prefix plus a short random suffix). When provided, must be\na valid DNS name: lowercase alphanumeric characters or '-', starting\nwith a letter, ending with an alphanumeric, max 63 characters.\n",
+            description="Sandbox name. Optional — when omitted, the server generates one (a\n\"sandbox-\" prefix plus a short random suffix). When provided, must be\na valid DNS name: lowercase alphanumeric characters or '-', starting\nwith a letter, ending with an alphanumeric, max 63 characters. It may\nnot be formatted as a UUID, because a sandbox can also be addressed by\nname and such a name would be read as an id.\n",
             examples=["my-sandbox"],
         )
     )
@@ -657,7 +808,7 @@ class CreateSandboxRequest4(BaseModel):
     name: constr(pattern=r"^[a-z]([-a-z0-9]*[a-z0-9])?$", min_length=1, max_length=63) | None = (
         Field(
             None,
-            description="Sandbox name. Optional — when omitted, the server generates one (a\n\"sandbox-\" prefix plus a short random suffix). When provided, must be\na valid DNS name: lowercase alphanumeric characters or '-', starting\nwith a letter, ending with an alphanumeric, max 63 characters.\n",
+            description="Sandbox name. Optional — when omitted, the server generates one (a\n\"sandbox-\" prefix plus a short random suffix). When provided, must be\na valid DNS name: lowercase alphanumeric characters or '-', starting\nwith a letter, ending with an alphanumeric, max 63 characters. It may\nnot be formatted as a UUID, because a sandbox can also be addressed by\nname and such a name would be read as an id.\n",
             examples=["my-sandbox"],
         )
     )
@@ -705,7 +856,7 @@ class CreateSandboxRequest5(BaseModel):
     name: constr(pattern=r"^[a-z]([-a-z0-9]*[a-z0-9])?$", min_length=1, max_length=63) | None = (
         Field(
             None,
-            description="Sandbox name. Optional — when omitted, the server generates one (a\n\"sandbox-\" prefix plus a short random suffix). When provided, must be\na valid DNS name: lowercase alphanumeric characters or '-', starting\nwith a letter, ending with an alphanumeric, max 63 characters.\n",
+            description="Sandbox name. Optional — when omitted, the server generates one (a\n\"sandbox-\" prefix plus a short random suffix). When provided, must be\na valid DNS name: lowercase alphanumeric characters or '-', starting\nwith a letter, ending with an alphanumeric, max 63 characters. It may\nnot be formatted as a UUID, because a sandbox can also be addressed by\nname and such a name would be read as an id.\n",
             examples=["my-sandbox"],
         )
     )
@@ -778,6 +929,14 @@ class UpdateSandboxRequest(BaseModel):
     egress: SandboxEgressConfig | None = Field(
         None,
         description="New egress policy for the sandbox. Replaces the existing policy\nin full and takes effect immediately for new connections — no sandbox\nrestart is required.\n",
+    )
+    egress_add: SandboxEgressRules | None = Field(
+        None,
+        description="Destinations to add to the existing allow-list, leaving every other\nrule in place. Adding a host already allowed replaces its ports and\nprotocol. Rejected with `egress`, and rejected when the current mode\nis deny_all — switch the mode with `egress` first.\n",
+    )
+    egress_remove: SandboxEgressRules | None = Field(
+        None,
+        description="Destinations to drop from the existing allow-list, leaving every\nother rule in place. Removing a host that is not allowed is a no-op.\nApplied before `egress_add`, so one call can swap a destination.\n",
     )
 
 

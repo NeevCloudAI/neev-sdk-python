@@ -96,7 +96,11 @@ Everything in `neevai.__all__`:
 | `SnapshotStatus` | enum | generated |
 | `CreateSnapshotParams` | model | `types.py` |
 | `SnapshotListResponse` | model | generated |
-| `NeevAIError` … `InternalServerError` | exceptions | `errors.py` |
+| `AuditRecord` | model | generated |
+| `AuditTrail` | model alias | generated → `AuditTrailResponse` |
+| `SandboxEgressRule` | model | generated |
+| `SandboxEgressRules` | model | generated |
+| `NeevAIError`, `APIConnectionError`, `APITimeoutError`, `APIError`, `BadRequestError`, `AuthenticationError`, `PermissionDeniedError`, `NotFoundError`, `ConflictError`, `PreconditionFailedError`, `RateLimitError`, `DeadlineExceededError`, `InternalServerError`, `ServiceUnavailableError` | exceptions | `errors.py` |
 
 Types exported from `neevai.types.__all__`:
 
@@ -128,6 +132,28 @@ Types exported from `neevai.types.__all__`:
 | `ProcessLogsPage` | model | `types.py` |
 | `ProcessLogEvent` | type alias | same union as `ExecStreamEvent` |
 | `Signal` | class | `types.py` |
+| `AgentData` | model | `types.py` subclass of generated `Agent` with `status: str` |
+| `AgentListResponse` | model | `types.py` (`items: list[AgentData]`) |
+| `AgentStatus` | enum | generated |
+| `AgentTemplate` / `AgentTemplateListResponse` | model | generated |
+| `CreateAgentParams` | model alias | generated → `CreateAgentRequest` |
+| `UpdateAgentParams` | model alias | generated → `UpdateAgentRequest` |
+| `UpdateSandboxParams` | model alias | generated → `UpdateSandboxRequest` |
+| `UpdateSandboxTimeoutParams` | model alias | generated → `UpdateSandboxTimeoutRequest` |
+| `PauseSandboxParams` | model alias | generated → `PauseSandboxRequest` |
+| `SandboxResources` | model | generated |
+| `SandboxEgressConfig` | model | generated |
+| `SandboxEgressRule` | model | generated (`host`, `ports`, `protocol`) |
+| `SandboxEgressRules` | model | generated (`allow: list[SandboxEgressRule]`) |
+| `SandboxLifecycle` | model | generated |
+| `OnIdleAction` | enum | generated |
+| `SandboxPort` | model | generated (`port`, `slug`, `preview_url`) |
+| `AuditRecord` | model | generated |
+| `AuditTrail` | model alias | generated → `AuditTrailResponse` |
+| `Snapshot` / `SnapshotListResponse` / `SnapshotStatus` | model / model / enum | generated |
+| `CreateSnapshotParams` | model | `types.py` |
+| `CreateSnapshotRequest` / `ForkSandboxRequest` / `RestoreSandboxRequest` | model | generated |
+| `WatchEvent` | model | `types.py` |
 
 ---
 
@@ -267,7 +293,8 @@ paused_web = client.sandboxes.list(name="web", status="Paused")
 
 ### `client.sandboxes.get(id, org_id=None, project_id=None)`
 
-Fetches a single sandbox by UUID.
+Fetches a single sandbox by its UUID or its name. Names are unique within a
+project, so either identifies one sandbox.
 
 **Returns:** `Sandbox` handle.
 
@@ -290,11 +317,16 @@ single `PATCH`:
 - `egress` replaces the policy in full and takes effect for new connections
   with no restart. `allow_internet` / `allow_egress` are the same convenience
   as `create`; an explicit `egress` in `params` takes precedence.
+- `egress_add` / `egress_remove` (`SandboxEgressRules`, `{"allow": [...]}`) edit the
+  existing allow-list in place, leaving other rules untouched. Removals apply first,
+  so one call can swap a host. Adding a host already allowed replaces its ports and
+  protocol. Rejected while the policy is `deny_all`.
 
 **Returns:** Updated `Sandbox` handle.
 
-**Raises:** `NeevAIError` before any request if neither `resources` nor
-`egress` is present (naming both fields).
+**Raises:** `NeevAIError` before any request if the body is empty (naming every
+accepted field), or if `egress` (or the `allow_internet` / `allow_egress`
+convenience) is combined with `egress_add` / `egress_remove`.
 
 ```python
 # Resize, then re-scope egress (two calls, or combine both in one):
@@ -308,7 +340,7 @@ client.sandboxes.update(sandbox.id, {}, allow_egress=["api.github.com"])
 
 ### `client.sandboxes.pause(id, *, org_id=None, project_id=None)`
 
-Scales the sandbox to 0 replicas. Lifecycle phase becomes `Paused`. Pause always
+Stops the sandbox while keeping its state. Lifecycle phase becomes `Paused`. Pause always
 snapshots the sandbox's full state (process memory + filesystem) before shutting
 down, so a resume restores exactly where it left off. The request body is empty:
 `preserve_memory` was dropped from `PauseSandboxRequest` and the kwarg is gone
@@ -327,7 +359,7 @@ A paused sandbox will not become `Ready` until `resume()` is called. Calling
 
 ### `client.sandboxes.resume(id, org_id=None, project_id=None)`
 
-Scales the sandbox back to 1 replica, moving it toward `Ready`.
+Starts a paused sandbox again, moving it toward `Ready`.
 
 **Returns:** Updated `Sandbox` handle (not `None`).
 
@@ -402,6 +434,34 @@ for series in metrics.series:
 ```
 
 **Example:** [`sandbox_metrics.py`](../examples/sandbox_metrics.py)
+
+### `client.sandboxes.audit(id, *, from_=None, to=None, cursor=None, limit=None, org_id=None, project_id=None)`
+
+Reads one page of the sandbox's command audit trail, newest first: terminal commands,
+SSH, process and file operations, each with the credential it ran under and how it
+ended. Only the program name is recorded, never its arguments, and input typed at a
+hidden password prompt is not captured.
+
+`from_` / `to` (RFC3339) default to the last 24 hours. `limit` is clamped server-side.
+The response's `window_truncated` is `True` when `from_` reaches past the
+`retention_days` of trail kept.
+
+**Returns:** `AuditTrail` (`sandbox_id`, `from_`, `to`, `retention_days`,
+`window_truncated`, `next_cursor`, `records: list[AuditRecord]`). Each `AuditRecord`
+has `at`, `id`, `tool`, `command`, `target`, `outcome`, `reason_code`, `request_id`,
+`caller_source`, `pty_id`, `seq`, `duration_ms`.
+
+```python
+trail = sandbox.audit(limit=50)
+while True:
+    for r in trail.records:
+        print(r.at, r.tool, r.command or "", r.outcome.value)
+    if not trail.next_cursor:
+        break
+    trail = sandbox.audit(limit=50, cursor=trail.next_cursor)
+```
+
+**Example:** [`audit_trail.py`](../examples/audit_trail.py)
 
 ### `client.sandboxes.create_snapshot(id, params=None, org_id=None, project_id=None)`
 
@@ -482,7 +542,7 @@ filesystem with the snapshot contents.
 
 **Note:** Prefer creating a new sandbox with `restore` in create params to recover
 into a new sandbox — see [`snapshot_fork_restore.py`](../examples/snapshot_fork_restore.py).
-In-place rollback may leave an empty workspace on some backends.
+In-place rollback can come back with an empty workspace.
 
 ```python
 rolled_back = client.sandboxes.rollback(sandbox.id, str(snap.id))
@@ -533,7 +593,8 @@ Access via `client.agents` (`Agents`). Requires org/project scope.
 ### `client.agents.create(params, org_id=None, project_id=None, *, allow_internet=None, allow_egress=None)`
 
 **Params:** `CreateAgentParams` or dict. Required: `name`, `agent_template` (template
-**name**, e.g. `"claude-code"`). Optional: `region`, `config`, `env`, `resources`, `egress`.
+**name**, e.g. `"claude-code"`). Optional: `region`, `config`, `env`, `resources`, `egress`,
+`idle_timeout_seconds` (omit for the account default, `0` for no idle limit).
 
 **Egress convenience:** `allow_internet=True` opens all egress (`0.0.0.0/0` + `::/0`);
 `allow_egress=[...]` allows specific hosts (FQDN or CIDR). Egress is deny-all by default;
@@ -556,12 +617,16 @@ agent = client.agents.create({
 
 ### `client.agents.get(id, org_id=None, project_id=None)`
 
-**Returns:** `Agent`. **Raises:** `NotFoundError` if unknown.
+Accepts the agent's UUID or its name. **Returns:** `Agent`. **Raises:** `NotFoundError` if unknown.
 
-### `client.agents.update(id, params, org_id=None, project_id=None)`
+### `client.agents.update(id, params, org_id=None, project_id=None, *, allow_internet=None, allow_egress=None)`
 
-In-place update of `egress` and/or `resources` (cpu/memory). **Empty update guard:**
-passing `{}` raises `NeevAIError` locally — no HTTP call.
+In-place update of `resources` (cpu/memory), `egress` (full replacement),
+`egress_add` / `egress_remove` (edit the allow-list in place, same rules as
+`sandboxes.update`), and `idle_timeout_seconds` (`0` removes the idle limit).
+**Empty update guard:** passing `{}` raises `NeevAIError` locally — no HTTP call.
+Combining `egress` (or the convenience flags) with `egress_add` / `egress_remove`
+is also rejected locally.
 
 ```python
 agent = client.agents.update(agent.id, {"resources": {"cpu": 2, "memory_gb": 4}})
@@ -570,6 +635,34 @@ agent = client.agents.update(agent.id, {"resources": {"cpu": 2, "memory_gb": 4}}
 ### `client.agents.pause(id, ...)` / `client.agents.resume(id, ...)` / `client.agents.delete(id, ...)`
 
 Pause and resume return updated `Agent` handles. Delete returns `None` (HTTP 204).
+
+### `client.agents.keepalive(id, ...)` / `client.agents.rollback(id, snapshot_id, ...)`
+
+`keepalive` resets the agent's idle timer; call it periodically while work is in
+progress. `rollback` rolls the agent's backing sandbox back in place to a snapshot from
+the same project. Both return the updated `Agent`.
+
+### Agent preview ports
+
+`client.agents.expose_port(id, port, org_id=None, project_id=None, *, slug=None)`,
+`list_ports(id, org_id=None, project_id=None)`, `revoke_port(id, port, org_id=None,
+project_id=None)`, and `get_port_url(id, port, wait_until_ready=True, timeout_ms=60000,
+poll_interval_ms=2000, org_id=None, project_id=None, *, slug=None)` behave exactly like
+the sandbox preview ports below.
+
+```python
+port = client.agents.expose_port(agent.id, 3000)
+print(port.slug, port.preview_url)
+client.agents.revoke_port(agent.id, 3000)
+```
+
+### `client.agents.audit(id, *, from_=None, to=None, cursor=None, limit=None, ...)`
+
+The agent's command audit trail, same shape and recording rules as
+`sandboxes.audit`. The response's `sandbox_id` is the sandbox backing the agent, not
+the agent id.
+
+**Example:** [`agent_ports_audit.py`](../examples/agent_ports_audit.py)
 
 ---
 
@@ -634,7 +727,8 @@ in-memory state mirroring the last API response.
 | `sandbox_id` | `str` | Backing sandbox UUID |
 | `agent_template_id` | `str` | Catalogue template id (e.g. `ag-claude-code`) |
 | `config` | `dict \| None` | Effective merged configuration |
-| `last_crash` | `AgentLastCrash \| None` | Most recent unexpected stop; `storage_reset=True` means it restarted with an empty filesystem. `None` if it never crashed. |
+| `last_crash` | `AgentLastCrash \| None` | Most recent unexpected stop; `storage_reset=True` means it restarted with an empty filesystem. `None` if it never crashed. Rolling back to a snapshot from before that stop restores the files and clears it. |
+| `idle_timeout_seconds` | `int \| None` | Idle window; `0` = no idle limit, `None` = account default |
 | `data` | `dict[str, Any]` | Full record snapshot |
 
 ### `agent.wait_until_ready(timeout_ms=120000, poll_interval_ms=2000, on_poll=None)`
@@ -653,6 +747,15 @@ Does **not** fail fast on `Deleting` (matches TypeScript SDK).
 ### `agent.sandbox()`
 
 Resolves the backing sandbox as a `Sandbox` handle via `Agents.get_sandbox()`.
+
+### `agent.keepalive()` / `agent.rollback(snapshot_id)` / `agent.audit(...)`
+
+Handle wrappers for `client.agents.keepalive` / `.rollback` / `.audit`; the first two
+update the handle in place and return `self`.
+
+### `agent.expose_port(port, *, slug=None)` / `agent.list_ports()` / `agent.revoke_port(port)` / `agent.get_url(port, ..., *, slug=None)`
+
+Same signatures as the sandbox handle's preview-port methods.
 
 ### `agent.update(params)` / `agent.pause()` / `agent.resume()` / `agent.delete()`
 
@@ -674,9 +777,10 @@ mirroring the last API response. Call `refresh()` to sync from the server.
 | `id` | `str` | Sandbox identifier (UUID string) |
 | `name` | `str` | Human-readable name |
 | `phase` | `str` | OpenAPI steady states: `"Pending"`, `"Ready"`, `"NotReady"`, `"Unknown"`, `"Paused"`. API may also return transitional values (e.g. `"Pausing"`, `"Resuming"`) not in the spec enum; SDK accepts any phase string. |
-| `replicas` | `int` | `0` or `1` |
+| `replicas` | `int` | `0` while paused, `1` while running |
 | `connect_url` | `str \| None` | Regional runtime URL (available when ready) |
-| `last_crash` | `SandboxLastCrash \| None` | Most recent unexpected stop; `storage_reset=True` means it restarted with an empty filesystem. `None` if it never crashed. |
+| `addressable` | `bool` | Whether the sandbox can be reached yet; briefly `False` after create (`True` when the API omits it) |
+| `last_crash` | `SandboxLastCrash \| None` | Most recent unexpected stop; `storage_reset=True` means it restarted with an empty filesystem. `None` if it never crashed. Restoring from a snapshot taken before that stop brings the files back and clears it. |
 | `data` | `dict[str, Any]` | Full record snapshot |
 
 ### `sandbox.refresh()`
@@ -709,12 +813,16 @@ sandbox.update({"resources": {"cpu": 2, "memory_gb": 4}}, allow_egress=["api.git
 
 ### `sandbox.wait_until_ready(timeout_ms=120000, poll_interval_ms=2000, on_poll=None)`
 
-Polls `refresh()` until `phase == "Ready"`. Sandbox runtime operations (`exec`,
-`files`, `processes`) establish a lazy connection on first use via `_connection()`.
+Polls `refresh()` until `phase == "Ready"` and `addressable` is `True`. A new sandbox
+is briefly not addressable right after create; calls made in that window are refused,
+so this wait covers it. Call it before sandbox runtime operations (`exec`, `files`,
+`processes`): they do not wait on their own, and raise `NeevAIError` while the sandbox
+has no `connect_url` yet. The connection is then opened on first use and reused.
 
 **Raises:**
 
-- `NeevAIError` on timeout
+- `NeevAIError` on timeout (the message names the phase and whether the sandbox is
+  addressable yet)
 - `NeevAIError` if sandbox is `Paused` (call `resume()` first)
 
 Optional `on_poll` callback receives the handle on each poll iteration — useful for
@@ -738,7 +846,7 @@ along with the field itself (`PauseSandboxRequest` carries no fields):
 
 ```python
 sandbox = sandbox.pause()   # phase → Paused, replicas → 0
-sandbox = sandbox.resume()  # scales back, then wait for Ready
+sandbox = sandbox.resume()  # starts again, then wait for Ready
 sandbox.wait_until_ready()
 ```
 
@@ -767,13 +875,17 @@ Same as `client.sandboxes.metrics(self.id, ...)` using the handle's scope.
 Ports are private by default. Expose a port to reach it through a public,
 credential-free preview URL.
 
-- `sandbox.expose_port(port)` → `SandboxPort` (`port`, `preview_url`). Idempotent;
-  exposing an already-exposed port returns the same URL.
+- `sandbox.expose_port(port, *, slug=None)` → `SandboxPort` (`port`, `slug`,
+  `preview_url`). The URL needs no credential — its slug is the only thing gating it,
+  so treat it as a secret. Omit `slug` for a random, unguessable one. Exposing an
+  already-exposed port returns the same URL, unless you pass a different `slug`
+  (8 lowercase letters/digits): that replaces it and breaks the old URL, which is how
+  you rotate a leaked one.
 - `sandbox.list_ports()` → `list[SandboxPort]` currently exposed.
 - `sandbox.revoke_port(port)` → `None`. Revoking a port that is not exposed is a no-op.
-- `sandbox.get_url(port, wait_until_ready=True, timeout_ms=60000, poll_interval_ms=2000)`
-  → `str`. Exposes the port and returns its preview URL, polling until the gateway
-  routes it. Pass `wait_until_ready=False` to return immediately. A successful wait
+- `sandbox.get_url(port, wait_until_ready=True, timeout_ms=60000, poll_interval_ms=2000, *, slug=None)`
+  → `str`. Exposes the port and returns its preview URL, polling until the URL is
+  reachable. Pass `wait_until_ready=False` to return immediately. A successful wait
   means the URL is routable — the server behind the port must still be listening to
   answer a real request.
 
@@ -966,11 +1078,13 @@ Sync: `for event in sandbox.exec_stream(...)`. Async:
 ## Files API
 
 Access via the `sandbox.files` property (`SandboxFiles` / `AsyncSandboxFiles`).
-Paths are **workspace-relative**; absolute paths are rejected by the sandbox.
+Paths are relative to the workspace or absolute within it; a path outside the
+workspace is refused by the sandbox.
 
 ### `sandbox.files.write(path, content, cwd=None)`
 
-Writes string or bytes to a file.
+Writes string or bytes to a file. Content larger than 1 MiB — more than one request
+carries — is sent with `upload` in chunks automatically.
 
 **Returns:** `dict[str, int]` with key `bytes_written`.
 
@@ -978,6 +1092,34 @@ Writes string or bytes to a file.
 info = sandbox.files.write("src/main.py", 'print("hello")\n')
 print(f"Wrote {info['bytes_written']} bytes")
 ```
+
+### `sandbox.files.upload(path, data, *, chunk_size=None, cwd=None, on_progress=None)`
+
+Uploads a file of any size in chunks over the [tus](https://tus.io) resumable-upload protocol. `data` is
+`bytes`, `str` (UTF-8), or a seekable binary file object, read one chunk at a time
+and never held whole in memory. `chunk_size` defaults to 1 MiB (the most one request
+can carry) and may be 64 KiB to 1 MiB (`NeevAIError` otherwise). A chunk lost to a dropped connection, an offset
+conflict, or a brief outage resumes from the last byte the sandbox received; after
+five consecutive attempts without progress the upload fails. On any failure the
+upload is discarded on the sandbox before the error is raised.
+`on_progress(bytes_sent, total_bytes)` is called after each accepted chunk.
+
+**Returns:** `dict[str, int]` with key `bytes_written`, like `write`.
+
+### `sandbox.files.upload_file(local_path, remote_path, *, chunk_size=None, cwd=None, on_progress=None)` / `download_file(remote_path, local_path, *, cwd=None)`
+
+`upload_file` uploads a local file with `upload`. `download_file` streams a sandbox
+file to `local_path` and returns `{"bytes_written": n}`; it writes beside the target and
+moves the file into place only once complete, so a failed download leaves no partial
+file. Both accept `str` or `os.PathLike` local paths.
+
+```python
+sandbox.files.upload_file("dataset.parquet", "data/dataset.parquet",
+                          on_progress=lambda sent, total: print(f"{sent}/{total}"))
+result = sandbox.files.download_file("data/dataset.parquet", "copy.parquet")  # {"bytes_written": n}
+```
+
+**Example:** [`upload_download.py`](../examples/upload_download.py)
 
 ### `sandbox.files.read(path, cwd=None)` / `read_text(path, cwd=None)`
 
@@ -1404,6 +1546,7 @@ Alias for generated `CreateAgentRequest`.
 | ----- | ---- | -------- |
 | `name` | `str` (DNS-1123 label, max 63) | yes |
 | `agent_template` | `str` | yes (template **name**, e.g. `claude-code`) |
+| `idle_timeout_seconds` | `int \| None` (≥ 0) | no (omit for the account default; `0` = no idle limit) |
 | `region` | `str \| None` | no (set it in the create body) |
 | `config` | `dict \| None` | no |
 | `env` | `list[EnvVar] \| None` | no |
@@ -1414,8 +1557,26 @@ Alias for generated `CreateAgentRequest`.
 
 | Field | Type | Required |
 | ----- | ---- | -------- |
-| `egress` | `SandboxEgressConfig \| None` | no (at least one field required on update) |
+| `egress` | `SandboxEgressConfig \| None` | no (replaces the policy in full) |
+| `egress_add` | `SandboxEgressRules \| None` | no (adds rules to the allow-list; not combinable with `egress`) |
+| `egress_remove` | `SandboxEgressRules \| None` | no (removes rules; applied before `egress_add`) |
 | `resources` | `SandboxResources \| None` | no |
+| `idle_timeout_seconds` | `int \| None` (≥ 0) | no (`0` = no idle limit) |
+
+At least one field is required; `{}` is rejected locally.
+
+### `UpdateSandboxParams`
+
+Alias for generated `UpdateSandboxRequest`.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `resources` | `SandboxResources \| None` | no (cpu/memory resized in place; `disk_gb` is not resizable) |
+| `egress` | `SandboxEgressConfig \| None` | no (replaces the policy in full) |
+| `egress_add` | `SandboxEgressRules \| None` | no (adds rules to the allow-list; not combinable with `egress`) |
+| `egress_remove` | `SandboxEgressRules \| None` | no (removes rules; applied before `egress_add`) |
+
+At least one field is required; `{}` is rejected locally.
 
 ### `AgentData`
 
@@ -1432,13 +1593,16 @@ Subclass of generated `Agent` with relaxed `status: str`.
 | `config` | `dict \| None` | no |
 | `status` | `str` | yes |
 | `last_crash` | `AgentLastCrash \| None` | no (most recent unexpected stop; records a past event) |
+| `idle_timeout_seconds` | `int \| None` | no (`0` = no idle limit, `None` = account default) |
 | `created_at` | `datetime` | yes |
 | `updated_at` | `datetime` | yes |
 
 ### `AgentLastCrash`
 
 The most recent unexpected stop of the agent (`null` if it never had one). Records a
-past event and is not cleared on recovery, so read `at` before acting on it.
+past event and is not cleared on recovery, so read `at` before acting on it. Restoring
+from a snapshot taken before a stop that reset storage brings the files back and clears
+it once the restore completes.
 
 | Field | Type | Required |
 | ----- | ---- | -------- |
@@ -1538,8 +1702,8 @@ so transitional or future phase strings from the API are accepted.
 | `env` | `list[EnvVar] \| None` | no |
 | `resources` | `SandboxResources \| None` | no |
 | `phase` | `str` | yes |
+| `addressable` | `bool \| None` | no (`False` briefly after create; calls made before it turns `True` are refused and worth retrying) |
 | `connect_url` | `str \| None` | no |
-| `preview_url_template` | `str \| None` | no (template with `{port}` for `getUrl({port})`) |
 | `replicas` | `int` (0–1) | yes |
 | `egress` | `SandboxEgressConfig \| None` | no |
 | `sandbox_template_id` | `str \| None` | no |
@@ -1559,13 +1723,64 @@ On handles, `sandbox.phase` returns a `str` (not the generated enum). The OpenAP
 ### `SandboxLastCrash`
 
 The most recent unexpected stop of the sandbox (`null` if it never had one). Records a
-past event and is not cleared on recovery, so read `at` before acting on it.
+past event and is not cleared on recovery, so read `at` before acting on it. Restoring
+from a snapshot taken before a stop that reset storage brings the files back and clears
+it once the restore completes.
 
 | Field | Type | Required |
 | ----- | ---- | -------- |
 | `reason` | `str` | yes (e.g. `OOMKilled`) |
 | `at` | `datetime` | yes (when the stop was detected) |
 | `storage_reset` | `bool` | yes (`true` = the sandbox restarted with an empty filesystem: files under `/workspace`, and anything installed since create, are gone) |
+
+### `SandboxEgressRule` / `SandboxEgressRules`
+
+`SandboxEgressRule` is one allow-list entry; `SandboxEgressRules` wraps a list of them
+for `egress_add` / `egress_remove`.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `host` | `str` | yes (FQDN, wildcard, or CIDR) |
+| `ports` | `list[int] \| None` | no (omit to allow every port) |
+| `protocol` | `TCP` \| `UDP` | no (defaults to TCP when `ports` is set) |
+| `allow` (`SandboxEgressRules`) | `list[SandboxEgressRule]` | yes (at least one) |
+
+### `SandboxPort`
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `port` | `int` | yes |
+| `slug` | `str` | yes (8 lowercase letters/digits gating the preview URL) |
+| `preview_url` | `str` | yes (needs no credential; treat it as a secret) |
+
+### `AuditTrail` / `AuditRecord`
+
+`AuditTrail` (alias of generated `AuditTrailResponse`):
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `sandbox_id` | `UUID` | yes (for an agent trail, the agent's backing sandbox) |
+| `from_` / `to` | `datetime` | yes |
+| `retention_days` | `int` | yes |
+| `window_truncated` | `bool` | yes |
+| `next_cursor` | `str \| None` | no (pass as `cursor` for the next page) |
+| `records` | `list[AuditRecord]` | yes |
+
+`AuditRecord`:
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `at` | `datetime` | yes |
+| `id` | `str` | yes |
+| `tool` | `str` | yes (e.g. `pty_command`, `ssh`, `exec`, `process.start`, `fs.read`) |
+| `command` | `str \| None` | no (program name only, never its arguments) |
+| `target` | `str \| None` | no (file path or process acted on) |
+| `outcome` | `success` \| `error` | yes |
+| `reason_code` | `str \| None` | no |
+| `request_id` | `str \| None` | no |
+| `caller_source` | `str \| None` | no (the credential, not a person) |
+| `pty_id` / `seq` | `str \| None` / `int \| None` | no (terminal commands only) |
+| `duration_ms` | `int \| None` | no |
 
 ### `SandboxLifecycle`
 
@@ -1586,6 +1801,7 @@ Omit a field for the account default; send `0` to turn that limit off.
 | `id` | `str` | yes |
 | `name` | `str` | yes |
 | `description` | `str` | yes |
+| `icon` | `str \| None` | no (display icon, e.g. an SVG document) |
 | `category` | enum | yes |
 | `status` | enum | yes |
 | `created_at` | `datetime` | yes |
@@ -1629,7 +1845,7 @@ Omit a field for the account default; send `0` to turn that limit off.
 
 Type alias for documented phase strings: `Literal["Pending", "Ready", "NotReady", "Unknown", "Paused", "Pausing", "Resuming"]`.
 
-The OpenAPI `SandboxPhase` enum lists only the five steady states (`Pending`, `Ready`, `NotReady`, `Unknown`, `Paused`). The API may return transitional values such as `Pausing` and `Resuming` while pause/resume reconciliation is in progress; `SandboxData` and handle `phase` accept any string so future API values do not break the SDK.
+The OpenAPI `SandboxPhase` enum lists only the five steady states (`Pending`, `Ready`, `NotReady`, `Unknown`, `Paused`). The API may return transitional values such as `Pausing` and `Resuming` while a pause or resume is in progress; `SandboxData` and handle `phase` accept any string so future API values do not break the SDK.
 
 ### `FileEntry`
 
@@ -1733,9 +1949,13 @@ All SDK errors inherit from `NeevAIError`. Import from `neevai` or `neevai.error
 | `RateLimitError` | HTTP 429 |
 | `DeadlineExceededError` | HTTP 504 |
 | `InternalServerError` | HTTP 5xx |
+| `ServiceUnavailableError` | HTTP 503 — retry shortly (subclass of `InternalServerError`) |
 
-`APIError` attributes: `status_code`, `body`, `code`, `details`, `request_id`,
-`request_method`, `request_url`.
+`APIError` attributes: `status_code`, `body`, `code`, `scope`, `details`, `request_id`,
+`request_method`, `request_url`. `code` is the machine-readable classification (for
+example `not_found`, `validation_error`, `sandbox_quota_exceeded`); branch on it rather
+than on the message text, which may be reworded. `scope` names the limit a quota
+refusal hit (`organization` or `project`). `str(err)` carries the readable message.
 
 Sandbox runtime exec errors are mapped to the same hierarchy via gRPC-style reason codes.
 
@@ -1856,6 +2076,9 @@ Compact reviewer index. Each symbol should also appear in
 | `Sandboxes.resume` | method | `Sandbox` |
 | `Sandboxes.delete` | method | `None` |
 | `Sandboxes.metrics` | method | `SandboxMetricsResponse` |
+| `Sandboxes.audit` | method | `AuditTrail` |
+| `Sandboxes.keepalive` / `.update_timeout` | methods | `Sandbox` |
+| `Sandboxes.expose_port` / `.list_ports` / `.revoke_port` / `.get_port_url` | methods | `SandboxPort` / `list[SandboxPort]` / `None` / `str` |
 | `Sandboxes.create_snapshot` | method | `Snapshot` |
 | `Sandboxes.list_snapshots` | method | `list[Snapshot]` |
 | `Sandboxes.get_snapshot` | method | `Snapshot` |
@@ -1883,6 +2106,9 @@ Compact reviewer index. Each symbol should also appear in
 | `Agents.pause` / `.resume` | methods | `Agent` |
 | `Agents.delete` | method | `None` |
 | `Agents.get_sandbox` | method | `Sandbox` |
+| `Agents.keepalive` / `.rollback` | methods | `Agent` |
+| `Agents.expose_port` / `.list_ports` / `.revoke_port` / `.get_port_url` | methods | `SandboxPort` / `list[SandboxPort]` / `None` / `str` |
+| `Agents.audit` | method | `AuditTrail` |
 | `AsyncAgents.*` | methods | Same as sync with `await` |
 
 ### Agent templates resource (`resources/agent_templates.py`)
@@ -1903,6 +2129,9 @@ Compact reviewer index. Each symbol should also appear in
 | `Agent.wait_until_ready` | method | Poll until `Ready`; timing validation |
 | `Agent.sandbox` | method | Backing `Sandbox` handle |
 | `Agent.update` / `.pause` / `.resume` / `.delete` | methods | Scope-threaded |
+| `Agent.keepalive` / `.rollback` / `.audit` | methods | Scope-threaded |
+| `Agent.expose_port` / `.list_ports` / `.revoke_port` / `.get_url` | methods | Preview ports |
+| `Agent.idle_timeout_seconds` | property | `int \| None` |
 | `AsyncAgent.*` | mirror | Same surface with `await` |
 
 ### Sandbox handle (`handles/sandbox.py`)
@@ -1920,6 +2149,11 @@ Compact reviewer index. Each symbol should also appear in
 | `Sandbox.rollback` / `.fork` | methods | `Sandbox` (rollback updates in place) |
 | `Sandbox.delete` | method | `None` |
 | `Sandbox.metrics` | method | `SandboxMetricsResponse` |
+| `Sandbox.audit` | method | `AuditTrail` |
+| `Sandbox.addressable` | property | `bool`; `wait_until_ready` also waits for it |
+| `Sandbox.last_crash` | property | `SandboxLastCrash \| None` |
+| `Sandbox.keepalive` / `.update_timeout` | methods | Return updated `Sandbox` |
+| `Sandbox.expose_port` / `.list_ports` / `.revoke_port` / `.get_url` | methods | Preview ports |
 | `Sandbox.exec` | method | `ExecResult` |
 | `Sandbox.exec_stream` | method | `Iterator[ExecStreamEvent]` |
 | `Sandbox.files` | property | `SandboxFiles` |
@@ -1957,7 +2191,10 @@ Compact reviewer index. Each symbol should also appear in
 | `SandboxFiles.write` | method | `dict[str, int]` (`bytes_written`) |
 | `SandboxFiles.read` | method | `bytes` |
 | `SandboxFiles.read_text` | method | `str` |
+| `SandboxFiles.upload` / `.upload_file` | methods | `dict[str, int]` (`bytes_written`) |
+| `SandboxFiles.download_file` | method | `{"bytes_written": int}` |
 | `SandboxFiles.list` | method | `list[FileEntry]` |
+| `SandboxFiles.stat` / `.exists` / `.mkdir` / `.move` / `.remove` / `.watch` | methods | `FileEntry` / `bool` / `FileEntry` / `FileEntry` / `None` / `Iterator[WatchEvent]` |
 | `AsyncSandboxConnection.*` | mirror | `.aclose()` instead of `.close()` |
 | `AsyncSandboxFiles.*` | mirror | Add `await` |
 
@@ -1973,6 +2210,11 @@ Compact reviewer index. Each symbol should also appear in
 ## Contract notes
 
 - `ResponseValidationError` in `neevai._parse` is **internal** — not public API.
+- Sandboxes and agents can be addressed by id or by name wherever an id is accepted;
+  handles always carry the UUID `id`.
+- `APIError.code` is the machine-readable classification from the response (or the
+  sandbox runtime's reason code); it is `None` when a response carries only the
+  deprecated `error` text.
 - `Scope` is exported from both `neevai` and `neevai.types` intentionally.
 - Pagination types are public but not in top-level `__all__`.
 - Client env vars: `NEEV_API_KEY`, `NEEV_ORG_ID`, `NEEV_PROJECT_ID`, and
@@ -1980,7 +2222,7 @@ Compact reviewer index. Each symbol should also appear in
 - Sandbox create uses `sandbox_template_id` in params (not `template_id`).
 - `Sandbox.pause()` / `.resume()` return updated handles (not `None`).
 - `connect_url` is a property on `Sandbox`, not a method.
-- File, exec, and process paths are workspace-relative; absolute paths are rejected
+- File, exec, and process paths are relative to the workspace or absolute within it; paths outside it are rejected
   on file APIs.
 - Supervised processes use `sandbox.processes` (or `SandboxConnection.processes`)
   against `{connect_url}/v1/processes/*` with no transport retries. Wait for
@@ -1988,8 +2230,7 @@ Compact reviewer index. Each symbol should also appear in
   before `start` — see [Processes API](#processes-api).
 - Snapshot create returns `Pending` immediately; poll `get_snapshot` until `Ready`.
 - To recover into a new sandbox, prefer `sandboxes.create({..., "restore": snapshot_id})`
-  over in-place `rollback()` — some backends may return an empty workspace after
-  in-place rollback. `from_snapshot` is a deprecated alias for the create `restore` field.
+  over in-place `rollback()`, which can come back with an empty workspace. `from_snapshot` is a deprecated alias for the create `restore` field.
 - `rollback()`, `pause()`, and `resume()` invalidate the cached runtime connection
   on the handle; call `wait_until_ready()` again before file/exec/process operations when
   needed.

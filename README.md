@@ -71,7 +71,7 @@ You can also pass credentials directly when creating the client:
 ```python
 from neevai import NeevAI
 
-with NeevAI(api_key="...", org_id="...", project_id="...", region="...") as client:
+with NeevAI(api_key="...", org_id="...", project_id="...") as client:
     ...
 ```
 
@@ -101,7 +101,7 @@ If you just cloned the repo, follow these steps to reach your first successful r
 ```python
 from neevai import NeevAI
 
-with NeevAI(api_key="...", org_id="...", project_id="...", region="...") as client:
+with NeevAI(api_key="...", org_id="...", project_id="...") as client:
     sandbox = client.sandboxes.create({})
     sandbox.wait_until_ready()
     result = sandbox.exec("echo Hello World")
@@ -124,8 +124,59 @@ if crash and crash.storage_reset:
 
 `crash.storage_reset is False` means it restarted with its files intact. The field records
 a past event and is **not** cleared when the sandbox recovers, so check `crash.at` before
-reacting to it. Agents expose the same `agent.last_crash`. See
-[`last_crash.py`](examples/last_crash.py).
+reacting to it. Restoring from a snapshot taken before a stop that reset storage brings
+the files back and clears `last_crash` once the restore completes. Agents expose the same
+`agent.last_crash`. See [`last_crash.py`](examples/last_crash.py).
+
+## Files
+
+Paths are relative to the workspace or absolute within it. `files.write` sends content
+up to 1 MiB in one request and anything larger in chunks automatically. For large files
+on disk, `upload_file` / `download_file` stream without holding the file in memory:
+
+```python
+sandbox.files.write("notes.txt", "hello\n")
+
+# Chunked and resumable: a chunk lost to a dropped connection continues from the
+# last byte the sandbox received. chunk_size is 1 MiB by default (64 KiB-1 MiB).
+sandbox.files.upload_file("dataset.parquet", "data/dataset.parquet",
+                          on_progress=lambda sent, total: print(f"{sent}/{total}"))
+
+# Written beside the target and moved into place when complete: no partial file.
+sandbox.files.download_file("data/dataset.parquet", "copy.parquet")
+```
+
+`files.upload(path, data)` takes bytes, str, or a seekable binary file object. See
+[`upload_download.py`](examples/upload_download.py).
+
+## Preview URLs
+
+Ports are private until exposed. `get_url(port)` exposes one and returns its public,
+credential-free URL. The slug in the URL is the only thing gating it, so treat the URL
+as a secret; if it leaks, expose the port again with a new `slug` to rotate it:
+
+```python
+url = sandbox.get_url(3000)
+sandbox.expose_port(3000, slug="k3x9q2mz")  # replaces the slug; the old URL stops working
+sandbox.revoke_port(3000)
+```
+
+Agents have the same `expose_port` / `list_ports` / `revoke_port` / `get_url`.
+
+## Audit trail
+
+`sandbox.audit()` (and `agent.audit()`) reads what ran inside, newest first — terminal
+commands, SSH, process and file operations — with the credential each ran under and how it
+ended. Program names are recorded without their arguments. Page with `next_cursor`:
+
+```python
+trail = sandbox.audit(limit=50)
+for r in trail.records:
+    print(r.at, r.tool, r.command or "", r.outcome.value)
+older = sandbox.audit(limit=50, cursor=trail.next_cursor) if trail.next_cursor else None
+```
+
+See [`audit_trail.py`](examples/audit_trail.py).
 
 ## Network egress
 
@@ -144,9 +195,39 @@ client.sandboxes.create({"name": "ci", "sandbox_template_id": "..."}, allow_egre
 client.agents.create({"name": "coder", "agent_template": "claude-code"}, allow_internet=True)
 ```
 
-`allow_internet=True` opens `0.0.0.0/0` and `::/0`. For finer control (ports, protocols, a
-mix of rules) pass a full `egress` object in `params` instead — it takes precedence over
-the convenience args.
+`allow_internet=True` opens all outbound traffic (`0.0.0.0/0` and `::/0`). For finer control
+(ports, protocols, a mix of rules) pass a full `egress` object in `params` instead — it
+takes precedence over the convenience args.
+
+On a running sandbox or agent, `update` either replaces the policy (`egress`) or edits the
+allow-list in place, leaving every other rule untouched:
+
+```python
+sandbox.update({
+    "egress_add": {"allow": [{"host": "pypi.org", "ports": [443]}]},
+    "egress_remove": {"allow": [{"host": "github.com"}]},
+})
+```
+
+## Errors
+
+Every failure raises a `NeevAIError` subclass: `NotFoundError` (404), `ConflictError`
+(409), `RateLimitError` (429), `ServiceUnavailableError` (503, worth retrying shortly; a
+subclass of `InternalServerError`), and so on. `APIError.code` is a machine-readable
+classification such as `not_found` or `sandbox_quota_exceeded` — branch on it rather than
+on the message text — and `APIError.scope` names the limit a quota refusal hit:
+
+```python
+from neevai.errors import APIError
+
+try:
+    client.sandboxes.create({"sandbox_template_id": "sb-ubuntu-26-04-minimal"})
+except APIError as e:
+    if e.code == "sandbox_quota_exceeded":
+        print(f"quota reached for this {e.scope}")
+    else:
+        raise
+```
 
 ## Long-running processes
 
@@ -190,14 +271,19 @@ with NeevAI(api_key="...", org_id="...", project_id="...") as client:
     agent.wait_until_ready()
     sandbox = agent.sandbox()
     sandbox.files.write("notes.md", "# scratch\n")
-    agent.update({"resources": {"cpu": 2, "memory_gb": 4}})
+    agent.update({"resources": {"cpu": 2, "memory_gb": 4}, "idle_timeout_seconds": 1800})
+    agent.keepalive()  # reset the idle timer while work is in progress
     agent.pause()
     agent.delete()
 ```
 
-Browse templates with `client.agent_templates.list()` / `.get(id)`. Region is
-optional on create — the client injects `default_region` only when set (unlike
-sandbox create, which requires a region). See [`examples/create_agent.py`](examples/create_agent.py).
+Agents can also be fetched by name (`client.agents.get("my-agent")`), rolled back to a
+snapshot (`agent.rollback(snapshot_id)`), serve preview URLs (`agent.expose_port(port)`),
+and read their audit trail (`agent.audit()`). See
+[`agent_ports_audit.py`](examples/agent_ports_audit.py).
+
+Browse templates with `client.agent_templates.list()` / `.get(id)`. `region` is
+optional on agent create. See [`examples/create_agent.py`](examples/create_agent.py).
 
 ## Examples
 
@@ -218,6 +304,11 @@ See [`examples/README.md`](examples/README.md) for the full catalogue and learni
 | [`snapshot_fork_restore.py`](examples/snapshot_fork_restore.py) | Snapshot → `restore` → fork |
 | [`async_sandbox.py`](examples/async_sandbox.py) | End-to-end `AsyncNeevAI` workflow |
 | [`files_api.py`](examples/files_api.py) | `files.write` / `read_text` / `list` |
+| [`update_resize_egress.py`](examples/update_resize_egress.py) | Resize + re-scope egress in one update → `egress_add` / `egress_remove` |
+| [`upload_download.py`](examples/upload_download.py) | Chunked `upload_file` with progress → `download_file` → compare sizes |
+| [`preview_ports.py`](examples/preview_ports.py) | Serve a port → preview URL → rotate the slug → revoke |
+| [`audit_trail.py`](examples/audit_trail.py) | Run commands → page through the sandbox audit trail |
+| [`agent_ports_audit.py`](examples/agent_ports_audit.py) | Agent preview URL with a slug, keepalive, audit trail |
 | [`streaming_exec.py`](examples/streaming_exec.py) | Live `sandbox.exec_stream()` output |
 | [`processes.py`](examples/processes.py) | Supervised process lifecycle (start, follow, logs, kill) |
 | [`process_pool.py`](examples/process_pool.py) | Parallel processes with `kill_all` |

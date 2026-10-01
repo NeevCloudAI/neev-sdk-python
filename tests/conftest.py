@@ -312,10 +312,16 @@ def _control_response(
     if m_ports:
         sandbox_id = m_ports.group(3)
         port_seg = m_ports.group(4)
-        ports: list[int] = _FAKE_DB.setdefault("ports", {}).setdefault(sandbox_id, [])
+        # Exposed ports keyed by port number, each mapped to the slug gating its URL.
+        ports: dict[int, str] = _FAKE_DB.setdefault("ports", {}).setdefault(sandbox_id, {})
 
         def _port_obj(p: int) -> dict:
-            return {"port": p, "preview_url": f"https://{p}-{sandbox_id}.preview.example.com"}
+            slug = ports[p]
+            return {
+                "port": p,
+                "slug": slug,
+                "preview_url": f"https://{p}-{slug}.preview.example.com",
+            }
 
         if port_seg is None:
             if method == "GET":
@@ -324,13 +330,13 @@ def _control_response(
                 if not isinstance(body, dict) or "port" not in body:
                     return json_resp(400, {"message": "port is required"})
                 p = int(body["port"])
-                if p not in ports:
-                    ports.append(p)
+                if body.get("slug"):
+                    ports[p] = body["slug"]
+                elif p not in ports:
+                    ports[p] = uuid.uuid4().hex[:8]
                 return json_resp(200, _port_obj(p))
         elif method == "DELETE":
-            p = int(port_seg)
-            if p in ports:
-                ports.remove(p)
+            ports.pop(int(port_seg), None)
             return json_resp(204)
         return json_resp(400, {"message": "bad request"})
 

@@ -6,7 +6,18 @@ from collections.abc import Callable, Mapping
 from typing import TYPE_CHECKING, Any, cast
 
 from neevai.errors import NeevAIError
-from neevai.types import AgentData, AgentLastCrash, Scope, UpdateAgentParams
+from neevai.resources.sandboxes import (
+    DEFAULT_PORT_POLL_INTERVAL_MS,
+    DEFAULT_PORT_WAIT_TIMEOUT_MS,
+)
+from neevai.types import (
+    AgentData,
+    AgentLastCrash,
+    AuditTrail,
+    SandboxPort,
+    Scope,
+    UpdateAgentParams,
+)
 
 if TYPE_CHECKING:
     from neevai.handles.sandbox import AsyncSandbox, Sandbox
@@ -90,9 +101,15 @@ class Agent:
         Records a past event and is not cleared when the agent recovers, so check
         ``at`` before acting on it. ``storage_reset`` True means the agent came back
         with an empty filesystem: files under /workspace, and anything installed since
-        create, are gone.
+        create, are gone. Rolling back to a snapshot taken before that stop brings the
+        files back and clears this once the rollback has completed.
         """
         return self._state.last_crash
+
+    @property
+    def idle_timeout_seconds(self) -> int | None:
+        """Idle window in seconds; 0 means no idle limit, None means the account default."""
+        return self._state.idle_timeout_seconds
 
     @property
     def created_at(self) -> str:
@@ -132,7 +149,7 @@ class Agent:
         allow_internet: bool | None = None,
         allow_egress: list[str] | None = None,
     ) -> Agent:
-        """Updates mutable agent fields (``resources`` and/or ``egress``) in place."""
+        """Updates mutable agent fields (resources, egress, idle window) in place."""
         if self.agents is None:
             raise NeevAIError("Cannot update an agent handle with no client context.")
         next_state = self.agents.update(
@@ -178,6 +195,124 @@ class Agent:
             self.id,
             org_id=self.scope.org_id if self.scope else None,
             project_id=self.scope.project_id if self.scope else None,
+        )
+
+    def keepalive(self) -> Agent:
+        """Resets this agent's idle timer and updates this handle in place.
+
+        Call it periodically while work is in progress to hold the agent past its idle
+        deadline.
+        """
+        if self.agents is None:
+            raise NeevAIError("Cannot keep alive an agent handle with no client context.")
+        next_state = self.agents.keepalive(
+            self.id,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+        )
+        self._state = next_state._state
+        return self
+
+    def rollback(self, snapshot_id: str) -> Agent:
+        """Rolls this agent back in place to a snapshot and updates this handle."""
+        if self.agents is None:
+            raise NeevAIError("Cannot rollback an agent handle with no client context.")
+        next_state = self.agents.rollback(
+            self.id,
+            snapshot_id,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+        )
+        self._state = next_state._state
+        return self
+
+    def audit(
+        self,
+        *,
+        from_: str | None = None,
+        to: str | None = None,
+        cursor: str | None = None,
+        limit: int | None = None,
+    ) -> AuditTrail:
+        """Reads one page of this agent's command audit trail, newest first.
+
+        Pass the previous page's ``next_cursor`` as ``cursor`` to read older records.
+        """
+        if self.agents is None:
+            raise NeevAIError(
+                "Cannot read the audit trail of an agent handle with no client context."
+            )
+        return self.agents.audit(
+            self.id,
+            from_=from_,
+            to=to,
+            cursor=cursor,
+            limit=limit,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+        )
+
+    def expose_port(self, port: int, *, slug: str | None = None) -> SandboxPort:
+        """Exposes a port for credential-free preview URLs and returns it with its URL.
+
+        Treat the URL as a secret: its slug is the only thing gating it. Omit ``slug``
+        for a random one; a different ``slug`` on an exposed port rotates the URL.
+        """
+        if self.agents is None:
+            raise NeevAIError("Cannot expose a port on an agent handle with no client context.")
+        return self.agents.expose_port(
+            self.id,
+            port,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+            slug=slug,
+        )
+
+    def list_ports(self) -> list[SandboxPort]:
+        """Lists the ports currently exposed for this agent's preview URLs."""
+        if self.agents is None:
+            raise NeevAIError("Cannot list ports on an agent handle with no client context.")
+        return self.agents.list_ports(
+            self.id,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+        )
+
+    def revoke_port(self, port: int) -> None:
+        """Revokes a previously exposed preview port."""
+        if self.agents is None:
+            raise NeevAIError("Cannot revoke a port on an agent handle with no client context.")
+        self.agents.revoke_port(
+            self.id,
+            port,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+        )
+
+    def get_url(
+        self,
+        port: int,
+        wait_until_ready: bool = True,
+        timeout_ms: int = DEFAULT_PORT_WAIT_TIMEOUT_MS,
+        poll_interval_ms: int = DEFAULT_PORT_POLL_INTERVAL_MS,
+        *,
+        slug: str | None = None,
+    ) -> str:
+        """Exposes a port and returns its preview URL, waiting until it is routable by default.
+
+        ``slug`` is forwarded to ``expose_port``: omit it for a random one.
+        """
+        if self.agents is None:
+            raise NeevAIError("Cannot get a URL on an agent handle with no client context.")
+        return self.agents.get_port_url(
+            self.id,
+            port,
+            wait_until_ready=wait_until_ready,
+            timeout_ms=timeout_ms,
+            poll_interval_ms=poll_interval_ms,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+            slug=slug,
         )
 
     def sandbox(self) -> Sandbox:
@@ -261,6 +396,11 @@ class AsyncAgent:
         return self._state.last_crash
 
     @property
+    def idle_timeout_seconds(self) -> int | None:
+        """Idle window in seconds; 0 means no idle limit, None means the account default."""
+        return self._state.idle_timeout_seconds
+
+    @property
     def created_at(self) -> str:
         return cast(str, _state_as_json(self._state)["created_at"])
 
@@ -335,6 +475,124 @@ class AsyncAgent:
             self.id,
             org_id=self.scope.org_id if self.scope else None,
             project_id=self.scope.project_id if self.scope else None,
+        )
+
+    async def keepalive(self) -> AsyncAgent:
+        """Resets this agent's idle timer and updates this handle in place.
+
+        Call it periodically while work is in progress to hold the agent past its idle
+        deadline.
+        """
+        if self.agents is None:
+            raise NeevAIError("Cannot keep alive an agent handle with no client context.")
+        next_state = await self.agents.keepalive(
+            self.id,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+        )
+        self._state = next_state._state
+        return self
+
+    async def rollback(self, snapshot_id: str) -> AsyncAgent:
+        """Rolls this agent back in place to a snapshot and updates this handle."""
+        if self.agents is None:
+            raise NeevAIError("Cannot rollback an agent handle with no client context.")
+        next_state = await self.agents.rollback(
+            self.id,
+            snapshot_id,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+        )
+        self._state = next_state._state
+        return self
+
+    async def audit(
+        self,
+        *,
+        from_: str | None = None,
+        to: str | None = None,
+        cursor: str | None = None,
+        limit: int | None = None,
+    ) -> AuditTrail:
+        """Reads one page of this agent's command audit trail, newest first.
+
+        Pass the previous page's ``next_cursor`` as ``cursor`` to read older records.
+        """
+        if self.agents is None:
+            raise NeevAIError(
+                "Cannot read the audit trail of an agent handle with no client context."
+            )
+        return await self.agents.audit(
+            self.id,
+            from_=from_,
+            to=to,
+            cursor=cursor,
+            limit=limit,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+        )
+
+    async def expose_port(self, port: int, *, slug: str | None = None) -> SandboxPort:
+        """Exposes a port for credential-free preview URLs and returns it with its URL.
+
+        Treat the URL as a secret: its slug is the only thing gating it. Omit ``slug``
+        for a random one; a different ``slug`` on an exposed port rotates the URL.
+        """
+        if self.agents is None:
+            raise NeevAIError("Cannot expose a port on an agent handle with no client context.")
+        return await self.agents.expose_port(
+            self.id,
+            port,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+            slug=slug,
+        )
+
+    async def list_ports(self) -> list[SandboxPort]:
+        """Lists the ports currently exposed for this agent's preview URLs."""
+        if self.agents is None:
+            raise NeevAIError("Cannot list ports on an agent handle with no client context.")
+        return await self.agents.list_ports(
+            self.id,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+        )
+
+    async def revoke_port(self, port: int) -> None:
+        """Revokes a previously exposed preview port."""
+        if self.agents is None:
+            raise NeevAIError("Cannot revoke a port on an agent handle with no client context.")
+        await self.agents.revoke_port(
+            self.id,
+            port,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+        )
+
+    async def get_url(
+        self,
+        port: int,
+        wait_until_ready: bool = True,
+        timeout_ms: int = DEFAULT_PORT_WAIT_TIMEOUT_MS,
+        poll_interval_ms: int = DEFAULT_PORT_POLL_INTERVAL_MS,
+        *,
+        slug: str | None = None,
+    ) -> str:
+        """Exposes a port and returns its preview URL, waiting until it is routable by default.
+
+        ``slug`` is forwarded to ``expose_port``: omit it for a random one.
+        """
+        if self.agents is None:
+            raise NeevAIError("Cannot get a URL on an agent handle with no client context.")
+        return await self.agents.get_port_url(
+            self.id,
+            port,
+            wait_until_ready=wait_until_ready,
+            timeout_ms=timeout_ms,
+            poll_interval_ms=poll_interval_ms,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+            slug=slug,
         )
 
     async def sandbox(self) -> AsyncSandbox:
