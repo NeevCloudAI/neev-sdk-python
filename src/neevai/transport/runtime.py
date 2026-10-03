@@ -42,6 +42,7 @@ class RuntimeTransport:
         headers: dict[str, str] | None = None,
         content: str | bytes | None = None,
         body: Any | None = None,
+        timeout_s: float | None = None,
     ) -> httpx.Response:
         """Sends a request to the sandbox runtime without retries."""
         url = f"{self.connect_url}/{path.lstrip('/')}"
@@ -62,7 +63,7 @@ class RuntimeTransport:
                 headers=req_headers,
                 content=content,
                 json=body,
-                timeout=self.timeout,
+                timeout=httpx.Timeout(timeout_s) if timeout_s is not None else self.timeout,
             )
         except httpx.TimeoutException as e:
             from neevai.errors import APITimeoutError
@@ -84,6 +85,7 @@ class RuntimeTransport:
         path: str,
         headers: dict[str, str] | None = None,
         body: Any | None = None,
+        timeout_s: float | None = None,
     ) -> Generator[str, None, None]:
         """Streams the response body line by line for NDJSON exec streams."""
         url = f"{self.connect_url}/{path.lstrip('/')}"
@@ -97,7 +99,7 @@ class RuntimeTransport:
                 url=url,
                 headers=req_headers,
                 json=body,
-                timeout=self.timeout,
+                timeout=httpx.Timeout(timeout_s) if timeout_s is not None else self.timeout,
             ) as response:
                 if not response.is_success:
                     response.read()  # Buffer response text for mapping error
@@ -155,6 +157,7 @@ class RuntimeTransport:
                 body = {
                     "code": parsed.get("reason_code", ""),
                     "message": parsed.get("message", ""),
+                    "reason": parsed.get("reason", ""),
                 }
             except ValueError:
                 body = {"details": text}
@@ -196,6 +199,7 @@ class AsyncRuntimeTransport:
         headers: dict[str, str] | None = None,
         content: str | bytes | None = None,
         body: Any | None = None,
+        timeout_s: float | None = None,
     ) -> httpx.Response:
         """Sends an async request to the sandbox runtime without retries."""
         url = f"{self.connect_url}/{path.lstrip('/')}"
@@ -216,7 +220,7 @@ class AsyncRuntimeTransport:
                 headers=req_headers,
                 content=content,
                 json=body,
-                timeout=self.timeout,
+                timeout=httpx.Timeout(timeout_s) if timeout_s is not None else self.timeout,
             )
         except httpx.TimeoutException as e:
             from neevai.errors import APITimeoutError
@@ -238,6 +242,7 @@ class AsyncRuntimeTransport:
         path: str,
         headers: dict[str, str] | None = None,
         body: Any | None = None,
+        timeout_s: float | None = None,
     ) -> AsyncGenerator[str, None]:
         """Streams the response body line by line for NDJSON exec streams."""
         url = f"{self.connect_url}/{path.lstrip('/')}"
@@ -251,7 +256,7 @@ class AsyncRuntimeTransport:
                 url=url,
                 headers=req_headers,
                 json=body,
-                timeout=self.timeout,
+                timeout=httpx.Timeout(timeout_s) if timeout_s is not None else self.timeout,
             ) as response:
                 if not response.is_success:
                     await response.aread()
@@ -311,6 +316,7 @@ class AsyncRuntimeTransport:
                 body = {
                     "code": parsed.get("reason_code", ""),
                     "message": parsed.get("message", ""),
+                    "reason": parsed.get("reason", ""),
                 }
             except ValueError:
                 body = {"details": text}

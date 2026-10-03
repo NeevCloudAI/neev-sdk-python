@@ -254,6 +254,60 @@ final = proc.wait()
 See [`examples/processes.py`](examples/processes.py) and
 [`examples/process_pool.py`](examples/process_pool.py).
 
+## Code interpreter
+
+A sandbox created from the interpreter template runs Python in persistent kernels.
+Variables, imports and loaded data stay between runs in the same context, so each run
+builds on the last:
+
+```python
+sandbox = client.sandboxes.create({"sandbox_template_id": "sb-ubuntu-26-04-interpreter"})
+sandbox.wait_until_ready()
+
+sandbox.code.run("import pandas as pd\ndf = pd.DataFrame({'x': [1, 2, 3]})")
+run = sandbox.code.run(
+    "print(df.x.sum())\ndf.describe()",
+    on_stdout=lambda out: print(out.line, end=""),  # OutputMessage(line, timestamp, error)
+)
+run.stdout            # "6\n"
+run.text              # the last expression's text, here the describe() table
+run.results[0].html   # text, html, markdown, svg, png, jpeg, pdf, latex, json; formats()
+run.execution_count   # 2
+run.end_reason        # "ok"
+```
+
+Code that raises is returned, not raised: `end_reason` is `"error"` and `run.error`
+holds `name`, `value` and `traceback`. A run that outlives `timeout_ms` is interrupted
+with `end_reason == "deadline_exceeded"` and the context keeps its state;
+`"kernel_restarted"` and `"memory_exceeded"` mean the state was lost, which a change in
+`run.generation` also tells you. A run on a context that is still busy raises an
+`APIError` with `reason == "context_busy"`.
+
+Run options: `context` (a context or its id), `language` (`"python"`, the default
+context's language), `envs` (environment variables for this run only, seen by
+subprocesses too), `timeout_ms` (the cell's timeout; the sandbox's ceiling is the
+default), `request_timeout_ms` (a bound on the whole request), and the `on_stdout` /
+`on_stderr` / `on_result` / `on_error` callbacks. `run.logs` holds the output pieces as
+they arrived.
+
+```python
+sandbox.code.run("import os\nprint(os.environ['STAGE'])", envs={"STAGE": "test"})
+```
+
+Each context is a separate kernel with its own state, started in its own working
+directory; a run sent while its kernel is still starting waits for it. Runs without a
+`context` use the `default` context:
+
+```python
+ctx = sandbox.code.create_context(cwd="project")  # CreatedCodeContext(context_id, generation, language, cwd)
+sandbox.code.run("import os\nprint(os.getcwd())", context=ctx)
+sandbox.code.list_contexts()       # [CodeContext(context_id, state, generation, language, cwd, rss_mib)]
+sandbox.code.restart_context(ctx)  # drops its state, returns the new generation
+sandbox.code.delete_context(ctx)
+```
+
+See [`examples/code_interpreter.py`](examples/code_interpreter.py).
+
 ## Agents
 
 Provision a packaged agent from the catalogue template (`agent_template` is the
@@ -311,6 +365,7 @@ See [`examples/README.md`](examples/README.md) for the full catalogue and learni
 | [`agent_ports_audit.py`](examples/agent_ports_audit.py) | Agent preview URL with a slug, keepalive, audit trail |
 | [`streaming_exec.py`](examples/streaming_exec.py) | Live `sandbox.exec_stream()` output |
 | [`processes.py`](examples/processes.py) | Supervised process lifecycle (start, follow, logs, kill) |
+| [`code_interpreter.py`](examples/code_interpreter.py) | `sandbox.code` — state kept between runs, an exception as a result, a second context |
 | [`process_pool.py`](examples/process_pool.py) | Parallel processes with `kill_all` |
 | [`parallel_fanout.py`](examples/parallel_fanout.py) | 3 sandboxes, parallel repo analysis, aggregated file counts |
 | [`sandbox_metrics.py`](examples/sandbox_metrics.py) | Metrics under CPU load |
