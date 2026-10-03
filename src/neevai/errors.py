@@ -31,6 +31,8 @@ class APIError(NeevAIError):
     ``not_found`` or ``sandbox_quota_exceeded``); branch on it rather than on the
     message text, which may be reworded. ``scope`` names which limit was hit when a
     quota refuses the request (for example ``organization`` or ``project``).
+    ``reason`` refines ``code`` where one code covers several cases (for example
+    ``context_busy`` or ``interpreter_not_enabled`` from the code interpreter).
     """
 
     def __init__(
@@ -46,6 +48,8 @@ class APIError(NeevAIError):
         self.body = body
         self.code = _str_field(body, "code")
         self.scope = _str_field(body, "scope")
+        # Refines `code` where one code covers several cases, e.g. `context_busy`.
+        self.reason = _str_field(body, "reason")
         # `message` carries the readable text; `error` is the older field with the same text.
         self._text = _str_field(body, "message") or _str_field(body, "error")
         self.details = _str_field(body, "details")

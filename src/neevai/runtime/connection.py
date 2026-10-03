@@ -255,11 +255,13 @@ class SandboxConnection:
             connect_url, api_key, timeout_ms, client=client, sandbox_id=sandbox_id
         )
         self.files = SandboxFiles(self)
+        from neevai.runtime.code import SandboxCode
         from neevai.runtime.processes import SandboxProcesses
         from neevai.runtime.pty import SandboxPty
         from neevai.runtime.ssh import SandboxSsh
 
         self.processes = SandboxProcesses(self)
+        self.code = SandboxCode(self)
         self.pty = SandboxPty(self)
         self.ssh = SandboxSsh(self)
 
@@ -518,11 +520,13 @@ class AsyncSandboxConnection:
             connect_url, api_key, timeout_ms, client=client, sandbox_id=sandbox_id
         )
         self.files = AsyncSandboxFiles(self)
+        from neevai.runtime.code import AsyncSandboxCode
         from neevai.runtime.processes import AsyncSandboxProcesses
         from neevai.runtime.pty import AsyncSandboxPty
         from neevai.runtime.ssh import AsyncSandboxSsh
 
         self.processes = AsyncSandboxProcesses(self)
+        self.code = AsyncSandboxCode(self)
         self.pty = AsyncSandboxPty(self)
         self.ssh = AsyncSandboxSsh(self)
 
