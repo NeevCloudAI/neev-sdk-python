@@ -75,6 +75,7 @@ examples/
 ├── files_api.py
 ├── streaming_exec.py
 ├── processes.py
+├── code_interpreter.py
 ├── process_pool.py
 ├── sandbox_metrics.py
 ├── parallel_fanout.py
@@ -124,6 +125,7 @@ uses the **platform agents API** — not the model-driven patterns in Tier 2.
 | [`ssh_tunnel.py`](./ssh_tunnel.py) | `sandbox.ssh()` over a BYOI image — exec, `rsync` upload, and `ssh -L` port-forward through one tunnel | `uv run python examples/ssh_tunnel.py` |
 | [`streaming_exec.py`](./streaming_exec.py) | `exec_stream` — stdout/stderr streamed line-by-line | `uv run python examples/streaming_exec.py` |
 | [`processes.py`](./processes.py) | `refresh` (connect_url poll), `wait_until_ready`, `processes.list` (runtime probe), `start`, `follow`, `logs`, `kill`, `wait` | `uv run python examples/processes.py` |
+| [`code_interpreter.py`](./code_interpreter.py) | `sandbox.code` — state kept between runs, an exception as a result, a second context | `uv run python examples/code_interpreter.py` |
 | [`process_pool.py`](./process_pool.py) | Same wait pattern as `processes.py`, parallel `start`, `list`, `kill_all`, `wait` | `uv run python examples/process_pool.py` |
 | [`parallel_fanout.py`](./parallel_fanout.py) | Multiple `sandboxes.create`, parallel `exec` via `ThreadPoolExecutor` | `uv run python examples/parallel_fanout.py` |
 | [`sandbox_metrics.py`](./sandbox_metrics.py) | `metrics()` polled under simulated CPU load | `uv run python examples/sandbox_metrics.py` |
