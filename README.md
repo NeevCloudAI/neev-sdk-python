@@ -273,6 +273,61 @@ final = proc.wait()
 See [`examples/processes.py`](examples/processes.py) and
 [`examples/process_pool.py`](examples/process_pool.py).
 
+## Code interpreter
+
+A sandbox created from the interpreter template runs Python in persistent kernels.
+Variables, imports and loaded data stay between runs in the same context, so each run
+builds on the last:
+
+```python
+sandbox = client.sandboxes.create({"sandbox_template_id": "sb-ubuntu-26-04-interpreter"})
+sandbox.wait_until_ready()
+
+sandbox.code.run("import pandas as pd\ndf = pd.DataFrame({'x': [1, 2, 3]})")
+run = sandbox.code.run(
+    "print(df.x.sum())\ndf.describe()",
+    on_stdout=lambda out: print(out.line, end=""),  # OutputMessage(line, timestamp, error)
+)
+run.stdout            # "6\n"
+run.text              # the last expression's text, here the describe() table
+run.results[0].html   # text, html, markdown, svg, png, jpeg, pdf, latex, json; formats()
+run.execution_count   # 2
+run.end_reason        # "ok"
+```
+
+Code that raises is returned, not raised: `end_reason` is `"error"` and `run.error`
+holds `name`, `value` and `traceback`. A run that outlives `timeout_ms` is interrupted
+with `end_reason == "deadline_exceeded"` and the context keeps its state;
+`"kernel_restarted"` and `"memory_exceeded"` mean the state was lost, which a change in
+`run.generation` also tells you. A run on a context that is still busy raises an
+`APIError` with `reason == "context_busy"`. A run or context call on a paused sandbox
+wakes it and waits up to two minutes, within `request_timeout_ms`.
+
+Run options: `context` (a context or its id), `language` (`"python"`, the default
+context's language), `envs` (environment variables for this run only, seen by
+subprocesses too), `timeout_ms` (the cell's timeout; the sandbox's ceiling is the
+default), `request_timeout_ms` (a bound on the whole request), and the `on_stdout` /
+`on_stderr` / `on_result` / `on_error` callbacks. `run.logs` holds the output pieces as
+they arrived.
+
+```python
+sandbox.code.run("import os\nprint(os.environ['STAGE'])", envs={"STAGE": "test"})
+```
+
+Each context is a separate kernel with its own state, started in its own working
+directory; a run sent while its kernel is still starting waits for it. Runs without a
+`context` use the `default` context:
+
+```python
+ctx = sandbox.code.create_context(cwd="project")  # CreatedCodeContext(context_id, generation, language, cwd)
+sandbox.code.run("import os\nprint(os.getcwd())", context=ctx)
+sandbox.code.list_contexts()       # [CodeContext(context_id, state, generation, language, cwd, rss_mib)]
+sandbox.code.restart_context(ctx)  # drops its state, returns the new generation
+sandbox.code.delete_context(ctx)
+```
+
+See [`examples/code_interpreter.py`](examples/code_interpreter.py).
+
 ## Agent tools
 
 `neevai.agent_tools` ships the sandbox tool contract for your own agent: tools
@@ -357,6 +412,7 @@ See [`examples/README.md`](examples/README.md) for the full catalogue and learni
 | [`snapshot_fork_restore.py`](examples/snapshot_fork_restore.py) | Snapshot → `restore` → fork |
 | [`async_sandbox.py`](examples/async_sandbox.py) | End-to-end `AsyncNeevAI` workflow |
 | [`files_api.py`](examples/files_api.py) | `files.write` / `read_text` / `list` |
+| [`code_interpreter.py`](examples/code_interpreter.py) | `sandbox.code` — state kept between runs, an exception as a result, a second context |
 | [`update_resize_egress.py`](examples/update_resize_egress.py) | Resize + re-scope egress in one update → `egress_add` / `egress_remove` |
 | [`upload_download.py`](examples/upload_download.py) | Chunked `upload_file` with progress → `download_file` → compare sizes |
 | [`preview_ports.py`](examples/preview_ports.py) | Serve a port → preview URL → rotate the slug → revoke |

@@ -1,5 +1,6 @@
-"""Canonical ``<runtime>`` slot — runtime clients (connection + files + exec + processes)."""
+"""Canonical ``<runtime>`` slot — runtime clients (connection + files + exec + processes + code)."""
 
+from neevai.runtime.code import AsyncSandboxCode, SandboxCode
 from neevai.runtime.connection import (
     AsyncSandboxConnection,
     AsyncSandboxFiles,
@@ -22,4 +23,6 @@ __all__ = [
     "AsyncSandboxFiles",
     "AsyncSandboxProcesses",
     "AsyncProcess",
+    "SandboxCode",
+    "AsyncSandboxCode",
 ]
