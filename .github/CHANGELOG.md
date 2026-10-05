@@ -6,6 +6,13 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-10-05
+
+### Fixed
+
+- String enums from the API now subclass `str`, so they compare equal to their values. `client.sandboxes.get_snapshot(id).status == "Ready"` is `True` once a snapshot is ready. Before, it was always `False`, so a `while ... != "Ready"` poll never ended. The same applies to `outcome` on audit records, a sandbox's phase, agent status, and the other enums.
+- Request bodies are encoded the way the API expects, so IDs straight from SDK models work. `sandbox.rollback(snap.id)` and `client.sandboxes.rollback(id, snap.id)` raised `TypeError: Object of type UUID is not JSON serializable`, because a snapshot's `id` is a `UUID`. UUIDs, enums and datetimes inside any request body now serialise to their API form. `snapshot_id` parameters accept `str | UUID`, so passing `snap.id` also type-checks.
+
 ## [0.8.1] - 2026-10-05
 
 ### Changed
