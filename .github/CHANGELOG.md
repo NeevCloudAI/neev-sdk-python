@@ -6,6 +6,46 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-10-05
+
+### Changed
+
+- `APIError.code` is now the API's machine-readable code (`not_found`, `sandbox_quota_exceeded`, …). In 0.8.0 it held the human-readable message text, so code that compares `code` against message text must switch to the new codes. The text itself is in `error.body["message"]`. `APIError.scope` names the limit a quota refusal hit, and the message comes from the API's `message`. A `503` raises the new `ServiceUnavailableError`, a subclass of `InternalServerError`.
+
+### Added
+
+- `sandbox.audit()` / `client.sandboxes.audit(id)` and `agent.audit()` / `client.agents.audit(id)` read one page of what ran inside a sandbox — program names (never arguments), process and file operations, the credential each was made under, and how it ended. Page with `cursor=trail.next_cursor`.
+- Preview URLs are gated by a per-port slug. `expose_port(port, slug=...)` and `get_url(port, slug=...)` choose one; exposing an exposed port with a different slug rotates it and breaks the old URL. `SandboxPort` now carries `slug`.
+- `update()` accepts `egress_add` / `egress_remove` to edit the allow-list in place without restating it. Combining them with `egress` (or `allow_internet` / `allow_egress`) is rejected before the request.
+- Sandboxes and agents can be addressed by name wherever an id is accepted.
+- `sandbox.addressable` reports whether a new sandbox can be reached yet; `wait_until_ready()` now waits for it.
+- Agents gain `keepalive()`, `rollback(snapshot_id)`, preview ports (`expose_port` / `list_ports` / `revoke_port` / `get_url`), and an idle window: `idle_timeout_seconds` on create and update, read back as `agent.idle_timeout_seconds`.
+- `sandbox.files.upload(path, data)` sends bytes, str, or a seekable file in resumable chunks with progress; `files.write` uses it automatically above 1 MiB, so large writes no longer fail. `files.upload_file(local_path, remote_path)` and `files.download_file(remote_path, local_path)` move files to and from local disk without buffering them, and a failed download leaves no partial file.
+- Sandbox templates carry an `icon`. `last_crash` is cleared once a restore from a snapshot taken before the crash completes.
+
+## [0.8.0] - 2026-09-23
+
+### Changed
+
+- **Breaking:** the in-place snapshot revert is renamed from `restore` to `rollback`, and the create-from-snapshot field from `from_snapshot` to `restore`. Callers using `restore` to revert in place must switch to `rollback`.
+- **Breaking:** `pause()` no longer takes `preserve_memory`. A pause always captures full state and a resume always restores from it.
+- `0.8.0` drops the pre-release suffix, so it is the first version a plain `pip install neevai` resolves to.
+
+### Added
+
+- In-place resize and live egress update with `sandboxes.update` / `sandbox.update`, on the sync and async clients, and the same `allow_internet` / `allow_egress` convenience on `agents.update`.
+- Lifecycle windows: `keepalive`, `update_timeout`, and `lifecycle` plus your own `image` / `command` at create time.
+- `last_crash` on the sandbox and agent handles.
+- `name`, `status`, and `sandbox_id` filters on `sandboxes.list()`.
+
+## [0.7.0b0] - 2026-07-22
+
+### Added
+
+- Interactive PTY sessions with `sandbox.pty.create(...)`, on the sync and async clients. Output streams to the `on_data` callback; drive the session with `send_input` / `resize` / `kill`, wait for its exit code with `wait()`, and reattach with `pty.create(id=...)`. Adds a `websockets` dependency, used only for PTY.
+- Preview ports on the sandbox handle: `expose_port(port)` / `list_ports()` / `revoke_port(port)`, and `get_url(port)`, which exposes the port and waits until its preview URL is reachable.
+- Filesystem control and watch on `sandbox.files`: `stat`, `mkdir`, `move`, `exists`, `remove(path, recursive=False)`, and `watch(path, recursive=False, timeout_ms=None)`, which streams a `WatchEvent` per change.
+
 ## [0.6.0b0] - 2026-06-22
 
 ### Changed
