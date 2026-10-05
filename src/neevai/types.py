@@ -315,3 +315,133 @@ class Signal:
     QUIT = 3
     KILL = 9
     TERM = 15
+
+
+class OutputMessage(BaseModel):
+    """One piece of output as it arrived."""
+
+    # The text, which may hold several lines or part of one.
+    line: str
+    # When it arrived, in Unix epoch milliseconds.
+    timestamp: int
+    # True for stderr.
+    error: bool
+
+
+@dataclass
+class CodeResult:
+    """One display value. ``data`` maps MIME type to value; the properties read the common ones."""
+
+    data: dict[str, object]
+    # True for the value of the code's last expression.
+    is_main: bool = False
+
+    def formats(self) -> list[str]:
+        """The MIME types this result carries."""
+        return list(self.data)
+
+    def _str(self, mime: str) -> str | None:
+        value = self.data.get(mime)
+        return value if isinstance(value, str) else None
+
+    @property
+    def text(self) -> str | None:
+        return self._str("text/plain")
+
+    @property
+    def html(self) -> str | None:
+        return self._str("text/html")
+
+    @property
+    def markdown(self) -> str | None:
+        return self._str("text/markdown")
+
+    @property
+    def latex(self) -> str | None:
+        return self._str("text/latex")
+
+    @property
+    def svg(self) -> str | None:
+        return self._str("image/svg+xml")
+
+    @property
+    def png(self) -> str | None:
+        """Base64-encoded image bytes."""
+        return self._str("image/png")
+
+    @property
+    def jpeg(self) -> str | None:
+        return self._str("image/jpeg")
+
+    @property
+    def pdf(self) -> str | None:
+        return self._str("application/pdf")
+
+    @property
+    def javascript(self) -> str | None:
+        return self._str("application/javascript")
+
+    @property
+    def json(self) -> object:
+        """Structured JSON output, as the kernel sent it."""
+        return self.data.get("application/json")
+
+
+class CodeError(BaseModel):
+    """The exception the code raised."""
+
+    name: str
+    value: str
+    traceback: list[str]
+
+
+class Logs(BaseModel):
+    """A run's output, one entry per piece as it arrived."""
+
+    stdout: list[str] = []
+    stderr: list[str] = []
+
+
+class Execution(BaseModel):
+    """Everything one code run produced.
+
+    ``end_reason`` is ``ok``, ``error`` (the code raised, see ``error``),
+    ``deadline_exceeded``, ``kernel_restarted`` or ``memory_exceeded`` (the context's
+    state was lost), or ``unavailable`` or ``invalid_response``.
+    """
+
+    stdout: str = ""
+    stderr: str = ""
+    logs: Logs = Logs()
+    results: list[CodeResult] = []
+    # The text of the last expression's value, when it has one.
+    text: str | None = None
+    error: CodeError | None = None
+    end_reason: str = ""
+    # The cell's number in its context, when the kernel numbered it.
+    execution_count: int | None = None
+    # The context's generation; a change between runs means its state was lost.
+    generation: str = ""
+    # True when an oversized output was dropped.
+    truncated: bool = False
+
+
+class CreatedCodeContext(BaseModel):
+    """A context just created; its kernel may still be starting."""
+
+    context_id: str
+    generation: str
+    language: str | None = None
+    cwd: str | None = None
+
+
+class CodeContext(BaseModel):
+    """One code-interpreter context: a kernel with its own state."""
+
+    context_id: str
+    state: Literal["idle", "busy"]
+    generation: str
+    language: str | None = None
+    cwd: str | None = None
+    # Resident memory in MiB.
+    rss_mib: int
