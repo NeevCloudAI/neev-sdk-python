@@ -3,6 +3,7 @@ from __future__ import annotations
 import time
 from collections.abc import AsyncGenerator, Callable, Generator, Mapping
 from typing import TYPE_CHECKING, Any
+from uuid import UUID
 
 from neevai.errors import APIConnectionError, APIError, APITimeoutError, NeevAIError
 from neevai.resources.sandboxes import (
@@ -372,7 +373,7 @@ class Sandbox:
             project_id=self.scope.project_id if self.scope else None,
         )
 
-    def rollback(self, snapshot_id: str) -> Sandbox:
+    def rollback(self, snapshot_id: str | UUID) -> Sandbox:
         """Rolls this sandbox back in place to a previous snapshot."""
         if self.sandboxes is None:
             raise NeevAIError("Cannot rollback a sandbox handle with no client context.")
@@ -850,7 +851,7 @@ class AsyncSandbox:
             project_id=self.scope.project_id if self.scope else None,
         )
 
-    async def rollback(self, snapshot_id: str) -> AsyncSandbox:
+    async def rollback(self, snapshot_id: str | UUID) -> AsyncSandbox:
         if self.sandboxes is None:
             raise NeevAIError("Cannot rollback a sandbox handle with no client context.")
         next_state = await self.sandboxes.rollback(
