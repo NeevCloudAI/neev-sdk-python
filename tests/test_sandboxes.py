@@ -731,3 +731,26 @@ async def test_async_sandboxes_keepalive_and_update_timeout(async_mock_transport
     updated = await client.sandboxes.update_timeout(sb.id, {"idle_timeout_seconds": 120})
     assert updated.data["idle_timeout_seconds"] == 120
     await client.aclose()
+
+
+def test_rollback_accepts_the_snapshot_id_as_returned(mock_transport):
+    """`snap.id` is a UUID; passing it straight to rollback must not fail to serialise."""
+    client = _make_client(mock_transport)
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-x"})
+    snap = client.sandboxes.create_snapshot(sb.id, {"name": "before"})
+    assert isinstance(snap.id, uuid.UUID)
+    rolled_back = client.sandboxes.rollback(sb.id, snap.id)
+    assert rolled_back.id == sb.id
+
+
+@pytest.mark.asyncio
+async def test_async_rollback_accepts_the_snapshot_id_as_returned(async_mock_transport):
+    """The async client serialises a UUID snapshot id the same way."""
+    client = AsyncNeevAI(
+        api_key="test", org_id="org1", project_id="proj1", client=async_mock_transport
+    )
+    sb = await client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-x"})
+    snap = await client.sandboxes.create_snapshot(sb.id, {"name": "before"})
+    rolled_back = await client.sandboxes.rollback(sb.id, snap.id)
+    assert rolled_back.id == sb.id
+    await client.aclose()

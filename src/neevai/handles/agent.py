@@ -4,6 +4,7 @@ import math
 import time
 from collections.abc import Callable, Mapping
 from typing import TYPE_CHECKING, Any, cast
+from uuid import UUID
 
 from neevai.errors import NeevAIError
 from neevai.resources.sandboxes import (
@@ -213,7 +214,7 @@ class Agent:
         self._state = next_state._state
         return self
 
-    def rollback(self, snapshot_id: str) -> Agent:
+    def rollback(self, snapshot_id: str | UUID) -> Agent:
         """Rolls this agent back in place to a snapshot and updates this handle."""
         if self.agents is None:
             raise NeevAIError("Cannot rollback an agent handle with no client context.")
@@ -493,7 +494,7 @@ class AsyncAgent:
         self._state = next_state._state
         return self
 
-    async def rollback(self, snapshot_id: str) -> AsyncAgent:
+    async def rollback(self, snapshot_id: str | UUID) -> AsyncAgent:
         """Rolls this agent back in place to a snapshot and updates this handle."""
         if self.agents is None:
             raise NeevAIError("Cannot rollback an agent handle with no client context.")

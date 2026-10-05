@@ -3,6 +3,7 @@ import time
 from typing import Any, cast
 
 import httpx
+from pydantic_core import to_jsonable_python
 
 from neevai.errors import (
     APIConnectionError,
@@ -62,7 +63,8 @@ class ControlTransport:
                     method=method,
                     url=url,
                     params=filtered_query,
-                    json=body,
+                    # UUIDs, enums and datetimes from SDK models serialise like their API form.
+                    json=to_jsonable_python(body),
                     headers=headers,
                     timeout=self.timeout,
                 )
@@ -172,7 +174,8 @@ class AsyncControlTransport:
                     method=method,
                     url=url,
                     params=filtered_query,
-                    json=body,
+                    # UUIDs, enums and datetimes from SDK models serialise like their API form.
+                    json=to_jsonable_python(body),
                     headers=headers,
                     timeout=self.timeout,
                 )

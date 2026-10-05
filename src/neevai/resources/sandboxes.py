@@ -6,6 +6,7 @@ import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
+from uuid import UUID
 
 import httpx
 
@@ -566,7 +567,7 @@ class Sandboxes:
 
     def get_snapshot(
         self,
-        snapshot_id: str,
+        snapshot_id: str | UUID,
         org_id: str | None = None,
         project_id: str | None = None,
     ) -> Snapshot:
@@ -580,7 +581,7 @@ class Sandboxes:
 
     def delete_snapshot(
         self,
-        snapshot_id: str,
+        snapshot_id: str | UUID,
         org_id: str | None = None,
         project_id: str | None = None,
     ) -> None:
@@ -594,7 +595,7 @@ class Sandboxes:
     def rollback(
         self,
         id: str,
-        snapshot_id: str,
+        snapshot_id: str | UUID,
         org_id: str | None = None,
         project_id: str | None = None,
     ) -> Sandbox:
@@ -1007,7 +1008,7 @@ class AsyncSandboxes:
 
     async def get_snapshot(
         self,
-        snapshot_id: str,
+        snapshot_id: str | UUID,
         org_id: str | None = None,
         project_id: str | None = None,
     ) -> Snapshot:
@@ -1021,7 +1022,7 @@ class AsyncSandboxes:
 
     async def delete_snapshot(
         self,
-        snapshot_id: str,
+        snapshot_id: str | UUID,
         org_id: str | None = None,
         project_id: str | None = None,
     ) -> None:
@@ -1035,7 +1036,7 @@ class AsyncSandboxes:
     async def rollback(
         self,
         id: str,
-        snapshot_id: str,
+        snapshot_id: str | UUID,
         org_id: str | None = None,
         project_id: str | None = None,
     ) -> AsyncSandbox:

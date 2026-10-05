@@ -4,6 +4,7 @@ import builtins
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
+from uuid import UUID
 
 from neevai._egress import build_egress, prepare_update_body
 from neevai._parse import coerce_model, coerce_params
@@ -262,7 +263,7 @@ class Agents:
     def rollback(
         self,
         id: str,
-        snapshot_id: str,
+        snapshot_id: str | UUID,
         org_id: str | None = None,
         project_id: str | None = None,
     ) -> Agent:
@@ -561,7 +562,7 @@ class AsyncAgents:
     async def rollback(
         self,
         id: str,
-        snapshot_id: str,
+        snapshot_id: str | UUID,
         org_id: str | None = None,
         project_id: str | None = None,
     ) -> AsyncAgent:
