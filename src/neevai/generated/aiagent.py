@@ -19,7 +19,7 @@ from pydantic import (
 )
 
 
-class Code(Enum):
+class Code(str, Enum):
     unauthorized = "unauthorized"
     forbidden = "forbidden"
     not_found = "not_found"
@@ -64,7 +64,7 @@ class EnvVar(BaseModel):
     value: str
 
 
-class SandboxPhase(Enum):
+class SandboxPhase(str, Enum):
     Pending = "Pending"
     Ready = "Ready"
     NotReady = "NotReady"
@@ -93,7 +93,7 @@ class SandboxResources(BaseModel):
     )
 
 
-class OnIdleAction(Enum):
+class OnIdleAction(str, Enum):
     pause = "pause"
     delete = "delete"
 
@@ -152,18 +152,18 @@ class PauseSandboxRequest(BaseModel):
     pass
 
 
-class SnapshotStatus(Enum):
+class SnapshotStatus(str, Enum):
     Pending = "Pending"
     Running = "Running"
     Ready = "Ready"
     Failed = "Failed"
 
 
-class SnapshotType(Enum):
+class SnapshotType(str, Enum):
     full = "full"
 
 
-class SnapshotRestorability(Enum):
+class SnapshotRestorability(str, Enum):
     restorable = "restorable"
     deprecating = "deprecating"
     unsupported = "unsupported"
@@ -241,12 +241,12 @@ class ForkSandboxRequest(BaseModel):
     )
 
 
-class Mode(Enum):
+class Mode(str, Enum):
     deny_all = "deny_all"
     allow_list = "allow_list"
 
 
-class Protocol(Enum):
+class Protocol(str, Enum):
     TCP = "TCP"
     UDP = "UDP"
 
@@ -277,12 +277,12 @@ class SandboxEgressRules(BaseModel):
     )
 
 
-class SandboxTemplateCategory(Enum):
+class SandboxTemplateCategory(str, Enum):
     standard = "standard"
     browser = "browser"
 
 
-class SandboxTemplateStatus(Enum):
+class SandboxTemplateStatus(str, Enum):
     active = "active"
     deprecated = "deprecated"
     disabled = "disabled"
@@ -332,7 +332,7 @@ class ConnectTokenResponse(BaseModel):
     expires_in: int = Field(..., description="Token lifetime in seconds.")
 
 
-class Outcome(Enum):
+class Outcome(str, Enum):
     success = "success"
     error = "error"
 
@@ -401,7 +401,7 @@ class SandboxMetricsResponse(BaseModel):
     series: list[MetricSeries]
 
 
-class AgentStatus(Enum):
+class AgentStatus(str, Enum):
     Provisioning = "Provisioning"
     Ready = "Ready"
     Pausing = "Pausing"
@@ -419,7 +419,7 @@ class AgentLastCrash(BaseModel):
     )
 
 
-class DriveMode(Enum):
+class DriveMode(str, Enum):
     http = "http"
     exec = "exec"
     pty = "pty"
@@ -441,7 +441,7 @@ class RollbackAgentRequest(BaseModel):
     )
 
 
-class Status(Enum):
+class Status(str, Enum):
     active = "active"
     deprecated = "deprecated"
     disabled = "disabled"

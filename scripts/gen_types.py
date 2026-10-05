@@ -47,6 +47,8 @@ def generate(spec: pathlib.Path) -> None:
             str(output),
             "--output-model-type",
             "pydantic_v2.BaseModel",
+            # String enums subclass str, so `status == "Ready"` compares as callers expect.
+            "--use-subclass-enum",
         ],
         check=True,
     )
