@@ -130,6 +130,10 @@ class SandboxLastCrash(BaseModel):
     )
 
 
+class SandboxLabels(RootModel[dict[str, constr(max_length=63)]]):
+    root: dict[str, constr(max_length=63)] = Field(..., max_length=16)
+
+
 class ExposePortRequest(BaseModel):
     port: conint(ge=1, le=65535) = Field(..., description="User port to expose for preview URLs.")
     slug: constr(pattern=r"^[a-z0-9]{8}$") | None = Field(
@@ -619,6 +623,7 @@ class Sandbox(BaseModel):
     command: list[str] | None = None
     resources: SandboxResources | None = None
     phase: SandboxPhase
+    labels: SandboxLabels | None = None
     addressable: bool | None = Field(
         None,
         description="Whether the sandbox can be reached by name yet. Briefly false after a sandbox is created; a call made before it turns true is refused and is worth retrying.",
@@ -679,6 +684,7 @@ class CreateSandboxRequest1(BaseModel):
     env: list[EnvVar] | None = None
     resources: SandboxResources | None = None
     egress: SandboxEgressConfig | None = None
+    labels: SandboxLabels | None = None
     sandbox_template_id: constr(pattern=r"^sb-[a-zA-Z0-9-]+$", min_length=1) = Field(
         ..., description="Catalogue template id. Mutually exclusive with `image`."
     )
@@ -727,6 +733,7 @@ class CreateSandboxRequest2(BaseModel):
     env: list[EnvVar] | None = None
     resources: SandboxResources | None = None
     egress: SandboxEgressConfig | None = None
+    labels: SandboxLabels | None = None
     sandbox_template_id: constr(pattern=r"^sb-[a-zA-Z0-9-]+$", min_length=1) | None = Field(
         None, description="Catalogue template id. Mutually exclusive with `image`."
     )
@@ -772,6 +779,7 @@ class CreateSandboxRequest3(BaseModel):
     env: list[EnvVar] | None = None
     resources: SandboxResources | None = None
     egress: SandboxEgressConfig | None = None
+    labels: SandboxLabels | None = None
     sandbox_template_id: constr(pattern=r"^sb-[a-zA-Z0-9-]+$", min_length=1) | None = Field(
         None, description="Catalogue template id. Mutually exclusive with `image`."
     )
@@ -820,6 +828,7 @@ class CreateSandboxRequest4(BaseModel):
     env: list[EnvVar] | None = None
     resources: SandboxResources | None = None
     egress: SandboxEgressConfig | None = None
+    labels: SandboxLabels | None = None
     sandbox_template_id: constr(pattern=r"^sb-[a-zA-Z0-9-]+$", min_length=1) | None = Field(
         None, description="Catalogue template id. Mutually exclusive with `image`."
     )
@@ -868,6 +877,7 @@ class CreateSandboxRequest5(BaseModel):
     env: list[EnvVar] | None = None
     resources: SandboxResources | None = None
     egress: SandboxEgressConfig | None = None
+    labels: SandboxLabels | None = None
     sandbox_template_id: constr(pattern=r"^sb-[a-zA-Z0-9-]+$", min_length=1) | None = Field(
         None, description="Catalogue template id. Mutually exclusive with `image`."
     )

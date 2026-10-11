@@ -178,6 +178,25 @@ older = sandbox.audit(limit=50, cursor=trail.next_cursor) if trail.next_cursor e
 
 See [`audit_trail.py`](examples/audit_trail.py).
 
+## Labels
+
+Tag a sandbox with key-value labels at create time, then find it again by them:
+
+```python
+client.sandboxes.create(
+    {"name": "ci", "sandbox_template_id": "..."},
+    labels={"team": "payments", "ci-run": "4821"},
+)
+page = client.sandboxes.list(labels={"team": "payments"})  # every label must match
+print(page.items[0].labels)  # {'team': 'payments', 'ci-run': '4821'}
+```
+
+A sandbox takes at most 16 labels. Keys are 1-63 lowercase letters, digits, `.`, `_` or
+`-`, starting and ending with a letter or digit; values are up to 63 letters, digits,
+`.`, `_` or `-`. More than 16 labels or a value over 63 characters raises
+`ResponseValidationError` before the request is sent; a key or value in the wrong
+format is rejected by the server with `BadRequestError`.
+
 ## Network egress
 
 Sandboxes (and agents) are **deny-all by default** — no outbound network. Open egress at

@@ -16,8 +16,8 @@ which examples demonstrate which APIs, see
 - [Top-level exports](#top-level-exports)
 - [Client](#client)
 - [Sandboxes resource](#sandboxes-resource)
-  - [create](#clientsandboxescreateparams-org_idnone-project_idnone)
-  - [list](#clientsandboxeslistpage-none-limit-none-org_idnone-project_idnone)
+  - [create](#clientsandboxescreateparams-org_idnone-project_idnone--allow_internetnone-allow_egressnone-labelsnone)
+  - [list](#clientsandboxeslistpagenone-limitnone-namenone-statusnone-sandbox_idnone-org_idnone-project_idnone--labelsnone)
   - [get](#clientsandboxesgetid-org_idnone-project_idnone)
   - [update](#clientsandboxesupdateid-params-org_idnone-project_idnone--allow_internetnone-allow_egressnone)
   - [pause](#clientsandboxespauseid-org_idnone-project_idnone)
@@ -213,7 +213,7 @@ of their sync counterparts.
 All sandbox resource methods require a resolved org/project scope. Missing scope
 raises `NeevAIError` before any HTTP request is sent.
 
-### `client.sandboxes.create(params, org_id=None, project_id=None, *, allow_internet=None, allow_egress=None)`
+### `client.sandboxes.create(params, org_id=None, project_id=None, *, allow_internet=None, allow_egress=None, labels=None)`
 
 Creates a new sandbox in the resolved project context.
 
@@ -226,6 +226,7 @@ Creates a new sandbox in the resolved project context.
 | `project_id` | `str \| None` | Override project (else client default) |
 | `allow_internet` | `bool \| None` | Convenience: open all egress (`0.0.0.0/0` + `::/0`). Egress is deny-all by default. |
 | `allow_egress` | `list[str] \| None` | Convenience: allow egress to specific hosts (FQDN or CIDR). |
+| `labels` | `Mapping[str, str] \| None` | Key-value labels to find the sandbox by later. At most 16; keys 1-63 lowercase letters, digits, `.`, `_` or `-`, starting and ending with a letter or digit; values up to 63 letters, digits, `.`, `_` or `-`. More than 16 labels or a value over 63 characters raises `ResponseValidationError` before the request; a wrong key or value format is rejected by the server with `BadRequestError`. Setting `labels` both here and in `params` raises `NeevAIError`. |
 
 `allow_internet` / `allow_egress` translate into the `egress` policy; an explicit `egress`
 in `params` takes precedence over both.
@@ -253,7 +254,7 @@ sandbox = client.sandboxes.create({
     "name": "my-agent",
     "sandbox_template_id": "tmpl-abc123",
     "env": [{"name": "LOG_LEVEL", "value": "debug"}],
-})
+}, labels={"team": "payments"})
 sandbox.wait_until_ready()
 
 # Or provision from a snapshot:
@@ -269,12 +270,16 @@ restored = client.sandboxes.create({
 **Examples:** [`sandbox_lifecycle.py`](../examples/sandbox_lifecycle.py),
 [`snapshot_fork_restore.py`](../examples/snapshot_fork_restore.py) (`restore`)
 
-### `client.sandboxes.list(page=None, limit=None, name=None, status=None, sandbox_id=None, org_id=None, project_id=None)`
+### `client.sandboxes.list(page=None, limit=None, name=None, status=None, sandbox_id=None, org_id=None, project_id=None, *, labels=None)`
 
 Lists sandboxes with server-side pagination and optional filters. The filters
 combine with AND: `name` is a case-insensitive substring match on the sandbox
 name, `status` is an exact lifecycle-phase match (a `SandboxPhase`), and
-`sandbox_id` narrows to a single sandbox. Each is omitted when unset.
+`sandbox_id` narrows to a single sandbox. `labels` keeps only sandboxes carrying every
+given key-value pair; it is sent as one repeated `label=key=value` query parameter per
+label, at most 16. Each is omitted when unset.
+
+**Raises:** `BadRequestError` if a label filter is malformed.
 
 **Returns:** `SandboxPage` with fields `items`, `total`, `page`, `limit`. Each item
 is a `Sandbox` handle bound to the client.
@@ -287,6 +292,9 @@ print(f"Showing {len(page.items)} of {page.total}")
 
 # Filter by name substring and lifecycle phase.
 paused_web = client.sandboxes.list(name="web", status="Paused")
+
+# Only sandboxes carrying every given label.
+payments = client.sandboxes.list(labels={"team": "payments", "env": "staging"})
 ```
 
 **Example:** [`sandbox_lifecycle_controller.py`](../examples/sandbox_lifecycle_controller.py)
@@ -780,6 +788,7 @@ mirroring the last API response. Call `refresh()` to sync from the server.
 | `replicas` | `int` | `0` while paused, `1` while running |
 | `connect_url` | `str \| None` | Regional runtime URL (available when ready) |
 | `addressable` | `bool` | Whether the sandbox can be reached yet; briefly `False` after create (`True` when the API omits it) |
+| `labels` | `dict[str, str]` | Key-value labels the sandbox was created with; `{}` when it has none |
 | `last_crash` | `SandboxLastCrash \| None` | Most recent unexpected stop; `storage_reset=True` means it restarted with an empty filesystem. `None` if it never crashed. Restoring from a snapshot taken before that stop brings the files back and clears it. |
 | `data` | `dict[str, Any]` | Full record snapshot |
 

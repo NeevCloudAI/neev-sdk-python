@@ -13,6 +13,15 @@ from neevai.errors import (
 from neevai.transport.retry import calculate_backoff, parse_retry_after
 
 
+def _encode_query(query: dict[str, Any]) -> dict[str, str | list[str]]:
+    """Stringify query values, dropping None; a list becomes a repeated ``?k=a&k=b`` param."""
+    return {
+        k: [str(i) for i in cast(list[object], v)] if isinstance(v, list) else str(v)
+        for k, v in query.items()
+        if v is not None
+    }
+
+
 class ControlTransport:
     """Synchronous HTTP transport for NeevAI API."""
 
@@ -54,7 +63,7 @@ class ControlTransport:
         # Filter out None values from query parameters
         filtered_query = None
         if query:
-            filtered_query = {k: str(v) for k, v in query.items() if v is not None}
+            filtered_query = _encode_query(query)
 
         attempt = 0
         while True:
@@ -165,7 +174,7 @@ class AsyncControlTransport:
 
         filtered_query = None
         if query:
-            filtered_query = {k: str(v) for k, v in query.items() if v is not None}
+            filtered_query = _encode_query(query)
 
         attempt = 0
         while True:

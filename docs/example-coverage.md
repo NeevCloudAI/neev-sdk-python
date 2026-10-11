@@ -18,7 +18,9 @@ path and run commands, see [`examples/README.md`](../examples/README.md).
 | `client.sandboxes.create` (`restore`) | `snapshot_fork_restore.py` | `restored = client.sandboxes.create({..., "restore": snapshot_id})` |
 | `client.sandboxes.create` (`lifecycle`) | `sandbox_lifecycle_windows.py` | `client.sandboxes.create({..., "lifecycle": {"idle_timeout_seconds": 60}})` |
 | `client.sandboxes.create` (BYOI `image`/`command`) | `byoi_create.py` | `client.sandboxes.create({"image": "docker.io/library/python:3.12", "command": [...]})` |
+| `client.sandboxes.create` (`labels`) | `sandbox_labels.py` | `client.sandboxes.create({...}, labels={"team": "payments"})` |
 | `client.sandboxes.list` | `sandbox_lifecycle_controller.py` | `page = client.sandboxes.list(page=1, limit=20)` |
+| `client.sandboxes.list` (`labels`) | `sandbox_labels.py` | `page = client.sandboxes.list(labels={"team": "payments"})` |
 | `client.sandboxes.get` | `sandbox_lifecycle_controller.py` | `sandbox = client.sandboxes.get(sandbox_id)` |
 | `client.sandboxes.update` | `sandbox_update.py` | `client.sandboxes.update(id, {"resources": {"cpu": 2}})` |
 | `client.sandboxes.pause` | `sandbox_lifecycle_controller.py` | `sandbox = client.sandboxes.pause(sandbox_id)` |
@@ -30,6 +32,7 @@ path and run commands, see [`examples/README.md`](../examples/README.md).
 | `client.sandboxes.audit` / `sandbox.audit` | `audit_trail.py` | `trail = sandbox.audit(limit=20)` — then `cursor=trail.next_cursor` |
 | `client.sandboxes.update` (`egress_add` / `egress_remove`) | `update_resize_egress.py` | `sandbox.update({"egress_add": {"allow": [{"host": "pypi.org"}]}})` |
 | `sandbox.expose_port` / `.list_ports` / `.revoke_port` / `.get_url` | `preview_ports.py` | `url = sandbox.get_url(3000)`; `sandbox.expose_port(3000, slug=new_slug)` rotates it |
+| `sandbox.labels` | `sandbox_labels.py` | `sandbox.labels` — `{}` when it has none |
 | `sandbox.addressable` | — | `sandbox.addressable` — `wait_until_ready()` waits for it |
 | `client.sandboxes.create_snapshot` | `snapshot_fork_restore.py` (via `sandbox.snapshot`) | `pending = sandbox.snapshot({"name": "demo-snap"})` |
 | `client.sandboxes.get_snapshot` | `snapshot_fork_restore.py` | `snap = client.sandboxes.get_snapshot(snapshot_id)` |
@@ -99,6 +102,7 @@ path and run commands, see [`examples/README.md`](../examples/README.md).
 | Agent lifecycle | `examples/create_agent.py` | List agent templates, create agent, wait, sandbox exec, update, pause, delete |
 | Sandbox lifecycle | `examples/sandbox_lifecycle.py` | Create → wait → metrics → pause → delete |
 | Sandbox in-place update | `examples/sandbox_update.py` | Create → wait → resize → re-scope egress → verify → delete |
+| Sandbox labels | `examples/sandbox_labels.py` | Create two labelled sandboxes → list by one label → narrow by two → delete |
 | Crash reporting | `examples/last_crash.py` | Create → mark file → force OOM → poll `last_crash` → check `storage_reset` → delete |
 | Snapshot fork & restore | `examples/snapshot_fork_restore.py` | Write state → snapshot → modify → `restore` create → fork → cleanup |
 | Async workflow | `examples/async_sandbox.py` | `AsyncNeevAI` create → wait → exec → delete |
