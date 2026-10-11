@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import AsyncGenerator, Callable, Generator, Mapping
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 from uuid import UUID
 
 from neevai.errors import APIConnectionError, APIError, APITimeoutError, NeevAIError
@@ -119,6 +119,14 @@ class Sandbox:
     def addressable(self) -> bool:
         """Whether the sandbox can be reached yet; briefly False right after create."""
         return self._state.addressable is not False
+
+    @property
+    def labels(self) -> dict[str, str]:
+        """Key-value labels the sandbox was created with; empty when it has none."""
+        if self._state.labels is None:
+            return {}
+        # Values are constrained strings in the generated model; pyright sees them as unknown.
+        return dict(cast(dict[str, str], self._state.labels.root))
 
     @property
     def last_crash(self) -> SandboxLastCrash | None:
@@ -611,6 +619,14 @@ class AsyncSandbox:
     def addressable(self) -> bool:
         """Whether the sandbox can be reached yet; briefly False right after create."""
         return self._state.addressable is not False
+
+    @property
+    def labels(self) -> dict[str, str]:
+        """Key-value labels the sandbox was created with; empty when it has none."""
+        if self._state.labels is None:
+            return {}
+        # Values are constrained strings in the generated model; pyright sees them as unknown.
+        return dict(cast(dict[str, str], self._state.labels.root))
 
     @property
     def last_crash(self) -> SandboxLastCrash | None:

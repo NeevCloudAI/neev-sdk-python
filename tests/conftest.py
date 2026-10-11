@@ -169,6 +169,8 @@ def _make_sandbox_record(
         "connect_url": None,
         "replicas": 0,
         "egress": req.get("egress"),
+        # Echoed only when sent, like the API, so a label-less record lacks the key.
+        **({"labels": req["labels"]} if "labels" in req else {}),
         "sandbox_template_id": req.get("sandbox_template_id"),
         "created_by": None,
         "last_crash": None,

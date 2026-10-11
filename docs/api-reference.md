@@ -36,8 +36,8 @@ Details: [`api-inventory.md` → Client](./api-inventory.md#client)
 
 | Method | Returns | Summary |
 | ------ | ------- | ------- |
-| `create(params, org_id=None, project_id=None, *, allow_internet=None, allow_egress=None)` | `Sandbox` | Creates a new sandbox. `allow_internet=True` / `allow_egress=[...]` open egress (deny-all by default; explicit `egress` wins). Optional `restore` in params provisions from a snapshot. |
-| `list(page=None, limit=None, org_id=None, project_id=None)` | `SandboxPage` | Lists sandboxes with pagination in the resolved org/project scope. |
+| `create(params, org_id=None, project_id=None, *, allow_internet=None, allow_egress=None, labels=None)` | `Sandbox` | Creates a new sandbox. `allow_internet=True` / `allow_egress=[...]` open egress (deny-all by default; explicit `egress` wins). `labels={...}` tags it with key-value labels. Optional `restore` in params provisions from a snapshot. |
+| `list(page=None, limit=None, name=None, status=None, sandbox_id=None, org_id=None, project_id=None, *, labels=None)` | `SandboxPage` | Lists sandboxes with pagination in the resolved org/project scope. `labels={...}` keeps only sandboxes carrying every given label. |
 | `get(id, org_id=None, project_id=None)` | `Sandbox` | Fetches the current record for a sandbox by ID or name. |
 | `update(id, params, org_id=None, project_id=None, *, allow_internet=None, allow_egress=None)` | `Sandbox` | In-place update of `resources` (cpu/memory) and/or `egress`. Resize keeps the ID/name/preview URLs and does not restart; `disk_gb` is not resizable and the server rejects a change. `allow_internet` / `allow_egress` are the same egress convenience as `create`. `egress_add` / `egress_remove` edit the allow-list in place (not combinable with `egress`). Rejects `{}` locally, naming every field. |
 | `pause(id, org_id=None, project_id=None)` | `Sandbox` | Stops a sandbox and keeps its state (Paused). Sends an empty body; a pause always captures full state, so a resume picks up where it left off. |
@@ -121,7 +121,7 @@ Returned by `create()`, `get()`, `list().items`, etc.
 
 | API | Kind |
 | --- | ---- |
-| `id`, `name`, `phase`, `replicas`, `connect_url`, `addressable`, `last_crash`, `data` | properties |
+| `id`, `name`, `phase`, `replicas`, `connect_url`, `addressable`, `labels`, `last_crash`, `data` | properties |
 | `refresh()` | method |
 | `update(params, *, allow_internet=None, allow_egress=None)` | method — in-place resize / egress re-scope (`egress_add` / `egress_remove` edit the allow-list); updates state in place |
 | `wait_until_ready(timeout_ms=120000, ...)` | method — polls the API until `Ready` and addressable |
@@ -242,6 +242,7 @@ Minimal one-liners for each public API. Runnable examples link to repo paths.
 | `client.close()` / `aclose()` | `with NeevAI() as client:` (auto) | `async with AsyncNeevAI() as client:` (auto) | all tier-1 examples |
 | `client.sandboxes.create(...)` | `sandbox = client.sandboxes.create({...})` | `sandbox = await client.sandboxes.create({...})` | [sandbox_lifecycle.py](../examples/sandbox_lifecycle.py), [snapshot_fork_restore.py](../examples/snapshot_fork_restore.py) (`restore`) |
 | `client.sandboxes.list(...)` | `page = client.sandboxes.list(name="web", status="Paused")` | `page = await client.sandboxes.list(name="web", status="Paused")` | [sandbox_lifecycle_controller.py](../examples/sandbox_lifecycle_controller.py) |
+| `client.sandboxes.list(labels=...)` | `page = client.sandboxes.list(labels={"team": "payments"})` | `page = await client.sandboxes.list(labels={"team": "payments"})` | — |
 | `client.sandboxes.get(id)` | `sandbox = client.sandboxes.get(sandbox_id)` | `sandbox = await client.sandboxes.get(sandbox_id)` | [sandbox_lifecycle_controller.py](../examples/sandbox_lifecycle_controller.py) |
 | `client.sandboxes.update(id, params, *, allow_internet, allow_egress)` | `client.sandboxes.update(id, {"resources": {"cpu": 2}})` | `await client.sandboxes.update(id, {"resources": {"cpu": 2}})` | [sandbox_update.py](../examples/sandbox_update.py) |
 | `client.sandboxes.update(id, {"egress_add": ...})` | `client.sandboxes.update(id, {"egress_add": {"allow": [{"host": "pypi.org"}]}})` | `await client.sandboxes.update(id, {"egress_remove": {"allow": [{"host": "pypi.org"}]}})` | [update_resize_egress.py](../examples/update_resize_egress.py) |
@@ -292,6 +293,7 @@ Minimal one-liners for each public API. Runnable examples link to repo paths.
 | `sandbox.metrics(...)` | `metrics = sandbox.metrics()` | `metrics = await sandbox.metrics()` | [sandbox_metrics.py](../examples/sandbox_metrics.py) |
 | `sandbox.audit(...)` | `trail = sandbox.audit(limit=50)` | `trail = await sandbox.audit(limit=50)` | [audit_trail.py](../examples/audit_trail.py) |
 | `sandbox.addressable` | `print(sandbox.addressable)` | `print(sandbox.addressable)` | — |
+| `sandbox.labels` | `print(sandbox.labels)` | `print(sandbox.labels)` | — |
 | `sandbox.expose_port(port)` | `p = sandbox.expose_port(8080)` | `p = await sandbox.expose_port(8080)` | [preview_ports.py](../examples/preview_ports.py) |
 | `sandbox.expose_port(port, slug=...)` | `p = sandbox.expose_port(8080, slug="k3x9q2ab")` (rotates the URL) | `p = await sandbox.expose_port(8080, slug="k3x9q2ab")` | [preview_ports.py](../examples/preview_ports.py) |
 | `sandbox.list_ports()` | `ports = sandbox.list_ports()` | `ports = await sandbox.list_ports()` | [preview_ports.py](../examples/preview_ports.py) |

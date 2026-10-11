@@ -3,6 +3,7 @@
 import uuid
 from unittest.mock import MagicMock
 
+import httpx
 import pytest
 
 from neevai._parse import ResponseValidationError
@@ -753,4 +754,144 @@ async def test_async_rollback_accepts_the_snapshot_id_as_returned(async_mock_tra
     snap = await client.sandboxes.create_snapshot(sb.id, {"name": "before"})
     rolled_back = await client.sandboxes.rollback(sb.id, snap.id)
     assert rolled_back.id == sb.id
+    await client.aclose()
+
+
+# --- Labels ---
+
+LABELS = {"team": "payments", "ci-run": "4821"}
+EMPTY_PAGE = {"items": [], "total": 0, "page": 1, "limit": 20}
+
+
+def _recorder(captured: list[httpx.Request], status: int = 200, payload=None):
+    """Return a mock transport that records each request and answers with ``payload``."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        return httpx.Response(status, json=EMPTY_PAGE if payload is None else payload)
+
+    return httpx.MockTransport(handler)
+
+
+def test_sandboxes_create_with_labels(mock_transport):
+    client = _make_client(mock_transport)
+    captured = _capture_requests(client)
+
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-x"}, labels=LABELS)
+
+    assert captured[-1][2]["labels"] == LABELS
+    assert sb.labels == LABELS
+    client.close()
+
+
+def test_sandboxes_create_labels_in_params(mock_transport):
+    client = _make_client(mock_transport)
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-x", "labels": LABELS})
+    assert sb.labels == LABELS
+    client.close()
+
+
+def test_sandboxes_create_labels_twice_raises_without_http(mock_transport):
+    client = _make_client(mock_transport)
+    request_mock = MagicMock(side_effect=client._transport.request)
+    client._transport.request = request_mock
+
+    with pytest.raises(NeevAIError, match="labels"):
+        client.sandboxes.create(
+            {"name": "s1", "sandbox_template_id": "sb-x", "labels": LABELS}, labels=LABELS
+        )
+    request_mock.assert_not_called()
+    client.close()
+
+
+def test_sandbox_labels_empty_when_server_omits_them(mock_transport):
+    client = _make_client(mock_transport)
+    captured = _capture_requests(client)
+
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-x"})
+
+    assert "labels" not in captured[-1][2]
+    assert sb.data["labels"] is None
+    assert sb.labels == {}
+    client.close()
+
+
+def test_sandboxes_list_labels_sent_as_repeated_params():
+    captured: list[httpx.Request] = []
+    client = _make_client(httpx.Client(transport=_recorder(captured)))
+
+    client.sandboxes.list(name="web", labels=LABELS)
+
+    params = captured[-1].url.params
+    assert params.get_list("label") == ["team=payments", "ci-run=4821"]
+    assert params["name"] == "web"
+    # Repeated params, not a comma-joined value or a ``label[]`` key.
+    assert captured[-1].url.query.decode().count("label=") == 2
+    assert "label%5B%5D" not in captured[-1].url.query.decode()
+    client.close()
+
+
+def test_sandboxes_list_without_labels_omits_param():
+    captured: list[httpx.Request] = []
+    client = _make_client(httpx.Client(transport=_recorder(captured)))
+
+    client.sandboxes.list(labels={})
+
+    assert "label" not in captured[-1].url.params
+    client.close()
+
+
+def test_sandboxes_list_bad_label_surfaces_bad_request():
+    captured: list[httpx.Request] = []
+    transport = _recorder(captured, status=400, payload={"message": "invalid label"})
+    client = _make_client(httpx.Client(transport=transport))
+
+    # The SDK does not check label format; the server's 400 surfaces as BadRequestError.
+    with pytest.raises(BadRequestError, match="invalid label"):
+        client.sandboxes.list(labels={"Bad Key": "v"})
+    assert captured[-1].url.params.get_list("label") == ["Bad Key=v"]
+    client.close()
+
+
+@pytest.mark.asyncio
+async def test_async_sandboxes_create_with_labels(async_mock_transport):
+    client = AsyncNeevAI(
+        api_key="test", org_id="org1", project_id="proj1", client=async_mock_transport
+    )
+    sb = await client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-x"}, labels=LABELS)
+    assert sb.labels == LABELS
+    plain = await client.sandboxes.create({"name": "s2", "sandbox_template_id": "sb-x"})
+    assert plain.labels == {}
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_async_sandboxes_list_labels_sent_as_repeated_params():
+    captured: list[httpx.Request] = []
+    client = AsyncNeevAI(
+        api_key="test",
+        org_id="org1",
+        project_id="proj1",
+        client=httpx.AsyncClient(transport=_recorder(captured)),
+    )
+
+    await client.sandboxes.list(labels=LABELS)
+
+    assert captured[-1].url.params.get_list("label") == ["team=payments", "ci-run=4821"]
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_async_sandboxes_list_bad_label_surfaces_bad_request():
+    captured: list[httpx.Request] = []
+    transport = _recorder(captured, status=400, payload={"message": "invalid label"})
+    client = AsyncNeevAI(
+        api_key="test",
+        org_id="org1",
+        project_id="proj1",
+        client=httpx.AsyncClient(transport=transport),
+    )
+
+    with pytest.raises(BadRequestError):
+        await client.sandboxes.list(labels={"Bad Key": "v"})
     await client.aclose()

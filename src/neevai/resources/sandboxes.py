@@ -121,11 +121,17 @@ def _prepare_create_params(
     params: CreateSandboxParams | Mapping[str, Any],
     allow_internet: bool | None = None,
     allow_egress: list[str] | None = None,
+    labels: Mapping[str, str] | None = None,
 ) -> CreateSandboxParams:
     if isinstance(params, Mapping):
         raw: dict[str, Any] = dict(params)
     else:
         raw = params.model_dump(exclude_unset=True)
+    if labels is not None:
+        # Refuse two sources rather than silently dropping one.
+        if raw.get("labels") is not None:
+            raise NeevAIError("Pass `labels` either in `params` or as a keyword, not both.")
+        raw["labels"] = dict(labels)
     # Translate the allow_internet/allow_egress convenience into the egress policy,
     # unless the caller already set an explicit egress (which takes precedence).
     if raw.get("egress") is None:
@@ -174,6 +180,7 @@ def _list_query(
     name: str | None,
     status: SandboxPhase | None,
     sandbox_id: str | None,
+    labels: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
     """Build the listSandboxes query, omitting any pagination arg or filter left unset."""
     query: dict[str, Any] = {}
@@ -187,6 +194,9 @@ def _list_query(
         query["status"] = status
     if sandbox_id is not None:
         query["sandbox_id"] = sandbox_id
+    if labels:
+        # Sent as repeated ``label=key=value`` params; the server requires all to match.
+        query["label"] = [f"{k}={v}" for k, v in labels.items()]
     return query
 
 
@@ -204,12 +214,14 @@ class Sandboxes:
         *,
         allow_internet: bool | None = None,
         allow_egress: list[str] | None = None,
+        labels: Mapping[str, str] | None = None,
     ) -> Sandbox:
         """Creates a new sandbox in the resolved project context.
 
         Egress is deny-all by default. ``allow_internet=True`` opens all egress
         (0.0.0.0/0 and ::/0); ``allow_egress`` allows specific hosts (FQDN or CIDR). An
-        explicit ``egress`` in ``params`` takes precedence over both.
+        explicit ``egress`` in ``params`` takes precedence over both. ``labels`` tags the
+        sandbox with key-value pairs that ``list(labels=...)`` can filter on.
         """
         from neevai.handles.sandbox import Sandbox
 
@@ -217,7 +229,11 @@ class Sandboxes:
         path = f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes"
 
         body = _prepare_create_params(
-            self._client, params, allow_internet=allow_internet, allow_egress=allow_egress
+            self._client,
+            params,
+            allow_internet=allow_internet,
+            allow_egress=allow_egress,
+            labels=labels,
         )
         raw = self._client._transport.request(
             "POST",
@@ -236,19 +252,22 @@ class Sandboxes:
         sandbox_id: str | None = None,
         org_id: str | None = None,
         project_id: str | None = None,
+        *,
+        labels: Mapping[str, str] | None = None,
     ) -> SandboxPage:
         """Lists sandboxes in the resolved project context with pagination.
 
         The optional filters combine with AND: ``name`` is a case-insensitive
         substring match, ``status`` is an exact lifecycle-phase match, and
-        ``sandbox_id`` narrows to a single sandbox. Each is omitted when unset.
+        ``sandbox_id`` narrows to a single sandbox. ``labels`` keeps only sandboxes
+        carrying every given key-value pair. Each is omitted when unset.
         """
         from neevai.handles.sandbox import Sandbox
 
         scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
         path = f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes"
 
-        query = _list_query(page, limit, name, status, sandbox_id)
+        query = _list_query(page, limit, name, status, sandbox_id, labels)
 
         raw = self._client._transport.request("GET", path, query=query)
         page_data = coerce_model(SandboxListResponse, raw)
@@ -645,12 +664,14 @@ class AsyncSandboxes:
         *,
         allow_internet: bool | None = None,
         allow_egress: list[str] | None = None,
+        labels: Mapping[str, str] | None = None,
     ) -> AsyncSandbox:
         """Creates a new sandbox asynchronously.
 
         Egress is deny-all by default. ``allow_internet=True`` opens all egress
         (0.0.0.0/0 and ::/0); ``allow_egress`` allows specific hosts (FQDN or CIDR). An
-        explicit ``egress`` in ``params`` takes precedence over both.
+        explicit ``egress`` in ``params`` takes precedence over both. ``labels`` tags the
+        sandbox with key-value pairs that ``list(labels=...)`` can filter on.
         """
         from neevai.handles.sandbox import AsyncSandbox
 
@@ -658,7 +679,11 @@ class AsyncSandboxes:
         path = f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes"
 
         body = _prepare_create_params(
-            self._client, params, allow_internet=allow_internet, allow_egress=allow_egress
+            self._client,
+            params,
+            allow_internet=allow_internet,
+            allow_egress=allow_egress,
+            labels=labels,
         )
         raw = await self._client._transport.request(
             "POST",
@@ -677,19 +702,22 @@ class AsyncSandboxes:
         sandbox_id: str | None = None,
         org_id: str | None = None,
         project_id: str | None = None,
+        *,
+        labels: Mapping[str, str] | None = None,
     ) -> AsyncSandboxPage:
         """Lists sandboxes asynchronously with pagination.
 
         The optional filters combine with AND: ``name`` is a case-insensitive
         substring match, ``status`` is an exact lifecycle-phase match, and
-        ``sandbox_id`` narrows to a single sandbox. Each is omitted when unset.
+        ``sandbox_id`` narrows to a single sandbox. ``labels`` keeps only sandboxes
+        carrying every given key-value pair. Each is omitted when unset.
         """
         from neevai.handles.sandbox import AsyncSandbox
 
         scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
         path = f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes"
 
-        query = _list_query(page, limit, name, status, sandbox_id)
+        query = _list_query(page, limit, name, status, sandbox_id, labels)
 
         raw = await self._client._transport.request("GET", path, query=query)
         page_data = coerce_model(SandboxListResponse, raw)
