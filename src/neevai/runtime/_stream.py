@@ -60,13 +60,15 @@ def _prepare_argv(
 
 @dataclass
 class _StreamState:
-    out_decoder: codecs.IncrementalDecoder = field(
-        default_factory=lambda: codecs.getincrementaldecoder("utf-8")()
-    )
-    err_decoder: codecs.IncrementalDecoder = field(
-        default_factory=lambda: codecs.getincrementaldecoder("utf-8")()
-    )
+    # "strict" raises on bytes that are not UTF-8; "replace" turns them into U+FFFD.
+    errors: str = "strict"
+    out_decoder: codecs.IncrementalDecoder = field(init=False)
+    err_decoder: codecs.IncrementalDecoder = field(init=False)
     saw_exit: bool = False
+
+    def __post_init__(self) -> None:
+        self.out_decoder = codecs.getincrementaldecoder("utf-8")(self.errors)
+        self.err_decoder = codecs.getincrementaldecoder("utf-8")(self.errors)
 
 
 def _parse_exec_frame(raw: object) -> ExecFrame:
@@ -136,8 +138,10 @@ def _yield_log_frame_events(
         yield {"type": "exit", "exit_code": frame.exit_code}
 
 
-def _iter_exec_stream_events(lines: Iterator[str]) -> Iterator[ExecStreamEvent]:
-    state = _StreamState()
+def _iter_exec_stream_events(
+    lines: Iterator[str], errors: str = "strict"
+) -> Iterator[ExecStreamEvent]:
+    state = _StreamState(errors)
     for line in lines:
         trimmed = line.strip()
         if not trimmed:
@@ -151,8 +155,10 @@ def _iter_exec_stream_events(lines: Iterator[str]) -> Iterator[ExecStreamEvent]:
         )
 
 
-async def _aiter_exec_stream_events(lines: AsyncIterator[str]) -> AsyncIterator[ExecStreamEvent]:
-    state = _StreamState()
+async def _aiter_exec_stream_events(
+    lines: AsyncIterator[str], errors: str = "strict"
+) -> AsyncIterator[ExecStreamEvent]:
+    state = _StreamState(errors)
     async for line in lines:
         trimmed = line.strip()
         if not trimmed:

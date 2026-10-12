@@ -273,6 +273,40 @@ final = proc.wait()
 See [`examples/processes.py`](examples/processes.py) and
 [`examples/process_pool.py`](examples/process_pool.py).
 
+## Agent tools
+
+`neevai.agent_tools` ships the sandbox tool contract for your own agent: tools
+like `run_command`, `write_file` and `read_file`, with model-ready descriptions
+and JSON Schemas, capped output, and errors the model can act on returned as
+`{"error": ...}`. Preview URLs, checkpoints and background processes are
+opt-in. It has no framework dependency: build tool specs from `DESCRIPTIONS`
+and `PARAMETERS`, and pass each tool call to `call(name, args)`.
+`AsyncSandboxTools` wraps an `AsyncSandbox` the same way.
+
+A command that prints nothing for about 2 minutes is cut off at the network
+edge; `run_command` then returns an error result telling the model to use
+`start_process`, so give it `allow_processes=True` for long or quiet work
+(`start_process` plus `read_process_output` with `wait_s`).
+
+```python
+import json
+
+from neevai.agent_tools import DESCRIPTIONS, PARAMETERS, SandboxTools
+
+tools = SandboxTools(sandbox, allow_processes=True)
+specs = [
+    {"type": "function", "function": {"name": n, "description": DESCRIPTIONS[n], "parameters": PARAMETERS[n]}}
+    for n in tools.names()
+]
+# ... send specs to your model; for each tool call it returns:
+result = tools.call(tool_call.name, json.loads(tool_call.arguments))  # a JSON-serializable dict
+```
+
+See the [tool contract](https://docs.ai.neevcloud.com/build-your-own-agent/tool-contract)
+for every tool's arguments and results, and
+[`examples/agent_patterns/agent_tools_loop.py`](examples/agent_patterns/agent_tools_loop.py)
+for a complete loop.
+
 ## Agents
 
 Provision a packaged agent from the catalogue template (`agent_template` is the

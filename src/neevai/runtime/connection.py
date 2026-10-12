@@ -18,7 +18,7 @@ from neevai.runtime.schemas import (
     FileListResponse,
     FileWriteResponse,
 )
-from neevai.transport.runtime import AsyncRuntimeTransport, RuntimeTransport
+from neevai.transport.runtime import AsyncRuntimeTransport, RuntimeTransport, read_timeout_for
 from neevai.types import ExecResult, ExecStreamEvent, FileEntry, WatchEvent
 
 
@@ -235,7 +235,11 @@ class SandboxFiles:
         headers = {"Content-Type": "application/json", "Accept": "application/x-ndjson"}
         body = {"path": path, "cwd": cwd, "recursive": recursive, "timeout_ms": timeout_ms}
         lines = self._conn._transport.stream_request(
-            "POST", "/v1/files/watch", headers=headers, body=body
+            "POST",
+            "/v1/files/watch",
+            headers=headers,
+            body=body,
+            read_timeout_ms=read_timeout_for(timeout_ms),
         )
         yield from _iter_watch_events(iter(lines))
 
@@ -277,14 +281,32 @@ class SandboxConnection:
         stdin: str | None = None,
     ) -> Iterator[ExecStreamEvent]:
         """Runs a command and yields stdout/stderr chunks as they arrive."""
+        return self._exec_events(command, args, cwd, env, timeout_ms, stdin)
+
+    def _exec_events(
+        self,
+        command: str | list[str],
+        args: list[str] | None,
+        cwd: str | None,
+        env: dict[str, str] | None,
+        timeout_ms: int | None,
+        stdin: str | None,
+        errors: str = "strict",
+    ) -> Iterator[ExecStreamEvent]:
         program, cmd_args = _prepare_argv(command, args, prefix="exec")
         body = _prepare_exec_body(program, cmd_args, cwd, env, timeout_ms, stdin)
         headers = {
             "Content-Type": "application/json",
             "Accept": "application/x-ndjson",
         }
-        lines = self._transport.stream_request("POST", "/v1/exec", headers=headers, body=body)
-        yield from _iter_exec_stream_events(iter(lines))
+        lines = self._transport.stream_request(
+            "POST",
+            "/v1/exec",
+            headers=headers,
+            body=body,
+            read_timeout_ms=read_timeout_for(timeout_ms),
+        )
+        yield from _iter_exec_stream_events(iter(lines), errors)
 
     def exec(
         self,
@@ -296,17 +318,23 @@ class SandboxConnection:
         stdin: str | None = None,
     ) -> ExecResult:
         """Runs a shell command inside the sandbox synchronously, parsing NDJSON output."""
+        return self._exec(command, args, cwd, env, timeout_ms, stdin)
+
+    def _exec(
+        self,
+        command: str | list[str],
+        args: list[str] | None = None,
+        cwd: str | None = None,
+        env: dict[str, str] | None = None,
+        timeout_ms: int | None = None,
+        stdin: str | None = None,
+        errors: str = "strict",
+    ) -> ExecResult:
+        """Like exec, decoding output with the given codec error handler."""
         stdout_chunks: list[str] = []
         stderr_chunks: list[str] = []
         exit_code = 0
-        for event in self.exec_stream(
-            command=command,
-            args=args,
-            cwd=cwd,
-            env=env,
-            timeout_ms=timeout_ms,
-            stdin=stdin,
-        ):
+        for event in self._exec_events(command, args, cwd, env, timeout_ms, stdin, errors):
             if event["type"] == "stdout":
                 stdout_chunks.append(event["data"])
             elif event["type"] == "stderr":
@@ -492,7 +520,11 @@ class AsyncSandboxFiles:
         headers = {"Content-Type": "application/json", "Accept": "application/x-ndjson"}
         body = {"path": path, "cwd": cwd, "recursive": recursive, "timeout_ms": timeout_ms}
         stream_gen = self._conn._transport.stream_request(
-            "POST", "/v1/files/watch", headers=headers, body=body
+            "POST",
+            "/v1/files/watch",
+            headers=headers,
+            body=body,
+            read_timeout_ms=read_timeout_for(timeout_ms),
         )
 
         async def _lines() -> AsyncIterator[str]:
@@ -540,19 +572,38 @@ class AsyncSandboxConnection:
         stdin: str | None = None,
     ) -> AsyncIterator[ExecStreamEvent]:
         """Runs a command asynchronously and yields stdout/stderr chunks as they arrive."""
+        async for event in self._exec_events(command, args, cwd, env, timeout_ms, stdin):
+            yield event
+
+    async def _exec_events(
+        self,
+        command: str | list[str],
+        args: list[str] | None,
+        cwd: str | None,
+        env: dict[str, str] | None,
+        timeout_ms: int | None,
+        stdin: str | None,
+        errors: str = "strict",
+    ) -> AsyncIterator[ExecStreamEvent]:
         program, cmd_args = _prepare_argv(command, args, prefix="exec")
         body = _prepare_exec_body(program, cmd_args, cwd, env, timeout_ms, stdin)
         headers = {
             "Content-Type": "application/json",
             "Accept": "application/x-ndjson",
         }
-        stream_gen = self._transport.stream_request("POST", "/v1/exec", headers=headers, body=body)
+        stream_gen = self._transport.stream_request(
+            "POST",
+            "/v1/exec",
+            headers=headers,
+            body=body,
+            read_timeout_ms=read_timeout_for(timeout_ms),
+        )
 
         async def _lines() -> AsyncIterator[str]:
             async for line in stream_gen:
                 yield line
 
-        async for event in _aiter_exec_stream_events(_lines()):
+        async for event in _aiter_exec_stream_events(_lines(), errors):
             yield event
 
     async def exec(
@@ -565,17 +616,23 @@ class AsyncSandboxConnection:
         stdin: str | None = None,
     ) -> ExecResult:
         """Runs a command asynchronously inside the sandbox, parsing streaming NDJSON output."""
+        return await self._exec(command, args, cwd, env, timeout_ms, stdin)
+
+    async def _exec(
+        self,
+        command: str | list[str],
+        args: list[str] | None = None,
+        cwd: str | None = None,
+        env: dict[str, str] | None = None,
+        timeout_ms: int | None = None,
+        stdin: str | None = None,
+        errors: str = "strict",
+    ) -> ExecResult:
+        """Like exec, decoding output with the given codec error handler."""
         stdout_chunks: list[str] = []
         stderr_chunks: list[str] = []
         exit_code = 0
-        async for event in self.exec_stream(
-            command=command,
-            args=args,
-            cwd=cwd,
-            env=env,
-            timeout_ms=timeout_ms,
-            stdin=stdin,
-        ):
+        async for event in self._exec_events(command, args, cwd, env, timeout_ms, stdin, errors):
             if event["type"] == "stdout":
                 stdout_chunks.append(event["data"])
             elif event["type"] == "stderr":

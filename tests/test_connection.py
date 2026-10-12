@@ -379,3 +379,144 @@ def test_exec_stream_error_frame_carries_reason_code_as_code():
     assert exc.value.code == "permission_denied"
     assert "denied" in str(exc.value)
     conn.close()
+
+
+class TimeoutRecordingTransport(httpx.MockTransport):
+    """Records each request's read timeout and answers exec, watch and process get."""
+
+    def __init__(self) -> None:
+        self.read_timeouts: list[float | None] = []
+        super().__init__(self.handler)
+
+    def handler(self, request: httpx.Request) -> httpx.Response:
+        self.read_timeouts.append(request.extensions["timeout"]["read"])
+        path = request.url.path
+        if path.endswith("/v1/exec"):
+            return httpx.Response(200, content=_ndjson_lines([{"type": "exit", "exit_code": 0}]))
+        if path.endswith("/v1/files/watch"):
+            return httpx.Response(200, content=b"")
+        if path.endswith("/v1/processes/get"):
+            return httpx.Response(
+                200,
+                json={"process_id": "p", "state": "exited", "exit_code": 0, "started_at": 1},
+            )
+        return httpx.Response(404, json={"reason_code": "not_found", "message": "missing"})
+
+
+def _recording_conn() -> tuple[SandboxConnection, TimeoutRecordingTransport]:
+    transport = TimeoutRecordingTransport()
+    conn = SandboxConnection(
+        connect_url="https://sbx.example.com",
+        api_key="test",
+        timeout_ms=60_000,
+        client=httpx.Client(transport=transport),
+    )
+    return conn, transport
+
+
+@pytest.mark.parametrize(
+    "timeout_ms,expected_read",
+    [(None, 60.0), (0, 60.0), (10_000, 60.0), (120_000, 150.0), (600_000, 630.0)],
+)
+def test_exec_read_timeout_outlasts_the_exec_timeout(timeout_ms, expected_read):
+    conn, transport = _recording_conn()
+    conn.exec("sleep", args=["75"], timeout_ms=timeout_ms)
+    assert transport.read_timeouts == [expected_read]
+    conn.close()
+
+
+def test_watch_read_timeout_outlasts_the_watch_timeout():
+    conn, transport = _recording_conn()
+    list(conn.files.watch(".", timeout_ms=90_000))
+    list(conn.files.watch("."))
+    assert transport.read_timeouts == [120.0, 60.0]
+    conn.close()
+
+
+def test_blocking_process_get_read_timeout_outlasts_the_wait_ceiling():
+    conn, transport = _recording_conn()
+    conn.processes.get("p", wait=True)
+    conn.processes.get("p")
+    assert transport.read_timeouts == [330.0, 60.0]
+    conn.close()
+
+
+def test_extended_read_timeout_keeps_the_other_timeouts():
+    seen: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.extensions["timeout"])
+        return httpx.Response(200, content=_ndjson_lines([{"type": "exit", "exit_code": 0}]))
+
+    conn = SandboxConnection(
+        connect_url="https://sbx.example.com",
+        api_key="test",
+        timeout_ms=5_000,
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    conn.exec("true", timeout_ms=60_000)
+    assert seen == [{"connect": 5.0, "read": 90.0, "write": 5.0, "pool": 5.0}]
+    conn.close()
+
+
+async def test_async_exec_and_process_get_read_timeouts_are_extended():
+    transport = TimeoutRecordingTransport()
+    conn = AsyncSandboxConnection(
+        connect_url="https://sbx.example.com",
+        api_key="test",
+        timeout_ms=60_000,
+        client=httpx.AsyncClient(transport=transport),
+    )
+    await conn.exec("sleep", args=["75"], timeout_ms=120_000)
+    async for _ in conn.files.watch(".", timeout_ms=90_000):
+        pass
+    await conn.processes.get("p", wait=True)
+    await conn.processes.get("p")
+    assert transport.read_timeouts == [150.0, 120.0, 330.0, 60.0]
+    await conn.aclose()
+
+
+INVALID_UTF8_FRAMES = [
+    {"type": "stdout", "data": base64.b64encode(b"ok \xff\xfe done").decode()},
+    {"type": "stderr", "data": base64.b64encode(b"\xc3").decode()},
+    {"type": "exit", "exit_code": 0},
+]
+
+
+def _invalid_utf8_conn() -> SandboxConnection:
+    return SandboxConnection(
+        connect_url="https://sbx.example.com",
+        api_key="test",
+        timeout_ms=5000,
+        client=httpx.Client(transport=ExecStreamMockTransport(INVALID_UTF8_FRAMES)),
+    )
+
+
+def test_exec_stays_strict_about_invalid_utf8():
+    conn = _invalid_utf8_conn()
+    with pytest.raises(UnicodeDecodeError):
+        conn.exec("cat", args=["blob"])
+    conn.close()
+
+
+def test_private_exec_can_replace_invalid_utf8():
+    conn = _invalid_utf8_conn()
+    result = conn._exec("cat", args=["blob"], errors="replace")
+    assert result.stdout == "ok �� done"
+    assert result.stderr == "�"
+    assert result.exit_code == 0
+    conn.close()
+
+
+async def test_async_private_exec_can_replace_invalid_utf8():
+    conn = AsyncSandboxConnection(
+        connect_url="https://sbx.example.com",
+        api_key="test",
+        timeout_ms=5000,
+        client=httpx.AsyncClient(transport=ExecStreamMockTransport(INVALID_UTF8_FRAMES)),
+    )
+    result = await conn._exec("cat", args=["blob"], errors="replace")
+    assert result.stdout == "ok �� done"
+    with pytest.raises(UnicodeDecodeError):
+        await conn.exec("cat", args=["blob"])
+    await conn.aclose()
