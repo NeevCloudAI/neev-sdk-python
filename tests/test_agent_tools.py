@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import copy
 import inspect
 import json
+import pickle
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+import httpx
 import pytest
 
 from neevai import agent_tools
@@ -21,6 +24,7 @@ from neevai.agent_tools import (
 )
 from neevai.errors import (
     APIConnectionError,
+    APIError,
     AuthenticationError,
     BadRequestError,
     DeadlineExceededError,
@@ -29,7 +33,9 @@ from neevai.errors import (
     NotFoundError,
     RateLimitError,
     error_from_status,
+    parse_error_body,
 )
+from neevai.transport.runtime import RuntimeTransport
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -287,6 +293,21 @@ def test_schemas_match_the_method_signatures():
         assert required == list(schema["required"]), name
 
 
+LIST_MUTATIONS = [
+    lambda xs: xs.__setitem__(0, "x"),
+    lambda xs: xs.__delitem__(0),
+    lambda xs: xs.__iadd__(["x"]),
+    lambda xs: xs.__imul__(2),
+    lambda xs: xs.append("x"),
+    lambda xs: xs.extend(["x"]),
+    lambda xs: xs.insert(0, "x"),
+    lambda xs: xs.pop(),
+    lambda xs: xs.remove("command"),
+    lambda xs: xs.clear(),
+    lambda xs: xs.sort(),
+    lambda xs: xs.reverse(),
+]
+
 MUTATIONS = [
     lambda m: m.__setitem__("run_command", "x"),
     lambda m: m.__delitem__("run_command"),
@@ -306,7 +327,11 @@ def test_descriptions_and_parameters_are_read_only(mutate: Any):
         with pytest.raises(TypeError, match="read-only"):
             mutate(mapping)
     assert len(DESCRIPTIONS) == 9 and len(PARAMETERS) == 9
-    assert isinstance(run_command["required"], tuple)
+    assert type(run_command["required"]) is not list and isinstance(run_command["required"], list)
+    for mutate_list in LIST_MUTATIONS:
+        with pytest.raises(TypeError, match="read-only"):
+            mutate_list(run_command["required"])
+    assert list(run_command["required"]) == ["command"]
 
 
 def test_descriptions_and_parameters_serialize_as_json():
@@ -318,7 +343,7 @@ def test_parameter_schemas_share_no_objects():
     seen: dict[int, str] = {}
 
     def walk(node: Any, path: str) -> None:
-        if isinstance(node, (dict, tuple)):
+        if isinstance(node, (dict, list)):
             assert id(node) not in seen, f"{path} shares an object with {seen.get(id(node))}"
             seen[id(node)] = path
             items = node.items() if isinstance(node, dict) else enumerate(node)
@@ -438,7 +463,7 @@ def test_run_command_truncates_each_stream():
 def test_recoverable_errors_become_results(cls: type[Exception]):
     tools, sandbox = tools_for()
     sandbox.fail = api_error(cls, "path is outside the workspace")
-    assert tools.run_command("ls") == {"error": "HTTP 400 path is outside the workspace"}
+    assert tools.run_command("ls") == {"error": "HTTP 400: path is outside the workspace"}
 
 
 def test_bad_request_error_comes_through_intact():
@@ -448,8 +473,109 @@ def test_bad_request_error_comes_through_intact():
         {"code": "invalid_argument", "message": 'path "/etc/passwd" escapes workspace root'},
         "req-1",
     )
-    assert tools.run_command("ls") == {"error": str(sandbox.fail)}
-    assert "[request-id: req-1]" in str(sandbox.fail)
+    assert tools.run_command("ls") == {
+        "error": 'HTTP 400 invalid_argument: path "/etc/passwd" escapes workspace root'
+    }
+
+
+def test_api_error_text_leaves_out_request_details():
+    tools, sandbox = tools_for()
+    sandbox.fail = NotFoundError(
+        404,
+        {"code": "not_found", "message": "no such file"},
+        "req-1",
+        request_method="POST",
+        request_url="https://api.example/orgs/org-1/projects/prj-1/sandboxes",
+    )
+    assert "[POST https://" in str(sandbox.fail)
+    assert tools.read_file("a.txt") == {"error": "HTTP 404 not_found: no such file"}
+
+
+def test_api_error_text_falls_back_to_details():
+    tools, sandbox = tools_for()
+    sandbox.fail = BadRequestError(400, {"details": "<html>bad</html>"}, None)
+    assert tools.read_file("a.txt") == {"error": "HTTP 400: <html>bad</html>"}
+
+
+def _error_fixture() -> dict[str, Any]:
+    # The JS SDK carries a byte-identical copy of this fixture.
+    fixture: dict[str, Any] = json.loads(
+        (FIXTURES / "agent_tool_error_texts.json").read_text(encoding="utf-8")
+    )
+    return fixture
+
+
+def _runtime_error_for(case: dict[str, Any]) -> APIError:
+    headers = {"content-type": case["content_type"]}
+    if "request_id" in case:
+        headers["x-request-id"] = case["request_id"]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(case["status"], content=case["body_raw"].encode(), headers=headers)
+
+    transport = RuntimeTransport(
+        "https://sbx.example", "key", client=httpx.Client(transport=httpx.MockTransport(handler))
+    )
+    with pytest.raises(APIError) as caught:
+        transport.request("POST", "/v1/files/read", body={})
+    return caught.value
+
+
+@pytest.mark.parametrize("case", _error_fixture()["api_errors"], ids=lambda c: c["name"])
+def test_api_error_texts_match_the_shared_fixture(case: dict[str, Any]):
+    runtime_error = _runtime_error_for(case)
+    assert agent_tools._api_error_text(runtime_error) == case["expected"]
+    # The lifecycle transport parses error bodies with the same function.
+    lifecycle_error = error_from_status(
+        case["status"], parse_error_body(case["body_raw"]), case.get("request_id")
+    )
+    assert agent_tools._api_error_text(lifecycle_error) == case["expected"]
+
+
+@pytest.mark.parametrize("case", _error_fixture()["call_errors"], ids=lambda c: c["name"])
+def test_call_error_texts_match_the_shared_fixture(case: dict[str, Any]):
+    tools, sandbox = tools_for(allow_preview=True, allow_rollback=True, allow_processes=True)
+    assert tools.call(case["tool"], case["args"]) == {"error": case["expected"]}
+    assert sandbox.calls == []
+
+
+def test_error_fixture_covers_the_agreed_cases():
+    fixture = _error_fixture()
+    assert len(fixture["api_errors"]) >= 25
+    assert len(fixture["call_errors"]) >= 50
+    assert all(
+        set(c) >= {"name", "status", "content_type", "body_raw", "expected"}
+        for c in fixture["api_errors"]
+    )
+    assert all(set(c) == {"name", "tool", "args", "expected"} for c in fixture["call_errors"])
+
+
+def test_schema_lists_copy_deepcopy_and_pickle_to_plain_objects():
+    schema = PARAMETERS["run_command"]
+    for clone in (copy.deepcopy(schema), pickle.loads(pickle.dumps(schema))):
+        assert type(clone) is dict
+        assert type(clone["required"]) is list
+        assert type(clone["properties"]["command"]) is dict
+        clone["required"].append("cwd")
+        clone["properties"]["command"]["type"] = "x"
+        assert clone != schema
+    shallow = copy.copy(schema)
+    assert type(shallow) is dict and shallow == schema
+    assert type(copy.copy(schema["required"])) is list
+    for clone_list in (
+        copy.deepcopy(schema["required"]),
+        pickle.loads(pickle.dumps(schema["required"])),
+    ):
+        assert type(clone_list) is list and clone_list == ["command"]
+    assert type(copy.deepcopy(PARAMETERS)) is dict
+    assert type(pickle.loads(pickle.dumps(DESCRIPTIONS))) is dict
+    assert list(PARAMETERS["run_command"]["required"]) == ["command"]
+
+
+def test_schemas_are_valid_json_schema():
+    jsonschema = pytest.importorskip("jsonschema")
+    for schema in PARAMETERS.values():
+        jsonschema.Draft202012Validator.check_schema(schema)
 
 
 @pytest.mark.parametrize(
@@ -523,7 +649,7 @@ def test_non_utf8_content_is_an_error_result():
     tools, sandbox = tools_for()
     sandbox.fail = UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte")
     result = tools.read_file("blob.bin")
-    assert result["error"].startswith("not UTF-8 text: ")  # type: ignore[typeddict-item]
+    assert result == {"error": "not UTF-8 text"}
 
 
 def test_write_then_read_round_trips():
@@ -534,7 +660,7 @@ def test_write_then_read_round_trips():
 
 def test_read_missing_file_is_an_error_result():
     tools, _ = tools_for()
-    assert tools.read_file("nope.txt") == {"error": "HTTP 400 nope.txt: no such file"}
+    assert tools.read_file("nope.txt") == {"error": "HTTP 400: nope.txt: no such file"}
 
 
 def test_read_truncates_large_files():
@@ -592,13 +718,13 @@ def test_call_disabled_tool_refuses_before_checking_args():
 @pytest.mark.parametrize(
     "name,args,reason",
     [
-        ("run_command", {}, "missing a required argument: 'command'"),
+        ("run_command", {}, 'missing a required argument: "command"'),
         (
             "run_command",
             {"command": "ls", "shell": "bash"},
-            "got an unexpected keyword argument 'shell'",
+            'got an unexpected keyword argument "shell"',
         ),
-        ("write_file", {"path": "a.txt"}, "missing a required argument: 'content'"),
+        ("write_file", {"path": "a.txt"}, 'missing a required argument: "content"'),
         ("read_file", ["a.txt"], "expected an object"),
         ("read_file", "a.txt", "expected an object"),
     ],
@@ -687,7 +813,7 @@ def test_rollback_to_a_known_checkpoint():
 
 def test_rollback_to_an_unknown_checkpoint_is_an_error_result():
     tools, _ = tools_for(allow_rollback=True)
-    assert tools.rollback("snap-9") == {"error": "HTTP 400 snapshot not found"}
+    assert tools.rollback("snap-9") == {"error": "HTTP 400: snapshot not found"}
 
 
 def test_start_process_runs_a_login_shell_in_cwd():
@@ -702,7 +828,7 @@ def test_start_process_runs_a_login_shell_in_cwd():
 def test_start_process_resource_exhausted_is_an_error_result(message: str):
     tools, sandbox = tools_for(allow_processes=True)
     sandbox.fail = RateLimitError(429, {"code": "resource_exhausted", "message": message}, None)
-    assert tools.start_process("sleep 1") == {"error": f"HTTP 429 resource_exhausted {message}"}
+    assert tools.start_process("sleep 1") == {"error": f"HTTP 429 resource_exhausted: {message}"}
 
 
 def test_start_process_other_rate_limits_raise():
@@ -856,13 +982,13 @@ def test_read_process_output_coerces_and_clamps_wait(clock: FakeClock, given: An
 
 def test_read_process_output_wait_on_an_unknown_process_is_an_error_result():
     tools, _ = tools_for(allow_processes=True)
-    assert tools.read_process_output("proc-9", wait_s=5) == {"error": "HTTP 400 process not found"}
+    assert tools.read_process_output("proc-9", wait_s=5) == {"error": "HTTP 400: process not found"}
 
 
 def test_unknown_process_ids_are_error_results():
     tools, _ = tools_for(allow_processes=True)
-    assert tools.read_process_output("proc-9") == {"error": "HTTP 400 process not found"}
-    assert tools.stop_process("proc-9") == {"error": "HTTP 400 process not found"}
+    assert tools.read_process_output("proc-9") == {"error": "HTTP 400: process not found"}
+    assert tools.stop_process("proc-9") == {"error": "HTTP 400: process not found"}
 
 
 def test_stop_process_reports_whether_it_was_signalled():
@@ -922,7 +1048,7 @@ async def test_async_core_tools():
     assert sandbox.calls == [("exec", "sh", ["-lc", "ls"], None, 1_000)]
     assert await tools.write_file("a.txt", "hi") == {"bytes_written": 2}
     assert await tools.read_file("a.txt") == {"content": "hi"}
-    assert await tools.read_file("nope.txt") == {"error": "HTTP 400 nope.txt: no such file"}
+    assert await tools.read_file("nope.txt") == {"error": "HTTP 400: nope.txt: no such file"}
 
 
 async def test_async_call():
@@ -938,7 +1064,7 @@ async def test_async_call():
         "error": "expose_port is not enabled for this agent"
     }
     assert await tools.call("stop_process", {}) == {
-        "error": "invalid arguments for stop_process: missing a required argument: 'process_id'"
+        "error": 'invalid arguments for stop_process: missing a required argument: "process_id"'
     }
 
 
@@ -978,7 +1104,7 @@ async def test_async_preview_checkpoint_and_rollback(clock: FakeClock):
     assert ("get_snapshot", "snap-1", "org-1", "prj-1") in sandbox.calls
     assert clock.sleeps == [2.0]
     assert await tools.rollback("snap-1") == {"ok": True}
-    assert await tools.rollback("snap-9") == {"error": "HTTP 400 snapshot not found"}
+    assert await tools.rollback("snap-9") == {"error": "HTTP 400: snapshot not found"}
 
 
 async def test_async_checkpoint_failed_final_fetch_and_deadline(clock: FakeClock):
@@ -1008,7 +1134,7 @@ async def test_async_process_tools(clock: FakeClock):
     assert clock.sleeps == [1.0]
     assert await tools.stop_process("proc-1") == {"ok": True}
     sandbox.fail = RateLimitError(429, {"code": "resource_exhausted", "message": "full"}, None)
-    assert await tools.start_process("x") == {"error": "HTTP 429 resource_exhausted full"}
+    assert await tools.start_process("x") == {"error": "HTTP 429 resource_exhausted: full"}
     sandbox.fail = RateLimitError(429, {"message": "slow down"}, None)
     with pytest.raises(RateLimitError):
         await tools.start_process("x")
@@ -1132,3 +1258,54 @@ def test_dropped_exec_stream_still_raises():
     sandbox.fail = APIConnectionError("Failed to reach the sandbox runtime during stream")
     with pytest.raises(APIConnectionError):
         tools.run_command("echo start; sleep 130")
+
+
+@pytest.mark.parametrize(
+    "given,expected_ms",
+    [
+        ("٣٠", 60_000),  # Arabic-Indic digits are not ASCII
+        (" 30", 60_000),  # a no-break space is not stripped
+        ("\t30\n", 30_000),
+        ("\v\f 30 \r", 30_000),
+        (1.0625, 1_063),  # half up, not half to even
+        (2.5005, 2_501),
+    ],
+)
+def test_numbers_are_ascii_and_round_half_up(given: Any, expected_ms: int):
+    tools, sandbox = tools_for()
+    tools.run_command("ls", timeout_s=given)
+    assert sandbox.calls[0][4] == expected_ms
+
+
+def test_call_quotes_key_names_as_json_and_caps_the_text():
+    tools, sandbox = tools_for()
+    assert tools.call("read_file", {"path": "a", 'we"ird': 1}) == {
+        "error": 'invalid arguments for read_file: got an unexpected keyword argument "we\\"ird"'
+    }
+    long_key = "k" * 1_000
+    result = tools.call("read_file", {"path": "a", long_key: 1})
+    assert len(result["error"]) == 501  # type: ignore[typeddict-item]
+    assert result["error"].endswith("…")  # type: ignore[typeddict-item]
+    result = tools.call("x" * 1_000, {})
+    assert len(result["error"]) == 501  # type: ignore[typeddict-item]
+    assert sandbox.calls == []
+
+
+def test_call_reports_unknown_keys_before_missing_ones():
+    tools, _ = tools_for()
+    assert tools.call("write_file", {"bogus": 1}) == {
+        "error": 'invalid arguments for write_file: got an unexpected keyword argument "bogus"'
+    }
+    assert tools.call("write_file", {"content": 1}) == {
+        "error": 'invalid arguments for write_file: missing a required argument: "path"'
+    }
+
+
+def test_truncation_keeps_a_leading_bom():
+    # The JS SDK keeps it too: the BOM is content, 3 bytes of the 4,000-byte head.
+    text = "\ufeff" + "a" * 20_000
+    cut = _truncate(text)
+    assert cut.startswith("\ufeff" + "a" * 3_997 + "\n…[")
+    tools, sandbox = tools_for()
+    sandbox.workspace["bom.txt"] = text
+    assert tools.read_file("bom.txt") == {"content": cut}

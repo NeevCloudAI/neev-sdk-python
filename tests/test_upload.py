@@ -8,7 +8,8 @@ import os
 import httpx
 import pytest
 
-from neevai.errors import InternalServerError, NeevAIError
+from neevai.errors import InternalServerError, NeevAIError, error_from_status, parse_error_body
+from neevai.runtime._upload import _is_missing_route, _is_retryable
 from neevai.runtime.connection import AsyncSandboxConnection, SandboxConnection
 
 MIB = 1 << 20
@@ -20,6 +21,8 @@ class FakeSandbox:
 
     def __init__(self, *, uploads_supported: bool = True):
         self.uploads_supported = uploads_supported
+        # A JSON 404 body for the missing upload route, as a gateway might send.
+        self.missing_route_json: dict[str, str] | None = None
         self.requests: list[tuple[str, str, dict[str, str]]] = []
         self.bodies: dict[str, bytes] = {}
         self.files: dict[str, bytes] = {}
@@ -52,6 +55,8 @@ class FakeSandbox:
             return httpx.Response(200, content=self.read_payload)
         if path == "/v1/files/uploads" and request.method == "POST":
             if not self.uploads_supported:
+                if self.missing_route_json is not None:
+                    return httpx.Response(404, json=self.missing_route_json)
                 return httpx.Response(404, text="404 page not found")
             meta = dict(pair.split(" ") for pair in headers["upload-metadata"].split(","))
             upload_id = f"u{len(self.lengths) + 1}"
@@ -423,3 +428,43 @@ def test_stops_after_five_attempts_without_progress():
     with pytest.raises(InternalServerError):
         _conn(fake).files.upload("f.bin", _payload(10))
     assert sum(1 for m, _ in fake.calls() if m == "PATCH") == 5
+
+
+def test_gateway_json_404_without_sandbox_envelope_falls_back_to_one_write():
+    fake = FakeSandbox(uploads_supported=False)
+    fake.missing_route_json = {"code": "not_found", "message": "no route"}
+    conn = _conn(fake)
+    data = _payload(3 * MIB)
+    assert conn.files.upload("big.bin", data) == {"bytes_written": len(data)}
+    assert fake.files["big.bin"] == data
+
+
+def _runtime_error(status: int, raw: str):
+    return error_from_status(status, parse_error_body(raw), None)
+
+
+@pytest.mark.parametrize(
+    "raw,missing",
+    [
+        ('{"code":"not_found","message":"no route"}', True),
+        ("404 page not found", True),
+        ('{"reason_code":"not_found","message":"no upload"}', False),
+        ('{"code":"not_found","reason_code":"not_found"}', False),
+        ('{"reason_code":""}', True),
+    ],
+)
+def test_missing_route_keys_on_the_sandbox_reason_code(raw: str, missing: bool):
+    assert _is_missing_route(_runtime_error(404, raw)) is missing
+
+
+@pytest.mark.parametrize(
+    "raw,retryable",
+    [
+        ('{"code":"internal","message":"gateway"}', True),
+        ("upstream hiccup", True),
+        ('{"reason_code":"internal","message":"could not write file"}', False),
+    ],
+)
+def test_last_chunk_500_is_final_only_with_the_sandbox_envelope(raw: str, retryable: bool):
+    assert _is_retryable(_runtime_error(500, raw), is_last=True) is retryable
+    assert _is_retryable(_runtime_error(500, raw), is_last=False) is True

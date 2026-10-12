@@ -153,12 +153,19 @@ def _is_retryable(exc: BaseException, is_last: bool) -> bool:
         return True
     if not isinstance(exc, APIError) or exc.status_code not in _RETRYABLE_STATUSES:
         return False
-    return not (exc.status_code == 500 and is_last and exc.code is not None)
+    return not (exc.status_code == 500 and is_last and _has_envelope(exc))
+
+
+def _has_envelope(exc: APIError) -> bool:
+    # sandboxd's error envelope carries reason_code; a gateway's body may carry a
+    # plain code, which must not count as the sandbox answering.
+    reason_code = exc.body.get("reason_code") if exc.body else None
+    return isinstance(reason_code, str) and reason_code != ""
 
 
 def _is_missing_route(exc: APIError) -> bool:
     """A 404 without the sandbox's error envelope: the runtime has no upload endpoints."""
-    return exc.status_code == 404 and exc.code is None
+    return exc.status_code == 404 and not _has_envelope(exc)
 
 
 def _stalled_error(offset: int, length: int) -> NeevAIError:

@@ -21,12 +21,12 @@ which means the command was silent too long.
 from __future__ import annotations
 
 import asyncio
-import inspect
+import json
 import math
 import re
 import time
-from collections.abc import Awaitable, Callable, Mapping
-from typing import TYPE_CHECKING, Any, Literal, NoReturn, TypeAlias, TypeVar, cast
+from collections.abc import Awaitable, Callable, Iterable, Mapping
+from typing import TYPE_CHECKING, Any, Literal, NoReturn, SupportsIndex, TypeAlias, TypeVar, cast
 
 from typing_extensions import NotRequired, TypedDict
 
@@ -188,11 +188,25 @@ _EDGE_TIMEOUT_ERROR = (
 _RECOVERABLE = (BadRequestError, NotFoundError, ConflictError, DeadlineExceededError)
 
 
-class _FrozenDict(dict[str, Any]):
-    """A dict that refuses changes, so shared tool metadata stays intact yet still serializes as JSON."""
+def _refuse(self: object, *args: object, **kwargs: object) -> NoReturn:
+    raise TypeError(f"{type(self).__name__} is read-only")
 
-    def _refuse(self, *args: object, **kwargs: object) -> NoReturn:
-        raise TypeError(f"{type(self).__name__} is read-only")
+
+def _thaw(value: Any) -> Any:
+    """Returns a plain, mutable deep copy of frozen tool metadata."""
+    if isinstance(value, dict):
+        return {k: _thaw(v) for k, v in cast("dict[str, Any]", value).items()}
+    if isinstance(value, list):
+        return [_thaw(v) for v in cast("Iterable[Any]", value)]
+    return value
+
+
+class _FrozenDict(dict[str, Any]):
+    """A dict that refuses changes, so shared tool metadata stays intact.
+
+    It still serializes as JSON, and copy, deepcopy and pickle give plain dicts,
+    since agent frameworks copy a schema before rewriting it.
+    """
 
     __setitem__ = _refuse  # pyright: ignore[reportAssignmentType]
     __delitem__ = _refuse  # pyright: ignore[reportAssignmentType]
@@ -203,14 +217,54 @@ class _FrozenDict(dict[str, Any]):
     setdefault = _refuse  # pyright: ignore[reportAssignmentType]
     update = _refuse  # pyright: ignore[reportAssignmentType]
 
+    def __copy__(self) -> dict[str, Any]:
+        return dict(self)
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> dict[str, Any]:
+        thawed: dict[str, Any] = _thaw(self)
+        return thawed
+
+    def __reduce_ex__(self, protocol: SupportsIndex) -> tuple[Any, ...]:
+        return (dict, (_thaw(self),))
+
+
+class _FrozenList(list[Any]):
+    """A list that refuses changes; a real list because schema checkers reject tuples.
+
+    Like _FrozenDict, copy, deepcopy and pickle give plain lists.
+    """
+
+    __setitem__ = _refuse  # pyright: ignore[reportAssignmentType]
+    __delitem__ = _refuse  # pyright: ignore[reportAssignmentType]
+    __iadd__ = _refuse  # pyright: ignore[reportAssignmentType]
+    __imul__ = _refuse  # pyright: ignore[reportAssignmentType]
+    append = _refuse  # pyright: ignore[reportAssignmentType]
+    extend = _refuse  # pyright: ignore[reportAssignmentType]
+    insert = _refuse  # pyright: ignore[reportAssignmentType]
+    pop = _refuse  # pyright: ignore[reportAssignmentType]
+    remove = _refuse  # pyright: ignore[reportAssignmentType]
+    clear = _refuse  # pyright: ignore[reportAssignmentType]
+    sort = _refuse  # pyright: ignore[reportAssignmentType]
+    reverse = _refuse  # pyright: ignore[reportAssignmentType]
+
+    def __copy__(self) -> list[Any]:
+        return list(self)
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> list[Any]:
+        thawed: list[Any] = _thaw(self)
+        return thawed
+
+    def __reduce_ex__(self, protocol: SupportsIndex) -> tuple[Any, ...]:
+        return (list, (_thaw(self),))
+
 
 def _freeze(value: Any) -> Any:
-    """Returns a read-only deep copy: dicts become _FrozenDict and lists tuples."""
+    """Returns a read-only deep copy: dicts become _FrozenDict and lists _FrozenList."""
     if isinstance(value, dict):
         items = cast("dict[str, Any]", value).items()
         return _FrozenDict({k: _freeze(v) for k, v in items})
     if isinstance(value, (list, tuple)):
-        return tuple(_freeze(v) for v in cast("list[Any]", value))
+        return _FrozenList(_freeze(v) for v in cast("list[Any]", value))
     return value
 
 
@@ -384,7 +438,9 @@ def _short_error(text: str) -> str:
 
 # Plain decimal numbers only, so "1_000", "0x10" and "inf" are not numbers here
 # or in the JS SDK.
-_NUMERIC = re.compile(r"[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?")
+_NUMERIC = re.compile(r"[+-]?([0-9]+\.?[0-9]*|\.[0-9]+)([eE][+-]?[0-9]+)?", re.ASCII)
+# ASCII whitespace only, the same set the JS SDK strips.
+_ASCII_SPACE = " \t\n\r\f\v"
 
 
 def _parse_number(value: object) -> float | None:
@@ -392,7 +448,7 @@ def _parse_number(value: object) -> float | None:
     if isinstance(value, bool):
         return None
     if isinstance(value, str):
-        value = value.strip()
+        value = value.strip(_ASCII_SPACE)
         if not _NUMERIC.fullmatch(value):
             return None
     elif not isinstance(value, (int, float)):
@@ -440,22 +496,25 @@ def _disabled(name: str) -> ToolErrorResult:
     return {"error": f"{name} is not enabled for this agent"}
 
 
-def _check_args(method: Callable[..., Any], name: str, args: object) -> dict[str, Any] | str:
-    """Checks model-supplied args against the tool's signature and schema.
+def _check_args(name: str, args: object) -> dict[str, Any] | str:
+    """Checks model-supplied args against the tool's schema.
 
     Returns the args to call with, with integers parsed from numeric strings, or
-    the reason they do not fit.
+    the reason they do not fit: the first unknown key, then the first missing
+    required key, then the first property of the wrong type, in schema order.
     """
     if args is None:
         args = {}
     if not isinstance(args, Mapping):
         return "expected an object"
     checked: dict[str, Any] = {str(k): v for k, v in args.items()}  # pyright: ignore[reportUnknownVariableType, reportUnknownArgumentType]
-    try:
-        inspect.signature(method).bind(**checked)
-    except TypeError as e:
-        return str(e)
     schema = PARAMETERS[name]
+    for key in checked:
+        if key not in schema["properties"]:
+            return f"got an unexpected keyword argument {json.dumps(key, ensure_ascii=False)}"
+    for key in schema["required"]:
+        if key not in checked:
+            return f"missing a required argument: {json.dumps(key, ensure_ascii=False)}"
     for field, prop in schema["properties"].items():
         if field not in checked:
             continue
@@ -475,6 +534,11 @@ def _check_args(method: Callable[..., Any], name: str, args: object) -> dict[str
     return checked
 
 
+def _milliseconds(seconds: float) -> int:
+    # Half up like JavaScript's Math.round; Python's round() rounds half to even.
+    return math.floor(seconds * 1000 + 0.5)
+
+
 def _command_timeout(timeout_s: object) -> float:
     return float(min(max(_number(timeout_s, _DEFAULT_TIMEOUT_S), 1), _MAX_TIMEOUT_S))
 
@@ -483,15 +547,30 @@ def _wait_seconds(wait_s: object) -> float:
     return float(min(max(_number(wait_s, 0), 0), _MAX_WAIT_S))
 
 
+def _api_error_text(e: APIError) -> str:
+    """Returns the model-facing text of an API error, the same in both SDKs.
+
+    It is "HTTP <status> <code>: <message>", leaving out the code or message when
+    absent; the request method, URL and request id never reach the model.
+    """
+    text = f"HTTP {e.status_code}"
+    if e.code:
+        text += f" {e.code}"
+    message = e._text or e.details
+    if message:
+        text += f": {message}"
+    return _short_error(text)
+
+
 def _error_result(e: Exception, timeout_error: str) -> ToolErrorResult:
     """Turns an error the model can act on into a short error result; re-raises the rest."""
     if isinstance(e, DeadlineExceededError):
         # The 504 body is often a proxy's HTML page, so say what happened instead.
         return {"error": timeout_error}
     if isinstance(e, _RECOVERABLE):
-        return {"error": _short_error(str(e))}
+        return {"error": _api_error_text(e)}
     if isinstance(e, UnicodeDecodeError):
-        return {"error": _short_error(f"not UTF-8 text: {e}")}
+        return {"error": "not UTF-8 text"}
     if isinstance(e, NeevAIError) and not isinstance(e, (APIError, APIConnectionError)):
         return {"error": _short_error(str(e))}
     raise e
@@ -512,7 +591,7 @@ def _start_error(e: RateLimitError) -> ToolErrorResult:
     # model gets it. Any other 429 raises.
     if e.code != "resource_exhausted":
         raise e
-    return {"error": _short_error(str(e))}
+    return {"error": _api_error_text(e)}
 
 
 def _checkpoint_failed(snap: Snapshot) -> ToolErrorResult:
@@ -580,13 +659,13 @@ class SandboxTools:
             or arguments that do not fit it.
         """
         if name not in DESCRIPTIONS:
-            return {"error": f"unknown tool: {name}"}
+            return {"error": _short_error(f"unknown tool: {name}")}
         if name not in self.names():
             return _disabled(name)
         method: Callable[..., ToolResult] = getattr(self, name)
-        checked = _check_args(method, name, args)
+        checked = _check_args(name, args)
         if isinstance(checked, str):
-            return {"error": f"invalid arguments for {name}: {checked}"}
+            return {"error": _short_error(f"invalid arguments for {name}: {checked}")}
         return method(**checked)
 
     def run_command(
@@ -609,7 +688,7 @@ class SandboxTools:
                     "sh",
                     args=["-lc", command],
                     cwd=cwd,
-                    timeout_ms=round(timeout * 1000),
+                    timeout_ms=_milliseconds(timeout),
                     errors="replace",
                 )
             except APIError as e:
@@ -829,13 +908,13 @@ class AsyncSandboxTools:
     async def call(self, name: str, args: Mapping[str, Any] | None = None) -> ToolResult:
         """Runs the tool the model named with the arguments it sent. See :meth:`SandboxTools.call`."""
         if name not in DESCRIPTIONS:
-            return {"error": f"unknown tool: {name}"}
+            return {"error": _short_error(f"unknown tool: {name}")}
         if name not in self.names():
             return _disabled(name)
         method: Callable[..., Awaitable[ToolResult]] = getattr(self, name)
-        checked = _check_args(method, name, args)
+        checked = _check_args(name, args)
         if isinstance(checked, str):
-            return {"error": f"invalid arguments for {name}: {checked}"}
+            return {"error": _short_error(f"invalid arguments for {name}: {checked}")}
         return await method(**checked)
 
     async def run_command(
@@ -851,7 +930,7 @@ class AsyncSandboxTools:
                     "sh",
                     args=["-lc", command],
                     cwd=cwd,
-                    timeout_ms=round(timeout * 1000),
+                    timeout_ms=_milliseconds(timeout),
                     errors="replace",
                 )
             except APIError as e:
