@@ -520,3 +520,47 @@ async def test_async_private_exec_can_replace_invalid_utf8():
     with pytest.raises(UnicodeDecodeError):
         await conn.exec("cat", args=["blob"])
     await conn.aclose()
+
+
+@pytest.mark.parametrize("raw", [b"[1,2]", b'"oops"', b"null", b"42"])
+def test_runtime_error_with_a_non_object_json_body_keeps_the_raw_text(raw: bytes):
+    transport = RuntimeTransport(
+        "https://sbx.example.com",
+        "test",
+        client=httpx.Client(
+            transport=httpx.MockTransport(lambda request: httpx.Response(400, content=raw))
+        ),
+    )
+    with pytest.raises(NeevAIError) as caught:
+        transport.request("POST", "/v1/files/read", body={})
+    assert caught.value.details == raw.decode()  # type: ignore[attr-defined]
+
+
+def test_runtime_error_with_a_bom_before_json_reads_the_message():
+    transport = RuntimeTransport(
+        "https://sbx.example.com",
+        "test",
+        client=httpx.Client(
+            transport=httpx.MockTransport(
+                lambda request: httpx.Response(400, content='\ufeff{"message":"bommed"}'.encode())
+            )
+        ),
+    )
+    with pytest.raises(NeevAIError) as caught:
+        transport.request("POST", "/v1/files/read", body={})
+    assert str(caught.value) == "HTTP 400 bommed"
+
+
+def test_runtime_error_drops_a_bom_before_plain_text():
+    transport = RuntimeTransport(
+        "https://sbx.example.com",
+        "test",
+        client=httpx.Client(
+            transport=httpx.MockTransport(
+                lambda request: httpx.Response(400, content="﻿plain text".encode())
+            )
+        ),
+    )
+    with pytest.raises(NeevAIError) as caught:
+        transport.request("POST", "/v1/files/read", body={})
+    assert caught.value.details == "plain text"  # type: ignore[attr-defined]

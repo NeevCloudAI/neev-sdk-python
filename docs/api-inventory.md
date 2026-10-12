@@ -1507,18 +1507,27 @@ with no client context (`sandbox.sandboxes is None`).
 | `stop_process(process_id)` | `StopProcessToolResult \| ToolErrorResult` | SIGTERM; `ok` is `False` if already exited |
 
 `timeout_s` and `wait_s` accept numbers or plain decimal strings (`"30"`,
-`"2.5"`); bools, NaN, infinities, overflowing values and anything else take the
-default. `call()` also checks each argument against `PARAMETERS`: a string
-property must be a string, a number property a number or decimal string, an
-integer property a whole number or integer string (converted to `int`), and
-`None` is accepted only for optional properties. A mismatch returns
-`{"error": "invalid arguments for <name>: <field> must be <type>"}`. Errors the model can act on
-(bad request, not found, conflict, deadline, client-side `NeevAIError`, a file
-that is not UTF-8, `resource_exhausted` on `start_process`, an edge 524 on
-`run_command`) return `{"error": ...}` with the first line, at most 500
-characters; auth, permission, other rate-limit, server and connection errors
-raise. `run_command` output that is not valid UTF-8 keeps its text, with U+FFFD
-in place of the bad bytes.
+`"2.5"`; ASCII digits, surrounding ASCII whitespace ignored). Called directly,
+bools, NaN, infinities, overflowing values and anything else take the default;
+`timeout_s` rounds to milliseconds half up. `call()` checks each argument
+against `PARAMETERS`, in order: an unknown key, then a missing required key,
+then a property of the wrong type. A string property must be a string, a number
+property a number or decimal string, an integer property a whole number or
+integer string (converted to `int`), and `None` is accepted only for optional
+properties. A mismatch returns `{"error": "invalid arguments for <name>: <reason>"}`,
+for example `got an unexpected keyword argument "shell"`,
+`missing a required argument: "path"` or `content must be string` (key names
+quoted as JSON). Errors the model can act on (bad request, not found,
+conflict, deadline, client-side `NeevAIError`, `resource_exhausted` on
+`start_process`, an edge 524 on `run_command`) return `{"error": ...}`. An API
+error reads `HTTP <status> <code>: <message>`, leaving out the code or message
+when absent and never including the request method, URL or request id. The
+message is the first non-empty string among the body's `message`, `error` and
+`details`; a body that is not a JSON object is used as raw text. A file
+that is not UTF-8 reads `not UTF-8 text`. Every error text keeps its first line,
+at most 500 characters. Auth, permission, other rate-limit, server and
+connection errors raise. `run_command` output that is not valid UTF-8 keeps its
+text, with U+FFFD in place of the bad bytes.
 
 `AsyncSandboxTools(sandbox: AsyncSandbox, ...)` has the same constructor and
 methods; every tool method and `call` is a coroutine, `names()` is not.
@@ -1526,7 +1535,7 @@ methods; every tool method and `call` is a coroutine, `names()` is not.
 | Constant | Type | Description |
 | -------- | ---- | ----------- |
 | `DESCRIPTIONS` | `Mapping[str, str]` (read-only `dict`, `json.dumps` works) | Model-facing description per tool |
-| `PARAMETERS` | `Mapping[str, Mapping[str, Any]]` (read-only at every level, arrays as tuples, `json.dumps` works) | JSON Schema per tool: object, `additionalProperties: false`, described properties |
+| `PARAMETERS` | `Mapping[str, Mapping[str, Any]]` (read-only at every level with real lists; `json.dumps` works and `copy`/`deepcopy`/`pickle` give plain dicts and lists) | JSON Schema per tool: object, `additionalProperties: false`, described properties |
 
 ```python
 from neevai.agent_tools import DESCRIPTIONS, PARAMETERS, SandboxTools

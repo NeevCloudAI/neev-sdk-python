@@ -1,4 +1,5 @@
-from typing import Any
+import json
+from typing import Any, cast
 
 
 class NeevAIError(Exception):
@@ -137,6 +138,31 @@ class ServiceUnavailableError(InternalServerError):
     """503 - The service is temporarily unavailable; retry shortly."""
 
     pass
+
+
+def parse_error_body(text: str) -> dict[str, Any] | None:
+    """Parses an error response body for ``error_from_status``.
+
+    A JSON object is kept as is, with sandboxd's ``reason_code`` used as ``code``
+    when ``code`` is absent. Any other body, including JSON that is not an object,
+    is kept as raw ``details`` text; an empty body gives ``None``. One leading
+    byte order mark is dropped first, as fetch's ``Response.text()`` does in the
+    JS SDK.
+    """
+    if text.startswith("\ufeff"):
+        text = text[1:]
+    if not text:
+        return None
+    try:
+        parsed = json.loads(text)
+    except ValueError:
+        return {"details": text}
+    if not isinstance(parsed, dict):
+        return {"details": text}
+    body = cast(dict[str, Any], parsed)
+    if not _str_field(body, "code") and _str_field(body, "reason_code"):
+        body = {**body, "code": body["reason_code"]}
+    return body
 
 
 def error_from_status(

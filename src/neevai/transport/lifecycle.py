@@ -9,6 +9,7 @@ from neevai.errors import (
     APIConnectionError,
     APITimeoutError,
     error_from_status,
+    parse_error_body,
 )
 from neevai.transport.retry import calculate_backoff, parse_retry_after
 
@@ -127,12 +128,7 @@ class ControlTransport:
             return {"details": response.text}
 
     def _parse_error_body(self, response: httpx.Response) -> dict[str, Any] | None:
-        parsed = self._parse_json(response)
-        if isinstance(parsed, dict):
-            return cast(dict[str, Any], parsed)
-        if response.text:
-            return {"details": response.text}
-        return None
+        return parse_error_body(response.text)
 
 
 class AsyncControlTransport:
@@ -236,12 +232,7 @@ class AsyncControlTransport:
             return {"details": response.text}
 
     def _parse_error_body(self, response: httpx.Response) -> dict[str, Any] | None:
-        parsed = self._parse_json(response)
-        if isinstance(parsed, dict):
-            return cast(dict[str, Any], parsed)
-        if response.text:
-            return {"details": response.text}
-        return None
+        return parse_error_body(response.text)
 
 
 class RawClient:

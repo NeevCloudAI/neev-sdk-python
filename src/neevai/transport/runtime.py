@@ -3,7 +3,7 @@ from typing import Any
 
 import httpx
 
-from neevai.errors import error_from_status
+from neevai.errors import error_from_status, parse_error_body
 
 SANDBOX_ID_HEADER = "X-Sandbox-Id"
 
@@ -171,17 +171,7 @@ class RuntimeTransport:
             raise APIConnectionError("Failed to reach the sandbox runtime during stream") from e
 
     def _runtime_error(self, response: httpx.Response) -> Exception:
-        text = response.text
-        body = None
-        if len(text) > 0:
-            try:
-                parsed = response.json()
-                body = {
-                    "code": parsed.get("reason_code", ""),
-                    "message": parsed.get("message", ""),
-                }
-            except ValueError:
-                body = {"details": text}
+        body = parse_error_body(response.text)
         request_id = response.headers.get("x-request-id")
         return error_from_status(response.status_code, body, request_id)
 
@@ -329,16 +319,6 @@ class AsyncRuntimeTransport:
             raise APIConnectionError("Failed to reach the sandbox runtime during stream") from e
 
     def _runtime_error(self, response: httpx.Response) -> Exception:
-        text = response.text
-        body = None
-        if len(text) > 0:
-            try:
-                parsed = response.json()
-                body = {
-                    "code": parsed.get("reason_code", ""),
-                    "message": parsed.get("message", ""),
-                }
-            except ValueError:
-                body = {"details": text}
+        body = parse_error_body(response.text)
         request_id = response.headers.get("x-request-id")
         return error_from_status(response.status_code, body, request_id)
