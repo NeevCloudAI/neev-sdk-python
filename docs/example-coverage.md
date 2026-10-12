@@ -73,6 +73,9 @@ path and run commands, see [`examples/README.md`](../examples/README.md).
 | `sandbox.processes.logs` | `processes.py` | `page = proc.logs()` |
 | `sandbox.processes.list` | `processes.py`, `process_pool.py` | `sandbox.processes.list()` — runtime probe before start; list running processes after |
 | `sandbox.processes.kill` | `processes.py` | `proc.kill(signal=Signal.TERM)` |
+| `SandboxTools` / `DESCRIPTIONS` / `PARAMETERS` | `agent_patterns/agent_tools_loop.py` | `tools = SandboxTools(sandbox, allow_processes=True)` |
+| `SandboxTools.call` | `agent_patterns/agent_tools_loop.py` | `result = tools.call(name, args)` |
+| `AsyncSandboxTools` | — | `result = await AsyncSandboxTools(sandbox).call(name, args)` |
 | `sandbox.processes.get` | — | `sandbox.processes.get(proc.id)` — no dedicated example; `proc.wait()` uses `get(wait=True)` |
 | `Process.status` | — | `proc.status()` — no dedicated example |
 | `sandbox.processes.kill_all` | `process_pool.py` | `count = sandbox.processes.kill_all(signal=Signal.TERM)` |
@@ -120,6 +123,7 @@ path and run commands, see [`examples/README.md`](../examples/README.md).
 | Raw request | `examples/raw_request.py` | Untyped `client.raw.request` |
 | Lifecycle CLI | `examples/sandbox_lifecycle_controller.py` | CLI over `client.sandboxes` CRUD |
 | Minimal agent | `examples/agent_patterns/minimal_agent.py` | Hand-rolled agent with `exec_stream` |
+| Agent tools loop | `examples/agent_patterns/agent_tools_loop.py` | Function-calling loop on `neevai.agent_tools`: specs from `DESCRIPTIONS` + `PARAMETERS`, calls via `tools.call` |
 | LangChain agent | `examples/agent_patterns/langchain_agent.py` | LangGraph ReAct via `SandboxCodeExecutor` |
 | Sandbox tool helper | `examples/agent_patterns/utils/sandbox_tool.py` | `SandboxCodeExecutor` wrapper |
 | Agent loop helper | `examples/agent_patterns/utils/agent_loop.py` | `StreamingAgentLoop`, `exec_stream`, `files.read` |

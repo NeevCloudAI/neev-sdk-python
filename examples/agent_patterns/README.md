@@ -10,6 +10,7 @@ OpenAI-compatible Neev inference endpoint.
 | Example | Framework | SDK features |
 | ------- | --------- | ------------ |
 | [`minimal_agent.py`](./minimal_agent.py) | none (hand-rolled loop) | `sandboxes.create`, `wait_until_ready`, `exec_stream`, `delete` |
+| [`agent_tools_loop.py`](./agent_tools_loop.py) | none (hand-rolled loop) | `neevai.agent_tools`: the sandbox tool contract via `SandboxTools.call` |
 | [`langchain_agent.py`](./langchain_agent.py) | LangChain (LangGraph ReAct) | Same via `SandboxCodeExecutor` (`exec`, `wait_until_ready`, `delete`) |
 
 **[`minimal_agent.py`](./minimal_agent.py)** is the highlight: the model writes

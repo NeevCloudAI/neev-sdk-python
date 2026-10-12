@@ -19,6 +19,7 @@ from neevai.runtime.schemas import (
     RawProcessLogsPage,
     RawProcessStatus,
 )
+from neevai.transport.runtime import read_timeout_for
 from neevai.types import (
     ProcessInfo,
     ProcessLogEntry,
@@ -26,6 +27,9 @@ from neevai.types import (
     ProcessLogsPage,
     ProcessStatus,
 )
+
+# sandboxd bounds one blocking get (wait=True) at 5 minutes by default.
+PROCESS_WAIT_CEILING_MS = 300_000
 
 if TYPE_CHECKING:
     from neevai.runtime.connection import AsyncSandboxConnection, SandboxConnection
@@ -196,6 +200,7 @@ class SandboxProcesses:
             path="/v1/processes/get",
             headers={"Content-Type": "application/json"},
             body=body,
+            read_timeout_ms=read_timeout_for(PROCESS_WAIT_CEILING_MS) if wait else None,
         )
         return _map_status(RawProcessStatus.model_validate(response.json()))
 
@@ -298,6 +303,7 @@ class AsyncSandboxProcesses:
             path="/v1/processes/get",
             headers={"Content-Type": "application/json"},
             body=body,
+            read_timeout_ms=read_timeout_for(PROCESS_WAIT_CEILING_MS) if wait else None,
         )
         return _map_status(RawProcessStatus.model_validate(response.json()))
 

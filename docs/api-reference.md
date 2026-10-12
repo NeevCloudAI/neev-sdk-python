@@ -11,6 +11,7 @@ For install and first scripts, see [`getting-started.md`](./getting-started.md).
 - [Lifecycle](#lifecycle)
 - [Snapshots](#snapshots)
 - [Runtime](#runtime)
+- [Agent tools](#agent-tools)
 - [Inline example snippets](#inline-example-snippets)
 - [Maintaining this reference](#maintaining-this-reference)
 
@@ -230,6 +231,26 @@ Details: [`api-inventory.md` → Runtime connection](./api-inventory.md#runtime-
 
 ---
 
+## Agent tools
+
+`neevai.agent_tools` binds the sandbox tool contract to one sandbox for your own
+agent, with model-ready descriptions and JSON Schemas. No framework dependency.
+
+| API | Sync | Async |
+| --- | ---- | ----- |
+| Tools | `SandboxTools(sandbox, *, allow_preview=False, allow_rollback=False, allow_processes=False)` | `AsyncSandboxTools(sandbox, ...)` |
+| Enabled tool names | `tools.names()` | `tools.names()` |
+| Run a model tool call | `tools.call(name, args)` | `await tools.call(name, args)` |
+| Tool methods | `run_command`, `write_file`, `read_file`, `expose_port`, `checkpoint`, `rollback`, `start_process`, `read_process_output`, `stop_process` | same, with `await` |
+| Descriptions / schemas | `DESCRIPTIONS[name]`, `PARAMETERS[name]` | same |
+
+Every tool returns a JSON-serializable `TypedDict`; errors the model can fix come
+back as `{"error": ...}`.
+
+Details: [`api-inventory.md` → Agent tools](./api-inventory.md#agent-tools)
+
+---
+
 ## Inline example snippets
 
 Minimal one-liners for each public API. Runnable examples link to repo paths.
@@ -346,6 +367,15 @@ Minimal one-liners for each public API. Runnable examples link to repo paths.
 | `SandboxConnection` (low-level) | via `sandbox.exec` on handle | via `await sandbox.exec` on handle | — |
 | `SandboxFiles` (low-level) | via `sandbox.files` property | via `sandbox.files` property | [files_api.py](../examples/files_api.py) |
 | `SandboxProcesses` (low-level) | via `sandbox.processes` property | via `sandbox.processes` property | [processes.py](../examples/processes.py) |
+
+### Agent tools
+
+| API | Sync snippet | Async snippet | Runnable example |
+| --- | ------------ | ------------- | ---------------- |
+| `SandboxTools(...)` | `tools = SandboxTools(sandbox, allow_processes=True)` | `tools = AsyncSandboxTools(sandbox, allow_processes=True)` | [agent_tools_loop.py](../examples/agent_patterns/agent_tools_loop.py) |
+| `tools.names()` / `DESCRIPTIONS` / `PARAMETERS` | `specs = [(n, DESCRIPTIONS[n], PARAMETERS[n]) for n in tools.names()]` | same | [agent_tools_loop.py](../examples/agent_patterns/agent_tools_loop.py) |
+| `tools.call(name, args)` | `result = tools.call("run_command", {"command": "ls"})` | `result = await tools.call("run_command", {"command": "ls"})` | [agent_tools_loop.py](../examples/agent_patterns/agent_tools_loop.py) |
+| `tools.read_process_output(...)` | `tools.read_process_output(pid, wait_s=30)` | `await tools.read_process_output(pid, wait_s=30)` | — |
 
 ---
 

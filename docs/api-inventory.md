@@ -41,6 +41,7 @@ which examples demonstrate which APIs, see
 - [Files API](#files-api)
 - [Processes API](#processes-api)
 - [Runtime connection](#runtime-connection)
+- [Agent tools](#agent-tools)
 - [Raw client](#raw-client)
 - [Types reference](#types-reference)
 - [Errors](#errors)
@@ -1023,7 +1024,7 @@ Runs a command and buffers stdout/stderr until completion.
 | `args` | Extra argv when `command` is a string (mutually exclusive with list `command`) |
 | `cwd` | Working directory (workspace-relative) |
 | `env` | `dict[str, str]` merged into environment |
-| `timeout_ms` | Command timeout |
+| `timeout_ms` | Command timeout. The request's read timeout is raised to `timeout_ms` + 30 s when that is longer than the client's, so a quiet long command is not cut off client-side. The network edge in front of the runtime still drops a response that stays silent for about 2 minutes (HTTP 524, or a dropped stream once output has started); run long quiet work with `sandbox.processes`. |
 | `stdin` | Optional stdin text |
 
 **Returns:** `ExecResult` with `stdout`, `stderr`, `exit_code`.
@@ -1389,6 +1390,9 @@ print(proc.id, proc.state)
 
 **Returns:** `ProcessStatus` with `process_id`, `state`, `exit_code`, `started_at`.
 
+With `wait=True` the server blocks for up to its 5-minute wait ceiling, so the
+request's read timeout is raised to 5 minutes + 30 s for that call.
+
 ```python
 status = sandbox.processes.get(proc.id)
 final = proc.wait()  # blocks until exit
@@ -1468,6 +1472,89 @@ try:
 finally:
     conn.close()
 ```
+
+---
+
+## Agent tools
+
+`neevai.agent_tools` (not re-exported from `neevai`) binds the sandbox tool
+contract to one sandbox handle for a model to call. No framework dependency.
+
+### `SandboxTools(sandbox, *, allow_preview=False, allow_rollback=False, allow_processes=False)`
+
+| Parameter | Description |
+| --------- | ----------- |
+| `sandbox` | `Sandbox` the tools act on |
+| `allow_preview` | Enable `expose_port` (makes a port public) |
+| `allow_rollback` | Enable `checkpoint` and `rollback` |
+| `allow_processes` | Enable `start_process`, `read_process_output`, `stop_process` |
+
+**Raises:** `ValueError` if `allow_preview` or `allow_rollback` is set on a handle
+with no client context (`sandbox.sandboxes is None`).
+
+| Method | Returns | Description |
+| ------ | ------- | ----------- |
+| `names()` | `list[ToolName]` | Enabled tools in contract order |
+| `call(name, args=None)` | `ToolResult` | Runs a tool by model-facing name with a dict of args; unknown tool, disabled tool, or args that do not fit return `ToolErrorResult` |
+| `run_command(command, cwd=None, timeout_s=None)` | `RunCommandToolResult \| ToolErrorResult` | `sh -lc`; `timeout_s` clamped 1-600, default 60; output over 10 KB per stream cut in the middle. A command silent for about 2 minutes is cut off at the network edge: before any output the edge answers HTTP 524, which `run_command` returns as the error result `"the command printed nothing for about 2 minutes and the connection was cut; it may still be running. Use start_process for long or quiet commands"`; once output has started the stream is dropped and `APIConnectionError` raises. Long or quiet work belongs in `start_process` |
+| `write_file(path, content)` | `WriteFileToolResult \| ToolErrorResult` | UTF-8 text under `/workspace` |
+| `read_file(path)` | `ReadFileToolResult \| ToolErrorResult` | UTF-8 text, cut like command output |
+| `expose_port(port)` | `ExposePortToolResult \| ToolErrorResult` | Public preview URL once routable |
+| `checkpoint(label=None)` | `CheckpointToolResult \| ToolErrorResult` | Snapshot, waiting up to 300 s for `Ready` |
+| `rollback(checkpoint_id)` | `RollbackToolResult \| ToolErrorResult` | In-place rollback |
+| `start_process(command, cwd=None)` | `StartProcessToolResult \| ToolErrorResult` | Background `sh -lc`; a `resource_exhausted` 429 is an error result |
+| `read_process_output(process_id, cursor=None, wait_s=None)` | `ReadProcessOutputToolResult \| ToolErrorResult` | Output since `cursor`; `wait_s` clamped 0-60, default 0, waits for a running process to exit first |
+| `stop_process(process_id)` | `StopProcessToolResult \| ToolErrorResult` | SIGTERM; `ok` is `False` if already exited |
+
+`timeout_s` and `wait_s` accept numbers or plain decimal strings (`"30"`,
+`"2.5"`); bools, NaN, infinities, overflowing values and anything else take the
+default. `call()` also checks each argument against `PARAMETERS`: a string
+property must be a string, a number property a number or decimal string, an
+integer property a whole number or integer string (converted to `int`), and
+`None` is accepted only for optional properties. A mismatch returns
+`{"error": "invalid arguments for <name>: <field> must be <type>"}`. Errors the model can act on
+(bad request, not found, conflict, deadline, client-side `NeevAIError`, a file
+that is not UTF-8, `resource_exhausted` on `start_process`, an edge 524 on
+`run_command`) return `{"error": ...}` with the first line, at most 500
+characters; auth, permission, other rate-limit, server and connection errors
+raise. `run_command` output that is not valid UTF-8 keeps its text, with U+FFFD
+in place of the bad bytes.
+
+`AsyncSandboxTools(sandbox: AsyncSandbox, ...)` has the same constructor and
+methods; every tool method and `call` is a coroutine, `names()` is not.
+
+| Constant | Type | Description |
+| -------- | ---- | ----------- |
+| `DESCRIPTIONS` | `Mapping[str, str]` (read-only `dict`, `json.dumps` works) | Model-facing description per tool |
+| `PARAMETERS` | `Mapping[str, Mapping[str, Any]]` (read-only at every level, arrays as tuples, `json.dumps` works) | JSON Schema per tool: object, `additionalProperties: false`, described properties |
+
+```python
+from neevai.agent_tools import DESCRIPTIONS, PARAMETERS, SandboxTools
+
+tools = SandboxTools(sandbox, allow_processes=True)
+specs = [{"name": n, "description": DESCRIPTIONS[n], "parameters": PARAMETERS[n]} for n in tools.names()]
+result = tools.call("run_command", {"command": "ls", "timeout_s": 30})
+```
+
+**Example:** [`agent_tools_loop.py`](../examples/agent_patterns/agent_tools_loop.py)
+
+#### Result types (`TypedDict`)
+
+| Type | Fields |
+| ---- | ------ |
+| `ToolErrorResult` | `error: str` |
+| `RunCommandToolResult` | `exit_code: int`, `stdout: str`, `stderr: str` |
+| `WriteFileToolResult` | `bytes_written: int` |
+| `ReadFileToolResult` | `content: str` |
+| `ExposePortToolResult` | `preview_url: str` |
+| `CheckpointToolResult` | `checkpoint_id: str` |
+| `RollbackToolResult` | `ok: Literal[True]` |
+| `StartProcessToolResult` | `process_id: str` |
+| `ReadProcessOutputToolResult` | `stdout: str`, `stderr: str`, `cursor: int`, `state: "running" \| "exited"`, `dropped: bool`, `exit_code: NotRequired[int \| None]` (present once exited, while the status is kept) |
+| `StopProcessToolResult` | `ok: bool` |
+
+`ToolResult` is the union of all of them; `ToolName` is a `Literal` of the nine
+tool names.
 
 ---
 
@@ -2051,6 +2138,7 @@ Every sync public API has an async equivalent with matching semantics.
 | `Process.*` | `AsyncProcess.*` | Add `await`; `follow` uses `async for` |
 | `Process.follow()` | `AsyncProcess.follow()` | `async for` instead of `for` |
 | `RawClient.request` | `AsyncRawClient.request` | Add `await` |
+| `SandboxTools.*` | `AsyncSandboxTools.*` | Add `await` on tool methods and `call`; `names()` is sync |
 
 No sync-only or async-only public methods. Pagination types mirror each other
 (`SandboxPage` / `AsyncSandboxPage`, `TemplatePage` / `AsyncTemplatePage`,
@@ -2206,6 +2294,17 @@ Compact reviewer index. Each symbol should also appear in
 | `SandboxFiles.stat` / `.exists` / `.mkdir` / `.move` / `.remove` / `.watch` | methods | `FileEntry` / `bool` / `FileEntry` / `FileEntry` / `None` / `Iterator[WatchEvent]` |
 | `AsyncSandboxConnection.*` | mirror | `.aclose()` instead of `.close()` |
 | `AsyncSandboxFiles.*` | mirror | Add `await` |
+
+### Agent tools (`agent_tools.py`)
+
+| Symbol | Kind | Notes |
+| ------ | ---- | ----- |
+| `SandboxTools` / `AsyncSandboxTools` | class | Tool contract bound to a `Sandbox` / `AsyncSandbox` |
+| `DESCRIPTIONS` | constant | `Mapping[str, str]`, read-only |
+| `PARAMETERS` | constant | `Mapping[str, Mapping[str, Any]]`, read-only |
+| `ToolName` | type alias | `Literal` of the nine tool names |
+| `ToolResult` | type alias | Union of the result types |
+| `ToolErrorResult`, `RunCommandToolResult`, `WriteFileToolResult`, `ReadFileToolResult`, `ExposePortToolResult`, `CheckpointToolResult`, `RollbackToolResult`, `StartProcessToolResult`, `ReadProcessOutputToolResult`, `StopProcessToolResult` | `TypedDict` | Tool results |
 
 ### Raw client (`transport/lifecycle.py`)
 

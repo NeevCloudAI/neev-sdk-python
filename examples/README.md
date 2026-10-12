@@ -83,6 +83,7 @@ examples/
 │
 ├── agent_patterns/               ← Tier 2: Agent Integration
 │   ├── minimal_agent.py          ← start here
+│   ├── agent_tools_loop.py
 │   └── langchain_agent.py
 │
 └── workflow_examples/            ← Tier 3: Real-World Workflows
@@ -153,6 +154,7 @@ export NEEV_INFERENCE_API_KEY=...          # preferred; falls back to NEEV_API_K
 | File | SDK features | Extra install | Run |
 |------|--------------|---------------|-----|
 | [`agent_patterns/minimal_agent.py`](./agent_patterns/minimal_agent.py) | `sandboxes.create`, `wait_until_ready`, `exec_stream`, `delete` | none (`neevai` + `httpx`) | `uv run python examples/agent_patterns/minimal_agent.py` |
+| [`agent_patterns/agent_tools_loop.py`](./agent_patterns/agent_tools_loop.py) | `neevai.agent_tools`: `SandboxTools`, `DESCRIPTIONS`, `PARAMETERS`, `call` | none (`neevai` + `httpx`) | `uv run python examples/agent_patterns/agent_tools_loop.py` |
 | [`agent_patterns/langchain_agent.py`](./agent_patterns/langchain_agent.py) | Same sandbox APIs via `SandboxCodeExecutor` | `uv sync --extra agents` | `uv run --extra agents python examples/agent_patterns/langchain_agent.py` |
 
 See [`agent_patterns/README.md`](./agent_patterns/README.md) for helper modules

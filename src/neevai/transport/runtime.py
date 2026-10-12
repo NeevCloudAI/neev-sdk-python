@@ -7,6 +7,28 @@ from neevai.errors import error_from_status
 
 SANDBOX_ID_HEADER = "X-Sandbox-Id"
 
+# A call bounded by a server-side deadline (exec timeout_ms, a blocking process
+# get) can stay silent until that deadline, so its read timeout must outlast it
+# by this margin or the client gives up before the server answers.
+READ_TIMEOUT_GRACE_MS = 30_000
+
+
+def read_timeout_for(server_deadline_ms: int | None) -> int | None:
+    """Returns the read timeout that outlasts a server-side deadline, or None when there is none."""
+    if server_deadline_ms is None or server_deadline_ms <= 0:
+        return None
+    return server_deadline_ms + READ_TIMEOUT_GRACE_MS
+
+
+def _extend_read(timeout: httpx.Timeout, read_timeout_ms: int | None) -> httpx.Timeout:
+    """Returns timeout with its read timeout raised to read_timeout_ms; never lowers it."""
+    if read_timeout_ms is None or timeout.read is None:
+        return timeout
+    read = read_timeout_ms / 1000.0
+    if timeout.read >= read:
+        return timeout
+    return httpx.Timeout(connect=timeout.connect, read=read, write=timeout.write, pool=timeout.pool)
+
 
 class RuntimeTransport:
     """Synchronous HTTP transport for sandbox runtime."""
@@ -42,6 +64,7 @@ class RuntimeTransport:
         headers: dict[str, str] | None = None,
         content: str | bytes | None = None,
         body: Any | None = None,
+        read_timeout_ms: int | None = None,
     ) -> httpx.Response:
         """Sends a request to the sandbox runtime without retries."""
         url = f"{self.connect_url}/{path.lstrip('/')}"
@@ -62,7 +85,7 @@ class RuntimeTransport:
                 headers=req_headers,
                 content=content,
                 json=body,
-                timeout=self.timeout,
+                timeout=_extend_read(self.timeout, read_timeout_ms),
             )
         except httpx.TimeoutException as e:
             from neevai.errors import APITimeoutError
@@ -84,6 +107,7 @@ class RuntimeTransport:
         path: str,
         headers: dict[str, str] | None = None,
         body: Any | None = None,
+        read_timeout_ms: int | None = None,
     ) -> Generator[str, None, None]:
         """Streams the response body line by line for NDJSON exec streams."""
         url = f"{self.connect_url}/{path.lstrip('/')}"
@@ -97,7 +121,7 @@ class RuntimeTransport:
                 url=url,
                 headers=req_headers,
                 json=body,
-                timeout=self.timeout,
+                timeout=_extend_read(self.timeout, read_timeout_ms),
             ) as response:
                 if not response.is_success:
                     response.read()  # Buffer response text for mapping error
@@ -196,6 +220,7 @@ class AsyncRuntimeTransport:
         headers: dict[str, str] | None = None,
         content: str | bytes | None = None,
         body: Any | None = None,
+        read_timeout_ms: int | None = None,
     ) -> httpx.Response:
         """Sends an async request to the sandbox runtime without retries."""
         url = f"{self.connect_url}/{path.lstrip('/')}"
@@ -216,7 +241,7 @@ class AsyncRuntimeTransport:
                 headers=req_headers,
                 content=content,
                 json=body,
-                timeout=self.timeout,
+                timeout=_extend_read(self.timeout, read_timeout_ms),
             )
         except httpx.TimeoutException as e:
             from neevai.errors import APITimeoutError
@@ -238,6 +263,7 @@ class AsyncRuntimeTransport:
         path: str,
         headers: dict[str, str] | None = None,
         body: Any | None = None,
+        read_timeout_ms: int | None = None,
     ) -> AsyncGenerator[str, None]:
         """Streams the response body line by line for NDJSON exec streams."""
         url = f"{self.connect_url}/{path.lstrip('/')}"
@@ -251,7 +277,7 @@ class AsyncRuntimeTransport:
                 url=url,
                 headers=req_headers,
                 json=body,
-                timeout=self.timeout,
+                timeout=_extend_read(self.timeout, read_timeout_ms),
             ) as response:
                 if not response.is_success:
                     await response.aread()
