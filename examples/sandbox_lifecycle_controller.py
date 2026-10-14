@@ -89,7 +89,7 @@ def _print_sandbox(sandbox: Sandbox, *, as_json: bool) -> None:
     if as_json:
         _print_json(sandbox.to_json())
         return
-    line = f"{sandbox.id}  name={sandbox.name}  phase={sandbox.phase}  replicas={sandbox.replicas}"
+    line = f"{sandbox.id}  name={sandbox.name}  phase={sandbox.phase}"
     if sandbox.connect_url:
         line += f"  connect_url={sandbox.connect_url}"
     print(line)
@@ -117,7 +117,7 @@ def _cmd_create(client: NeevAI, args: argparse.Namespace) -> None:
     if args.wait:
         sandbox.wait_until_ready(
             timeout_ms=WAIT_TIMEOUT_MS,
-            on_poll=lambda s: print(f"  phase={s.phase} replicas={s.replicas}", file=sys.stderr),
+            on_poll=lambda s: print(f"  phase={s.phase}", file=sys.stderr),
         )
     _print_sandbox(sandbox, as_json=args.json)
 

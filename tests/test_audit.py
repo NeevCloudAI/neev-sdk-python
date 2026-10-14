@@ -129,7 +129,6 @@ def test_sandbox_handle_audit_uses_its_id_and_scope():
             "region": "as-south-1",
             "image": "ubuntu:24.04",
             "phase": "Ready",
-            "replicas": 1,
             "created_at": "2026-01-01T00:00:00Z",
             "updated_at": "2026-01-01T00:00:00Z",
         },

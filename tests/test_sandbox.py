@@ -19,7 +19,6 @@ def _sandbox_data(**overrides):
         "region": "as-south-1",
         "image": "ubuntu:22.04",
         "phase": "Ready",
-        "replicas": 1,
         "connect_url": "https://sbx.example.com",
         "created_at": "2026-01-01T00:00:00Z",
         "updated_at": "2026-01-01T00:00:00Z",
@@ -34,7 +33,6 @@ def test_sandbox_properties():
     assert sb.id == "00000000-0000-0000-0000-000000000001"
     assert sb.name == "test-sandbox"
     assert sb.phase == "Ready"
-    assert sb.replicas == 1
     assert sb.connect_url == "https://sbx.example.com"
     assert sb.to_json()["id"] == data["id"]
     assert sb.to_json()["name"] == data["name"]
@@ -104,7 +102,7 @@ def test_wait_until_ready_ready_phase_does_not_probe_runtime(mock_transport, mon
 
 
 def test_wait_until_ready_paused_raises():
-    data = _sandbox_data(phase="Paused", replicas=0, connect_url=None)
+    data = _sandbox_data(phase="Paused", connect_url=None)
     sb = Sandbox(None, data)
     with pytest.raises(NeevAIError, match="Paused"):
         sb.wait_until_ready(timeout_ms=100)
@@ -132,7 +130,6 @@ def _mark_ready(sb, *, connect_url: str = "https://old.example.com") -> None:
 
     record = _FAKE_DB["sandboxes"][sb.id]
     record["phase"] = "Ready"
-    record["replicas"] = 1
     record["connect_url"] = connect_url
     sb.refresh()
 

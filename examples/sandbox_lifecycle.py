@@ -28,7 +28,7 @@ Flow
 ----
 
 1. **Create** — call ``client.sandboxes.create`` with the template
-2. **Wait** — block on ``sandbox.wait_until_ready``, printing phase/replicas
+2. **Wait** — block on ``sandbox.wait_until_ready``, printing the phase
    on each poll
 3. **Metrics** — call ``sandbox.metrics()`` and list available metric series
 4. **Pause** — stop the sandbox, keeping its state, via ``sandbox.pause()``
@@ -93,7 +93,7 @@ def main() -> None:
             _pause_between_steps("wait_until_ready")
             sandbox.wait_until_ready(
                 timeout_ms=WAIT_TIMEOUT_MS,
-                on_poll=lambda s: print(f"  phase={s.phase} replicas={s.replicas}"),
+                on_poll=lambda s: print(f"  phase={s.phase}"),
             )
             print(f"ready at {sandbox.connect_url}")
 
@@ -105,7 +105,7 @@ def main() -> None:
             # --- Pause ---
             _pause_between_steps("pause")
             sandbox.pause()
-            print(f"paused (replicas: {sandbox.replicas})")
+            print(f"paused (phase: {sandbox.phase})")
 
             # --- Delete ---
             _pause_between_steps("delete")

@@ -103,7 +103,6 @@ def _promote_agent_to_ready(agent: dict[str, Any]) -> None:
     sandbox = _FAKE_DB["sandboxes"].get(str(agent["sandbox_id"]))
     if sandbox is not None:
         sandbox["phase"] = "Ready"
-        sandbox["replicas"] = 1
         sandbox["connect_url"] = f"https://sandbox.example/{agent['sandbox_id']}"
 
 
@@ -167,7 +166,6 @@ def _make_sandbox_record(
         "resources": req.get("resources"),
         "phase": "Pending",
         "connect_url": None,
-        "replicas": 0,
         "egress": req.get("egress"),
         # Echoed only when sent, like the API, so a label-less record lacks the key.
         **({"labels": req["labels"]} if "labels" in req else {}),
@@ -294,14 +292,12 @@ def _control_response(
             sandbox = _FAKE_DB["sandboxes"].get(agent["sandbox_id"])
             if sandbox is not None:
                 sandbox["phase"] = "Paused"
-                sandbox["replicas"] = 0
             return json_resp(200, agent)
         if action == "resume":
             agent["status"] = "Provisioning"
             sandbox = _FAKE_DB["sandboxes"].get(agent["sandbox_id"])
             if sandbox is not None:
                 sandbox["phase"] = "Pending"
-                sandbox["replicas"] = 1
             return json_resp(200, agent)
 
         return json_resp(400, {"message": "bad request"})
@@ -418,11 +414,9 @@ def _control_response(
 
         if action == "pause":
             sandbox["phase"] = "Paused"
-            sandbox["replicas"] = 0
             return json_resp(200, sandbox)
         if action == "resume":
             sandbox["phase"] = "Pending"
-            sandbox["replicas"] = 1
             return json_resp(200, sandbox)
         if action == "keepalive" and method == "POST":
             return json_resp(200, sandbox)
@@ -484,7 +478,6 @@ def _control_response(
 
         if action == "rollback" and method == "POST":
             sandbox["phase"] = "Pending"
-            sandbox["replicas"] = 1
             return json_resp(200, sandbox)
 
         if action == "fork" and method == "POST":
@@ -500,7 +493,6 @@ def _control_response(
                 now=now,
             )
             forked["phase"] = "Pending"
-            forked["replicas"] = 1
             _FAKE_DB["sandboxes"][fork_id] = forked
             return json_resp(201, forked)
 

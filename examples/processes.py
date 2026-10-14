@@ -77,9 +77,9 @@ def _wait_for_connect_url(sandbox: Sandbox, *, deadline_ms: float) -> None:
         if remaining <= 0:
             raise NeevAIError(
                 f"Sandbox {sandbox.id} did not receive connect_url within {WAIT_TIMEOUT_MS}ms "
-                f"(phase: {sandbox.phase}, replicas: {sandbox.replicas})."
+                f"(phase: {sandbox.phase})."
             )
-        log(f"waiting for connect_url (phase={sandbox.phase}, replicas={sandbox.replicas})…")
+        log(f"waiting for connect_url (phase={sandbox.phase})…")
         time.sleep(min(POLL_INTERVAL_MS, remaining) / 1000.0)
         sandbox.refresh()
 
@@ -114,13 +114,13 @@ def _wait_before_processes(sandbox: Sandbox) -> None:
     if remaining <= 0:
         raise NeevAIError(
             f"Sandbox {sandbox.id} did not become Ready within {WAIT_TIMEOUT_MS}ms "
-            f"(phase: {sandbox.phase}, replicas: {sandbox.replicas}, "
+            f"(phase: {sandbox.phase}, "
             f"connect_url: {sandbox.connect_url})."
         )
     sandbox.wait_until_ready(
         timeout_ms=remaining,
         poll_interval_ms=POLL_INTERVAL_MS,
-        on_poll=lambda s: log(f"phase={s.phase} replicas={s.replicas}"),
+        on_poll=lambda s: log(f"phase={s.phase}"),
     )
 
     _wait_for_runtime(sandbox, deadline_ms=deadline_ms)

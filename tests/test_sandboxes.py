@@ -226,7 +226,6 @@ def test_sandboxes_pause_accepts_pausing_transitional_phase(mock_transport, monk
                 original_request("GET", f"/api/v1beta1/orgs/org1/projects/proj1/sandboxes/{sb.id}")
             )
             sandbox["phase"] = "Pausing"
-            sandbox["replicas"] = 0
             return sandbox
         return original_request(method, path, **kwargs)
 
@@ -234,7 +233,6 @@ def test_sandboxes_pause_accepts_pausing_transitional_phase(mock_transport, monk
 
     paused = client.sandboxes.pause(sb.id)
     assert paused.phase == "Pausing"
-    assert paused.replicas == 0
     client.close()
 
 
@@ -713,7 +711,7 @@ async def test_async_sandboxes_pause_sends_an_empty_json_body(async_mock_transpo
     client._transport.request = capturing_request  # type: ignore[method-assign]
 
     paused = await client.sandboxes.pause(sb.id)
-    assert paused.replicas == 0
+    assert paused.phase == "Paused"
     assert captured_bodies == [{}]
 
     with pytest.raises(TypeError):
