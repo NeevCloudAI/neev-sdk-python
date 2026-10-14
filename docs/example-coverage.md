@@ -92,7 +92,7 @@ path and run commands, see [`examples/README.md`](../examples/README.md).
 | `sandbox.pause` | `sandbox_lifecycle.py` | `sandbox.pause()` |
 | `sandbox.delete` | all examples that create sandboxes | `sandbox.delete()` / `await sandbox.delete()` |
 | `sandbox.to_json` | `sandbox_lifecycle_controller.py` | `sandbox.to_json()` |
-| `sandbox.id` / `.phase` / `.connect_url` / `.replicas` | tier-1, `processes.py`, `process_pool.py`, `sandbox_lifecycle_controller.py`, `agent_patterns/utils/sandbox_tool.py`, `workflow_examples/*` | `print(sandbox.phase, sandbox.connect_url, sandbox.replicas)` — polled until `connect_url` in process examples |
+| `sandbox.id` / `.phase` / `.connect_url` | tier-1, `processes.py`, `process_pool.py`, `sandbox_lifecycle_controller.py`, `agent_patterns/utils/sandbox_tool.py`, `workflow_examples/*` | `print(sandbox.phase, sandbox.connect_url)` — polled until `connect_url` in process examples |
 | `client.close()` | `agent_patterns/utils/sandbox_tool.py` | `client.close()` |
 
 ---

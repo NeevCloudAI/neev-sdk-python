@@ -46,7 +46,7 @@ def _wait_timeout_message(sandbox: Sandbox | AsyncSandbox, timeout_ms: int) -> s
     return (
         f"Sandbox {sandbox.id} did not become Ready within {timeout_ms}ms "
         f"(phase: {sandbox.phase}, addressable: {sandbox.addressable}, "
-        f"replicas: {sandbox.replicas}, connect_url: {sandbox.connect_url or '<none>'})."
+        f"connect_url: {sandbox.connect_url or '<none>'})."
     )
 
 
@@ -104,11 +104,6 @@ class Sandbox:
     def phase(self) -> str:
         """Current lifecycle phase as last fetched from the server."""
         return self._state.phase
-
-    @property
-    def replicas(self) -> int:
-        """0 while the sandbox is paused, 1 while it is running."""
-        return int(_state_as_json(self._state)["replicas"])
 
     @property
     def connect_url(self) -> str | None:
@@ -606,10 +601,6 @@ class AsyncSandbox:
     def phase(self) -> str:
         """Current lifecycle phase as last fetched from the server."""
         return self._state.phase
-
-    @property
-    def replicas(self) -> int:
-        return int(_state_as_json(self._state)["replicas"])
 
     @property
     def connect_url(self) -> str | None:

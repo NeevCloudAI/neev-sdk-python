@@ -165,6 +165,7 @@ class SnapshotStatus(str, Enum):
 
 class SnapshotType(str, Enum):
     full = "full"
+    filesystem = "filesystem"
 
 
 class SnapshotRestorability(str, Enum):
@@ -632,7 +633,11 @@ class Sandbox(BaseModel):
         None,
         description="Public URL the SDK calls (API key + X-Sandbox-Id). null when not configured.",
     )
-    replicas: conint(ge=0, le=1) = Field(..., description="0 = paused, 1 = running.")
+    replicas: conint(ge=0, le=1) | None = Field(
+        None,
+        deprecated=True,
+        description="Deprecated: read phase instead. 0 while paused, 1 otherwise.",
+    )
     egress: SandboxEgressConfig | None = None
     sandbox_template_id: str | None = Field(
         None,

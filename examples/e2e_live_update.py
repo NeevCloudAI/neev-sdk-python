@@ -117,11 +117,6 @@ def main() -> int:
         # --- No restart: still Ready and running, no new crash ---
         check("still Ready after update", got.phase == "Ready", got.phase)
         check(
-            "still running (not paused or restarted)",
-            got.data.get("replicas") == 1,
-            str(got.data.get("replicas")),
-        )
-        check(
             "no crash recorded by the update",
             got.data.get("last_crash") is None,
             str(got.data.get("last_crash")),

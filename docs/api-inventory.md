@@ -288,7 +288,7 @@ is a `Sandbox` handle bound to the client.
 ```python
 page = client.sandboxes.list(page=1, limit=20)
 for sb in page.items:
-    print(sb.id, sb.name, sb.phase, sb.replicas)
+    print(sb.id, sb.name, sb.phase)
 print(f"Showing {len(page.items)} of {page.total}")
 
 # Filter by name substring and lifecycle phase.
@@ -360,7 +360,6 @@ with it, so there is no opt-out and no volume-only pause.
 ```python
 paused = client.sandboxes.pause(sandbox.id)
 assert paused.phase == "Paused"
-assert paused.replicas == 0
 ```
 
 A paused sandbox will not become `Ready` until `resume()` is called. Calling
@@ -786,7 +785,6 @@ mirroring the last API response. Call `refresh()` to sync from the server.
 | `id` | `str` | Sandbox identifier (UUID string) |
 | `name` | `str` | Human-readable name |
 | `phase` | `str` | OpenAPI steady states: `"Pending"`, `"Ready"`, `"NotReady"`, `"Unknown"`, `"Paused"`. API may also return transitional values (e.g. `"Pausing"`, `"Resuming"`) not in the spec enum; SDK accepts any phase string. |
-| `replicas` | `int` | `0` while paused, `1` while running |
 | `connect_url` | `str \| None` | Regional runtime URL (available when ready) |
 | `addressable` | `bool` | Whether the sandbox can be reached yet; briefly `False` after create (`True` when the API omits it) |
 | `labels` | `dict[str, str]` | Key-value labels the sandbox was created with; `{}` when it has none |
@@ -803,7 +801,7 @@ Re-fetches the sandbox from the API and updates this handle in place.
 
 ```python
 sandbox.refresh()
-print(sandbox.phase, sandbox.replicas)
+print(sandbox.phase)
 ```
 
 ### `sandbox.update(params, *, allow_internet=None, allow_egress=None)`
@@ -855,7 +853,7 @@ snapshots full state before shutdown; the `preserve_memory` kwarg was dropped
 along with the field itself (`PauseSandboxRequest` carries no fields):
 
 ```python
-sandbox = sandbox.pause()   # phase → Paused, replicas → 0
+sandbox = sandbox.pause()   # phase → Paused
 sandbox = sandbox.resume()  # starts again, then wait for Ready
 sandbox.wait_until_ready()
 ```
@@ -1809,7 +1807,7 @@ so transitional or future phase strings from the API are accepted.
 | `phase` | `str` | yes |
 | `addressable` | `bool \| None` | no (`False` briefly after create; calls made before it turns `True` are refused and worth retrying) |
 | `connect_url` | `str \| None` | no |
-| `replicas` | `int` (0–1) | yes |
+| `replicas` | `int` (0–1) | no — deprecated; read `phase` instead |
 | `egress` | `SandboxEgressConfig \| None` | no |
 | `sandbox_template_id` | `str \| None` | no |
 | `created_by` | `str \| None` | no |
@@ -2244,7 +2242,7 @@ Compact reviewer index. Each symbol should also appear in
 
 | Symbol | Kind | Notes |
 | ------ | ---- | ----- |
-| `Sandbox.id`, `.name`, `.phase`, `.replicas`, `.connect_url` | properties | `phase` is `str` (any API phase string) |
+| `Sandbox.id`, `.name`, `.phase`, `.connect_url` | properties | `phase` is `str` (any API phase string) |
 | `Sandbox.data` | property | `dict[str, Any]` snapshot |
 | `Sandbox.to_json` | method | JSON-serializable dict |
 | `Sandbox.refresh` | method | Re-fetch from the API → `Sandbox` |

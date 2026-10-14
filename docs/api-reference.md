@@ -122,7 +122,7 @@ Returned by `create()`, `get()`, `list().items`, etc.
 
 | API | Kind |
 | --- | ---- |
-| `id`, `name`, `phase`, `replicas`, `connect_url`, `addressable`, `labels`, `last_crash`, `data` | properties |
+| `id`, `name`, `phase`, `connect_url`, `addressable`, `labels`, `last_crash`, `data` | properties |
 | `refresh()` | method |
 | `update(params, *, allow_internet=None, allow_egress=None)` | method — in-place resize / egress re-scope (`egress_add` / `egress_remove` edit the allow-list); updates state in place |
 | `wait_until_ready(timeout_ms=120000, ...)` | method — polls the API until `Ready` and addressable |
@@ -296,7 +296,7 @@ Minimal one-liners for each public API. Runnable examples link to repo paths.
 | `client.agent_templates.list(...)` | `page = client.agent_templates.list()` | `page = await client.agent_templates.list()` | [create_agent.py](../examples/create_agent.py) |
 | `client.agent_templates.get(id)` | `tpl = client.agent_templates.get(template_id)` | `tpl = await client.agent_templates.get(template_id)` | — |
 | `client.raw.request(...)` | `data = client.raw.request("GET", path, query={...})` | `data = await client.raw.request("GET", path, query={...})` | [raw_request.py](../examples/raw_request.py) |
-| `sandbox.id` / `.name` / `.phase` / `.replicas` | `print(sandbox.phase, sandbox.replicas)` | same after `await create` | [sandbox_lifecycle.py](../examples/sandbox_lifecycle.py) |
+| `sandbox.id` / `.name` / `.phase` | `print(sandbox.phase)` | same after `await create` | [sandbox_lifecycle.py](../examples/sandbox_lifecycle.py) |
 | `sandbox.connect_url` | `print(sandbox.connect_url)` | `print(sandbox.connect_url)` | [templates_list.py](../examples/templates_list.py) |
 | `sandbox.data` | `record = sandbox.data` | `record = sandbox.data` | — |
 | `sandbox.refresh()` | `sandbox.refresh()` | `await sandbox.refresh()` | — |
