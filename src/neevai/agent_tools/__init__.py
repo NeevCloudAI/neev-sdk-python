@@ -4,7 +4,8 @@
 ``AsyncSandboxTools`` to one ``AsyncSandbox``. Register ``names()`` with the
 model, using ``DESCRIPTIONS`` and ``PARAMETERS`` for each tool's description and
 JSON Schema and ``TITLES`` for a display title, and pass each tool call to
-``call(name, args)``.
+``call(name, args)``. Framework adapters build on ``specs()``, and ``FatalGuard``
+stops a run whose framework would otherwise hand a raised error to the model.
 
 Each tool returns a JSON-serializable dict for the model to read. Failures the
 model can act on come back as ``{"error": ...}``; auth, permission, rate-limit,
@@ -25,9 +26,22 @@ import asyncio
 import json
 import math
 import re
+import threading
 import time
 from collections.abc import Awaitable, Callable, Iterable, Mapping
-from typing import TYPE_CHECKING, Any, Literal, NoReturn, SupportsIndex, TypeAlias, TypeVar, cast
+from dataclasses import dataclass
+from functools import partial
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Generic,
+    Literal,
+    NoReturn,
+    SupportsIndex,
+    TypeAlias,
+    TypeVar,
+    cast,
+)
 
 from typing_extensions import NotRequired, TypedDict
 
@@ -48,12 +62,15 @@ if TYPE_CHECKING:
 
 __all__ = [
     "DESCRIPTIONS",
+    "FATAL_ERROR",
+    "FATAL_RESULT",
     "PARAMETERS",
     "TITLES",
     "AsyncSandboxTools",
     "CheckpointToolResult",
     "DeletePathToolResult",
     "ExposePortToolResult",
+    "FatalGuard",
     "ListProcessesToolResult",
     "ListedProcess",
     "MovePathToolResult",
@@ -68,6 +85,7 @@ __all__ = [
     "ToolErrorResult",
     "ToolName",
     "ToolResult",
+    "ToolSpec",
     "WriteFileToolResult",
 ]
 
@@ -211,6 +229,81 @@ ToolResult: TypeAlias = (
 )
 
 _R = TypeVar("_R")
+_C = TypeVar("_C")
+
+
+@dataclass(frozen=True)
+class ToolSpec(Generic[_C]):
+    """One enabled tool for a framework: its metadata and ``call(args)`` bound to it.
+
+    ``parameters`` is the read-only ``PARAMETERS`` entry itself; copy it before changing it.
+    """
+
+    name: ToolName
+    title: str
+    description: str
+    parameters: Mapping[str, Any]
+    call: Callable[[Mapping[str, Any] | None], _C]
+
+
+def _spec(name: ToolName, call: Callable[[Mapping[str, Any] | None], _C]) -> ToolSpec[_C]:
+    return ToolSpec(name, TITLES[name], DESCRIPTIONS[name], PARAMETERS[name], call)
+
+
+class FatalGuard:
+    """Stops one agent run at the first failure no next tool call can fix.
+
+    ``call`` and ``acall`` turn an exception from a tool into ``FATAL_RESULT``, so its
+    text never reaches the model, and keep the first one for ``raise_if_failed``.
+    Once failed, later calls return that result without running. Use one guard per run.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._error: Exception | None = None
+
+    @property
+    def failed(self) -> bool:
+        """Whether a tool call has failed."""
+        return self._error is not None
+
+    @property
+    def error(self) -> Exception | None:
+        """The first exception a tool call raised, if any."""
+        return self._error
+
+    def call(self, spec: ToolSpec[ToolResult], args: Mapping[str, Any] | None = None) -> ToolResult:
+        """Runs ``spec.call(args)``, returning the fatal result instead of raising."""
+        if self.failed:
+            return FATAL_RESULT
+        try:
+            return spec.call(args)
+        except Exception as e:
+            return self._record(e)
+
+    async def acall(
+        self, spec: ToolSpec[Awaitable[ToolResult]], args: Mapping[str, Any] | None = None
+    ) -> ToolResult:
+        """Awaits ``spec.call(args)``, returning the fatal result instead of raising."""
+        if self.failed:
+            return FATAL_RESULT
+        try:
+            return await spec.call(args)
+        except Exception as e:
+            return self._record(e)
+
+    def raise_if_failed(self) -> None:
+        """Raises the first exception a tool call raised; does nothing if none did."""
+        if self._error is not None:
+            raise self._error
+
+    def _record(self, e: Exception) -> ToolErrorResult:
+        # Sync calls may run in worker threads, so the first error wins under a lock.
+        with self._lock:
+            if self._error is None:
+                self._error = e
+        return FATAL_RESULT
+
 
 # Per-stream cap: keep the start (what ran) and the end (how it ended).
 _MAX_OUTPUT_BYTES = 10_000
@@ -403,6 +496,10 @@ TITLES: Mapping[str, str] = _freeze(
         "list_processes": "List processes",
     }
 )
+
+# Fixed text, since an error can carry request URLs with org and project IDs; one object, so adapters match by identity.
+FATAL_ERROR = "The sandbox call failed and the run is stopping."
+FATAL_RESULT: ToolErrorResult = _freeze({"error": FATAL_ERROR})
 
 
 def _schema(properties: dict[str, Any], required: list[str]) -> dict[str, Any]:
@@ -873,6 +970,10 @@ class SandboxTools:
         """Returns the tools to register with the model, in contract order."""
         return _names(self._allow_preview, self._allow_rollback, self._allow_processes)
 
+    def specs(self) -> list[ToolSpec[ToolResult]]:
+        """Returns a ``ToolSpec`` per enabled tool, in ``names()`` order, for framework adapters."""
+        return [_spec(name, partial(self.call, name)) for name in self.names()]
+
     def call(self, name: str, args: Mapping[str, Any] | None = None) -> ToolResult:
         """Runs the tool the model named with the arguments it sent.
 
@@ -1199,6 +1300,10 @@ class AsyncSandboxTools:
     def names(self) -> list[ToolName]:
         """Returns the tools to register with the model, in contract order."""
         return _names(self._allow_preview, self._allow_rollback, self._allow_processes)
+
+    def specs(self) -> list[ToolSpec[Awaitable[ToolResult]]]:
+        """Returns a ``ToolSpec`` per enabled tool whose ``call`` is a coroutine. See :meth:`SandboxTools.specs`."""
+        return [_spec(name, partial(self.call, name)) for name in self.names()]
 
     async def call(self, name: str, args: Mapping[str, Any] | None = None) -> ToolResult:
         """Runs the tool the model named with the arguments it sent. See :meth:`SandboxTools.call`."""

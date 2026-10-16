@@ -58,7 +58,14 @@ agents = [
     "langgraph>=0.2",
 ]
 
+claude = ["claude-agent-sdk>=0.2.140"]
+openai-agents = ["openai-agents>=0.22"]
+langchain = ["langchain>=1.0"]
+
 dev = [
+    "claude-agent-sdk>=0.2.140",
+    "openai-agents>=0.22",
+    "langchain>=1.0",
     "pytest>=7.0.0",
     "pytest-asyncio>=0.20.0",
     "pytest-mock>=3.6.0",
