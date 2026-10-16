@@ -3,13 +3,14 @@ from __future__ import annotations
 import asyncio
 import builtins
 import time
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 import httpx
 
+from neevai._audit import AuditActorType, AuditStatus, audit_query
 from neevai._egress import build_egress, prepare_update_body
 from neevai._parse import coerce_model, coerce_params
 from neevai.errors import NeevAIError
@@ -451,31 +452,40 @@ class Sandboxes:
         to: str | None = None,
         cursor: str | None = None,
         limit: int | None = None,
+        operation: str | Sequence[str] | None = None,
+        status: AuditStatus | None = None,
+        actor_type: AuditActorType | Sequence[AuditActorType] | None = None,
+        actor_uid: str | None = None,
+        credential_uid: str | None = None,
         org_id: str | None = None,
         project_id: str | None = None,
     ) -> AuditTrail:
-        """Reads one page of the command audit trail for a sandbox.
+        """Reads one page of the audit trail for a sandbox.
 
-        Records what ran inside the sandbox, newest first: terminal commands, SSH,
-        process and file operations, each with the credential it ran under and how it
-        ended. Only program names are recorded, never their arguments. ``from_`` /
-        ``to`` (RFC3339) default to the last 24 hours; ``window_truncated`` is true when
-        ``from_`` reaches past the retained trail. Pass the previous page's
-        ``next_cursor`` as ``cursor`` to read older records; no ``next_cursor`` means
-        the window is exhausted.
+        Each event in ``data`` is one call made inside the sandbox, newest first —
+        terminal commands, SSH, process and file operations — with who made it
+        (``actor``) and how it ended (``status``). Only program names are recorded,
+        never their arguments. ``from_`` / ``to`` (RFC3339) default to the last 24
+        hours; ``window_truncated`` is true when ``from_`` reaches past the retained
+        trail. Filter with ``operation`` (one or several, such as ``"exec"``),
+        ``status``, ``actor_type``, ``actor_uid`` or ``credential_uid``. Pass the
+        previous page's ``next_cursor`` as ``cursor`` to read older events; no
+        ``next_cursor`` means the window is exhausted.
         """
         scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
         path = f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes/{id}/audit"
 
-        query: dict[str, Any] = {}
-        if from_ is not None:
-            query["from"] = from_
-        if to is not None:
-            query["to"] = to
-        if cursor is not None:
-            query["cursor"] = cursor
-        if limit is not None:
-            query["limit"] = limit
+        query = audit_query(
+            from_=from_,
+            to=to,
+            cursor=cursor,
+            limit=limit,
+            operation=operation,
+            status=status,
+            actor_type=actor_type,
+            actor_uid=actor_uid,
+            credential_uid=credential_uid,
+        )
 
         raw = self._client._transport.request("GET", path, query=query)
         return coerce_model(AuditTrail, raw)
@@ -901,31 +911,40 @@ class AsyncSandboxes:
         to: str | None = None,
         cursor: str | None = None,
         limit: int | None = None,
+        operation: str | Sequence[str] | None = None,
+        status: AuditStatus | None = None,
+        actor_type: AuditActorType | Sequence[AuditActorType] | None = None,
+        actor_uid: str | None = None,
+        credential_uid: str | None = None,
         org_id: str | None = None,
         project_id: str | None = None,
     ) -> AuditTrail:
-        """Reads one page of the command audit trail for a sandbox asynchronously.
+        """Reads one page of the audit trail for a sandbox asynchronously.
 
-        Records what ran inside the sandbox, newest first: terminal commands, SSH,
-        process and file operations, each with the credential it ran under and how it
-        ended. Only program names are recorded, never their arguments. ``from_`` /
-        ``to`` (RFC3339) default to the last 24 hours; ``window_truncated`` is true when
-        ``from_`` reaches past the retained trail. Pass the previous page's
-        ``next_cursor`` as ``cursor`` to read older records; no ``next_cursor`` means
-        the window is exhausted.
+        Each event in ``data`` is one call made inside the sandbox, newest first —
+        terminal commands, SSH, process and file operations — with who made it
+        (``actor``) and how it ended (``status``). Only program names are recorded,
+        never their arguments. ``from_`` / ``to`` (RFC3339) default to the last 24
+        hours; ``window_truncated`` is true when ``from_`` reaches past the retained
+        trail. Filter with ``operation`` (one or several, such as ``"exec"``),
+        ``status``, ``actor_type``, ``actor_uid`` or ``credential_uid``. Pass the
+        previous page's ``next_cursor`` as ``cursor`` to read older events; no
+        ``next_cursor`` means the window is exhausted.
         """
         scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
         path = f"/api/v1beta1/orgs/{scope.org_id}/projects/{scope.project_id}/sandboxes/{id}/audit"
 
-        query: dict[str, Any] = {}
-        if from_ is not None:
-            query["from"] = from_
-        if to is not None:
-            query["to"] = to
-        if cursor is not None:
-            query["cursor"] = cursor
-        if limit is not None:
-            query["limit"] = limit
+        query = audit_query(
+            from_=from_,
+            to=to,
+            cursor=cursor,
+            limit=limit,
+            operation=operation,
+            status=status,
+            actor_type=actor_type,
+            actor_uid=actor_uid,
+            credential_uid=credential_uid,
+        )
 
         raw = await self._client._transport.request("GET", path, query=query)
         return coerce_model(AuditTrail, raw)

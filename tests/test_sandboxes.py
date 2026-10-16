@@ -346,6 +346,13 @@ def test_sandboxes_get_and_delete_snapshot(mock_transport):
     client.close()
 
 
+def test_snapshot_trigger_is_optional():
+    """Older API versions send no trigger; a snapshot must still parse."""
+    assert Snapshot.model_validate(snapshot_data()).trigger is None
+    pressured = Snapshot.model_validate(snapshot_data(trigger="memory_pressure"))
+    assert pressured.trigger == "memory_pressure"
+
+
 def test_sandboxes_get_snapshot_not_found(mock_transport):
     client = _make_client(mock_transport)
     with pytest.raises(NotFoundError):

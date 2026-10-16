@@ -1,9 +1,10 @@
 """
-Run a few commands in a sandbox, then read back its command audit trail.
+Run a few commands in a sandbox, then read back its audit trail.
 
-The trail records what ran inside the sandbox — terminal commands, SSH, process
-and file operations — newest first, with the credential each ran under and how it
-ended. Only the program name is recorded, never its arguments.
+Each event is one call made inside the sandbox — terminal commands, SSH, process
+and file operations — newest first, with who made it and how it ended. Only the
+program name is recorded, never its arguments. Filter by ``operation``,
+``status``, ``actor_type``, ``actor_uid`` or ``credential_uid``.
 
 Pages are read with ``cursor``: pass the previous page's ``next_cursor`` until it
 is empty.
@@ -18,11 +19,19 @@ from __future__ import annotations
 
 import os
 import sys
+import time
+from datetime import datetime, timezone
 
-from neevai import NeevAI
+from neevai import AuditEvent, NeevAI
 from neevai.errors import NeevAIError
 
 TEMPLATE = os.environ.get("NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-minimal")
+
+
+def show(e: AuditEvent) -> None:
+    at = datetime.fromtimestamp(e.time / 1000, tz=timezone.utc)
+    who = e.actor.user.name or e.actor.user.uid
+    print(f"{at:%H:%M:%S} {e.api.operation:<14} {who:<20} {e.status}")
 
 
 def main() -> None:
@@ -38,17 +47,26 @@ def main() -> None:
             sandbox.files.read_text("greeting.txt")
             sandbox.files.list(".")
 
-            # Read the trail one page at a time, newest first.
+            # Events take a few seconds to reach the trail.
             trail = sandbox.audit(limit=20)
+            deadline = time.monotonic() + 30
+            while not trail.data and time.monotonic() < deadline:
+                time.sleep(2)
+                trail = sandbox.audit(limit=20)
+
+            # Read the trail one page at a time, newest first.
             print(f"retention: {trail.retention_days} days, truncated: {trail.window_truncated}")
             while True:
-                for r in trail.records:
-                    print(
-                        f"{r.at:%H:%M:%S} {r.tool:<14} {r.command or r.target or '':<20} {r.outcome.value}"
-                    )
+                for e in trail.data:
+                    show(e)
                 if not trail.next_cursor:
                     break
                 trail = sandbox.audit(limit=20, cursor=trail.next_cursor)
+
+            # Only the commands that were run.
+            print("exec calls:")
+            for e in sandbox.audit(operation="exec").data:
+                show(e)
         except NeevAIError as e:
             print(f"Error: {e}", file=sys.stderr)
             sys.exit(1)

@@ -10,7 +10,11 @@ __all__ = [
     "AgentStatus",
     "AgentTemplate",
     "AgentTemplateListResponse",
-    "AuditRecord",
+    "AuditAPI",
+    "AuditActor",
+    "AuditActorUser",
+    "AuditEvent",
+    "AuditResource",
     "AuditTrail",
     "CreateAgentParams",
     "CreateSandboxParams",
@@ -51,6 +55,7 @@ __all__ = [
     "Snapshot",
     "SnapshotListResponse",
     "SnapshotStatus",
+    "SnapshotTrigger",
     "StderrStreamEvent",
     "StdoutStreamEvent",
     "UpdateAgentParams",
@@ -78,7 +83,19 @@ from neevai.generated.aiagent import (  # noqa: F401
     AgentTemplateListResponse as AgentTemplateListResponse,
 )
 from neevai.generated.aiagent import (  # noqa: F401
-    AuditRecord as AuditRecord,
+    AuditActor as AuditActor,
+)
+from neevai.generated.aiagent import (  # noqa: F401
+    AuditActorUser as AuditActorUser,
+)
+from neevai.generated.aiagent import (  # noqa: F401
+    AuditAPI as AuditAPI,
+)
+from neevai.generated.aiagent import (  # noqa: F401
+    AuditEvent as AuditEvent,
+)
+from neevai.generated.aiagent import (  # noqa: F401
+    AuditResource as AuditResource,
 )
 from neevai.generated.aiagent import (  # noqa: F401
     AuditTrailResponse as AuditTrail,
@@ -154,6 +171,9 @@ from neevai.generated.aiagent import (  # noqa: F401
 )
 from neevai.generated.aiagent import (  # noqa: F401
     SnapshotStatus as SnapshotStatus,
+)
+from neevai.generated.aiagent import (  # noqa: F401
+    SnapshotTrigger as SnapshotTrigger,
 )
 from neevai.generated.aiagent import (  # noqa: F401
     UpdateAgentRequest as UpdateAgentParams,

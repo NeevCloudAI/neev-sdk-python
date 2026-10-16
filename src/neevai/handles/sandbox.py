@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import time
-from collections.abc import AsyncGenerator, Callable, Generator, Mapping
+from collections.abc import AsyncGenerator, Callable, Generator, Mapping, Sequence
 from typing import TYPE_CHECKING, Any, cast
 from uuid import UUID
 
+from neevai._audit import AuditActorType, AuditStatus
 from neevai.errors import APIConnectionError, APIError, APITimeoutError, NeevAIError
 from neevai.resources.sandboxes import (
     DEFAULT_PORT_POLL_INTERVAL_MS,
@@ -334,10 +335,16 @@ class Sandbox:
         to: str | None = None,
         cursor: str | None = None,
         limit: int | None = None,
+        operation: str | Sequence[str] | None = None,
+        status: AuditStatus | None = None,
+        actor_type: AuditActorType | Sequence[AuditActorType] | None = None,
+        actor_uid: str | None = None,
+        credential_uid: str | None = None,
     ) -> AuditTrail:
-        """Reads one page of this sandbox's command audit trail, newest first.
+        """Reads one page of this sandbox's audit trail, newest first.
 
-        Pass the previous page's ``next_cursor`` as ``cursor`` to read older records.
+        Takes the same filters as ``audit`` on the resource. Pass the previous page's
+        ``next_cursor`` as ``cursor`` to read older events.
         """
         if self.sandboxes is None:
             raise NeevAIError(
@@ -349,6 +356,11 @@ class Sandbox:
             to=to,
             cursor=cursor,
             limit=limit,
+            operation=operation,
+            status=status,
+            actor_type=actor_type,
+            actor_uid=actor_uid,
+            credential_uid=credential_uid,
             org_id=self.scope.org_id if self.scope else None,
             project_id=self.scope.project_id if self.scope else None,
         )
@@ -823,10 +835,16 @@ class AsyncSandbox:
         to: str | None = None,
         cursor: str | None = None,
         limit: int | None = None,
+        operation: str | Sequence[str] | None = None,
+        status: AuditStatus | None = None,
+        actor_type: AuditActorType | Sequence[AuditActorType] | None = None,
+        actor_uid: str | None = None,
+        credential_uid: str | None = None,
     ) -> AuditTrail:
-        """Reads one page of this sandbox's command audit trail, newest first.
+        """Reads one page of this sandbox's audit trail, newest first.
 
-        Pass the previous page's ``next_cursor`` as ``cursor`` to read older records.
+        Takes the same filters as ``audit`` on the resource. Pass the previous page's
+        ``next_cursor`` as ``cursor`` to read older events.
         """
         if self.sandboxes is None:
             raise NeevAIError(
@@ -838,6 +856,11 @@ class AsyncSandbox:
             to=to,
             cursor=cursor,
             limit=limit,
+            operation=operation,
+            status=status,
+            actor_type=actor_type,
+            actor_uid=actor_uid,
+            credential_uid=credential_uid,
             org_id=self.scope.org_id if self.scope else None,
             project_id=self.scope.project_id if self.scope else None,
         )

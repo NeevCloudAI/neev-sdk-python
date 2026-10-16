@@ -95,10 +95,11 @@ Everything in `neevai.__all__`:
 | `Scope` | dataclass | `types.py` |
 | `Snapshot` | model | generated |
 | `SnapshotStatus` | enum | generated |
+| `SnapshotTrigger` | enum | generated (`manual`, `memory_pressure`) |
 | `CreateSnapshotParams` | model | `types.py` |
 | `SnapshotListResponse` | model | generated |
-| `AuditRecord` | model | generated |
 | `AuditTrail` | model alias | generated → `AuditTrailResponse` |
+| `AuditEvent` / `AuditActor` / `AuditActorUser` / `AuditAPI` / `AuditResource` | model | generated |
 | `SandboxEgressRule` | model | generated |
 | `SandboxEgressRules` | model | generated |
 | `NeevAIError`, `APIConnectionError`, `APITimeoutError`, `APIError`, `BadRequestError`, `AuthenticationError`, `PermissionDeniedError`, `NotFoundError`, `ConflictError`, `PreconditionFailedError`, `RateLimitError`, `DeadlineExceededError`, `InternalServerError`, `ServiceUnavailableError` | exceptions | `errors.py` |
@@ -149,8 +150,8 @@ Types exported from `neevai.types.__all__`:
 | `SandboxLifecycle` | model | generated |
 | `OnIdleAction` | enum | generated |
 | `SandboxPort` | model | generated (`port`, `slug`, `preview_url`) |
-| `AuditRecord` | model | generated |
 | `AuditTrail` | model alias | generated → `AuditTrailResponse` |
+| `AuditEvent` / `AuditActor` / `AuditActorUser` / `AuditAPI` / `AuditResource` | model | generated |
 | `Snapshot` / `SnapshotListResponse` / `SnapshotStatus` | model / model / enum | generated |
 | `CreateSnapshotParams` | model | `types.py` |
 | `CreateSnapshotRequest` / `ForkSandboxRequest` / `RestoreSandboxRequest` | model | generated |
@@ -443,27 +444,33 @@ for series in metrics.series:
 
 **Example:** [`sandbox_metrics.py`](../examples/sandbox_metrics.py)
 
-### `client.sandboxes.audit(id, *, from_=None, to=None, cursor=None, limit=None, org_id=None, project_id=None)`
+### `client.sandboxes.audit(id, *, from_=None, to=None, cursor=None, limit=None, operation=None, status=None, actor_type=None, actor_uid=None, credential_uid=None, org_id=None, project_id=None)`
 
-Reads one page of the sandbox's command audit trail, newest first: terminal commands,
-SSH, process and file operations, each with the credential it ran under and how it
-ended. Only the program name is recorded, never its arguments, and input typed at a
-hidden password prompt is not captured.
+Reads one page of the sandbox's audit trail, newest first: terminal commands, SSH,
+process and file operations, each with who made the call and how it ended. Only the
+program name is recorded, never its arguments, and input typed at a hidden password
+prompt is not captured.
 
 `from_` / `to` (RFC3339) default to the last 24 hours. `limit` is clamped server-side.
 The response's `window_truncated` is `True` when `from_` reaches past the
 `retention_days` of trail kept.
 
-**Returns:** `AuditTrail` (`sandbox_id`, `from_`, `to`, `retention_days`,
-`window_truncated`, `next_cursor`, `records: list[AuditRecord]`). Each `AuditRecord`
-has `at`, `id`, `tool`, `command`, `target`, `outcome`, `reason_code`, `request_id`,
-`caller_source`, `pty_id`, `seq`, `duration_ms`.
+Filters, all optional:
+
+- `operation` — one call name or a list, such as `"exec"` or `["exec", "pty_command"]`.
+- `status` — `"success"` or `"failure"`.
+- `actor_type` — `"user"`, `"api_key"`, `"system"`, or a list of them.
+- `actor_uid` — a user id or an API key id.
+- `credential_uid` — only calls made with this API key.
+
+**Returns:** `AuditTrail` (`from_`, `to`, `retention_days`, `window_truncated`,
+`next_cursor`, `data: list[AuditEvent]`). See [`AuditTrail` / `AuditEvent`](#audittrail--auditevent).
 
 ```python
 trail = sandbox.audit(limit=50)
 while True:
-    for r in trail.records:
-        print(r.at, r.tool, r.command or "", r.outcome.value)
+    for e in trail.data:
+        print(e.time, e.api.operation, e.actor.user.name or e.actor.user.uid, e.status)
     if not trail.next_cursor:
         break
     trail = sandbox.audit(limit=50, cursor=trail.next_cursor)
@@ -664,11 +671,10 @@ print(port.slug, port.preview_url)
 client.agents.revoke_port(agent.id, 3000)
 ```
 
-### `client.agents.audit(id, *, from_=None, to=None, cursor=None, limit=None, ...)`
+### `client.agents.audit(id, *, from_=None, to=None, cursor=None, limit=None, operation=None, ...)`
 
-The agent's command audit trail, same shape and recording rules as
-`sandboxes.audit`. The response's `sandbox_id` is the sandbox backing the agent, not
-the agent id.
+The agent's audit trail, with the same events, filters and recording rules as
+`sandboxes.audit`.
 
 **Example:** [`agent_ports_audit.py`](../examples/agent_ports_audit.py)
 
@@ -1645,7 +1651,8 @@ Generated snapshot metadata record.
 | `project_id` | `str` | yes |
 | `name` | `str \| None` | no |
 | `status` | `SnapshotStatus` | yes (`Pending`, `Running`, `Ready`, `Failed`) |
-| `snapshot_type` | `SnapshotType` | yes (`full`) |
+| `snapshot_type` | `SnapshotType` | yes (`full`, `filesystem`) |
+| `trigger` | `SnapshotTrigger \| None` | no (`manual`, or `memory_pressure` when taken automatically near the memory limit) |
 | `source_region` | `str` | yes |
 | `size_bytes` | `int \| None` | no |
 | `error_message` | `str \| None` | no |
@@ -1872,34 +1879,35 @@ for `egress_add` / `egress_remove`.
 | `slug` | `str` | yes (8 lowercase letters/digits gating the preview URL) |
 | `preview_url` | `str` | yes (needs no credential; treat it as a secret) |
 
-### `AuditTrail` / `AuditRecord`
+### `AuditTrail` / `AuditEvent`
 
 `AuditTrail` (alias of generated `AuditTrailResponse`):
 
 | Field | Type | Required |
 | ----- | ---- | -------- |
-| `sandbox_id` | `UUID` | yes (for an agent trail, the agent's backing sandbox) |
 | `from_` / `to` | `datetime` | yes |
 | `retention_days` | `int` | yes |
 | `window_truncated` | `bool` | yes |
-| `next_cursor` | `str \| None` | no (pass as `cursor` for the next page) |
-| `records` | `list[AuditRecord]` | yes |
+| `next_cursor` | `str \| None` | no (pass as `cursor` for the next, older page) |
+| `data` | `list[AuditEvent]` | yes (newest first) |
 
-`AuditRecord`:
+`AuditEvent` is one call, in the OCSF API Activity format. The fields most callers read:
 
 | Field | Type | Required |
 | ----- | ---- | -------- |
-| `at` | `datetime` | yes |
-| `id` | `str` | yes |
-| `tool` | `str` | yes (e.g. `pty_command`, `ssh`, `exec`, `process.start`, `fs.read`) |
-| `command` | `str \| None` | no (program name only, never its arguments) |
-| `target` | `str \| None` | no (file path or process acted on) |
-| `outcome` | `success` \| `error` | yes |
-| `reason_code` | `str \| None` | no |
-| `request_id` | `str \| None` | no |
-| `caller_source` | `str \| None` | no (the credential, not a person) |
-| `pty_id` / `seq` | `str \| None` / `int \| None` | no (terminal commands only) |
-| `duration_ms` | `int \| None` | no |
+| `time` | `int` | yes (milliseconds since the Unix epoch) |
+| `api.operation` | `str` | yes (e.g. `pty_command`, `ssh`, `exec`, `process.start`, `fs.read`) |
+| `status` | `str` | yes (`Success` or `Failure`) |
+| `status_code` | `str \| None` | no (`ok`, `permission_denied`, `internal`) |
+| `actor.user.type` | `user` \| `api_key` \| `system` \| `unknown` | yes |
+| `actor.user.uid` | `str` | yes (the user's or API key's id) |
+| `actor.user.name` | `str \| None` | no |
+| `actor.user.credential_uid` | `str \| None` | no (the API key used; absent for a user) |
+| `actor.session.uid` | `str \| None` | no (the console session) |
+| `resources` | `list[AuditResource] \| None` | no (the sandbox, then any file, process, program or terminal the call touched) |
+| `duration` | `int \| None` | no (milliseconds) |
+| `metadata.uid` | `str` | yes (stable id of the event) |
+| `metadata.sequence` | `int \| None` | no (a terminal command's ordinal within its terminal) |
 
 ### `SandboxLifecycle`
 

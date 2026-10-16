@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import Enum, IntEnum
 from typing import Any
 from uuid import UUID
 
@@ -174,6 +174,11 @@ class SnapshotRestorability(str, Enum):
     unsupported = "unsupported"
 
 
+class SnapshotTrigger(str, Enum):
+    manual = "manual"
+    memory_pressure = "memory_pressure"
+
+
 class Snapshot(BaseModel):
     id: UUID = Field(..., description="Snapshot UUID.")
     sandbox_id: UUID = Field(..., description="UUID of the source sandbox.")
@@ -182,6 +187,7 @@ class Snapshot(BaseModel):
     name: str | None = Field(None, description="Optional customer-supplied name.")
     status: SnapshotStatus
     snapshot_type: SnapshotType
+    trigger: SnapshotTrigger | None = None
     source_region: str = Field(..., description="Region where the snapshot is stored.")
     size_bytes: int | None = Field(
         None,
@@ -303,6 +309,14 @@ class SandboxTemplate(BaseModel):
     )
     category: SandboxTemplateCategory
     status: SandboxTemplateStatus
+    interpreter: bool | None = Field(
+        None,
+        description="True when sandboxes created from this template run the code interpreter: stateful kernels reached through the interpreter routes and tool. Size the sandbox for the interpreter at creation; its memory does not grow with a later resize.",
+    )
+    min_memory_gb: conint(ge=1, le=16) | None = Field(
+        None,
+        description="Smallest memory size in GB a sandbox created from this template may have; null when the template sets no minimum.",
+    )
     created_at: AwareDatetime
     updated_at: AwareDatetime
 
@@ -337,65 +351,114 @@ class ConnectTokenResponse(BaseModel):
     expires_in: int = Field(..., description="Token lifetime in seconds.")
 
 
-class Outcome(str, Enum):
-    success = "success"
-    error = "error"
+class ClassUid(IntEnum):
+    AuditClassAPIActivity = 6003
 
 
-class AuditRecord(BaseModel):
-    at: AwareDatetime = Field(..., description="When the operation was recorded.")
-    id: str = Field(..., description="Stable id of this record, unique within the trail.")
-    tool: str = Field(
+class CategoryUid(IntEnum):
+    AuditCategoryApplicationActivity = 6
+
+
+class ActivityId(IntEnum):
+    AuditActivityCreate = 1
+    AuditActivityRead = 2
+    AuditActivityUpdate = 3
+    AuditActivityDelete = 4
+    AuditActivityOther = 99
+
+
+class SeverityId(IntEnum):
+    AuditSeverityInformational = 1
+
+
+class StatusId(IntEnum):
+    AuditStatusSuccess = 1
+    AuditStatusFailure = 2
+
+
+class AuditAPIRequest(BaseModel):
+    uid: str = Field(..., description="The request that caused the call, for correlation.")
+
+
+class Type(str, Enum):
+    AuditResourceSandbox = "sandbox"
+    AuditResourceFile = "file"
+    AuditResourceProcess = "process"
+    AuditResourceChannel = "channel"
+    AuditResourceTerminal = "terminal"
+    AuditResourceInterpreterContext = "interpreter_context"
+
+
+class AuditResource(BaseModel):
+    type: Type
+    uid: str | None = Field(None, description="The sandbox, terminal or interpreter context id.")
+    name: str | None = Field(
+        None,
+        description="A file path (a move reads `source -> destination`), a program name without its arguments, or an SSH channel such as `direct-tcpip db.internal:5432`, `tcpip-forward 0.0.0.0:8080` or `auth-agent <socket>`. A program reads `[redacted]` where its name could not be established, and a terminal command interrupted with Ctrl-C is prefixed `[Ctrl-C]`. Truncated with a trailing `...` if unusually long.",
+    )
+
+
+class AuditAccount(BaseModel):
+    uid: str = Field(..., description="The organization id.")
+
+
+class AuditEndpoint(BaseModel):
+    name: str
+
+
+class AuditProduct(BaseModel):
+    name: str = Field(..., description="Always Sandbox Audit.")
+    vendor_name: str = Field(..., description="Always NeevCloud.")
+
+
+class Type1(str, Enum):
+    AuditActorTypeUser = "user"
+    AuditActorTypeAPIKey = "api_key"
+    AuditActorTypeSystem = "system"
+    AuditActorTypeUnknown = "unknown"
+
+
+class TypeId(IntEnum):
+    AuditActorTypeIDUnknown = 0
+    AuditActorTypeIDUser = 1
+    AuditActorTypeIDSystem = 3
+    AuditActorTypeIDOther = 99
+
+
+class AuditActorUser(BaseModel):
+    type: Type1 = Field(
         ...,
-        description="The operation, such as `pty_command`, `ssh`, `exec`, `process.start` or `fs.read`.",
+        description="A user in the console, an API key, the platform acting on its own, such as pairing a device, or unknown.",
     )
-    command: str | None = Field(
-        None,
-        description="The program that ran, without its arguments. Absent on operations that run no program, such as a file read. Reads `[redacted]` where the program name could not be established. A terminal command interrupted with Ctrl-C is prefixed `[Ctrl-C]`.",
+    type_id: TypeId = Field(
+        ...,
+        description="OCSF user.type_id: 0 (Unknown), 1 (User), 3 (System), 99 (Other) for api_key.",
     )
-    target: str | None = Field(
-        None,
-        description="What the operation acted on — the file path it read or wrote, or the process it named. A move carries both paths as `source -> destination`. Absent where the operation names nothing, and truncated with a trailing `...` if unusually long.",
+    uid: str = Field(
+        ...,
+        description="The user's id, the API key's id, a stable name for what the platform ran, such as device-pairing, or unknown.",
     )
-    outcome: Outcome
-    reason_code: str | None = Field(
-        None,
-        description="Why it ended that way: `ok`, `permission_denied`, `internal`.",
+    name: str | None = Field(
+        None, description="The user's or the API key's name when the call ran."
     )
-    request_id: str | None = Field(
-        None, description="Correlates the record to the request that caused it."
+    credential_uid: str | None = Field(
+        None, description="The API key the call was made with. Absent for a user."
     )
-    caller_source: str | None = Field(
-        None,
-        description="The credential the operation was made under. It identifies a credential, not a person.",
-    )
-    pty_id: str | None = Field(
-        None, description="The terminal a `pty_command` belongs to. Absent otherwise."
-    )
-    seq: int | None = Field(
-        None,
-        description="Ordinal within that terminal. Absent outside a `pty_command`.",
-    )
-    duration_ms: int | None = None
 
 
-class AuditTrailResponse(BaseModel):
-    sandbox_id: UUID = Field(
-        ...,
-        description="The sandbox the records came from. For an agent trail this is the sandbox backing the agent, not the agent id.",
-    )
-    from_: AwareDatetime = Field(..., alias="from")
-    to: AwareDatetime
-    retention_days: int = Field(..., description="How many days of trail are available.")
-    window_truncated: bool = Field(
-        ...,
-        description="True when the requested window reaches further back than the available trail, so it begins later than asked.",
-    )
-    next_cursor: str | None = Field(
-        None,
-        description="Pass as `cursor` for the next page. Absent when the window is exhausted.",
-    )
-    records: list[AuditRecord]
+class AuditActorSession(BaseModel):
+    uid: str | None = Field(None, description="The session's id, the same for every call it made.")
+
+
+class AuditStatusFilter(str, Enum):
+    AuditStatusFilterSuccess = "success"
+    AuditStatusFilterFailure = "failure"
+
+
+class AuditActorTypeFilterValue(str, Enum):
+    AuditActorTypeFilterUser = "user"
+    AuditActorTypeFilterAPIKey = "api_key"
+    AuditActorTypeFilterSystem = "system"
 
 
 class SandboxMetricsResponse(BaseModel):
@@ -457,16 +520,46 @@ class SandboxEgressConfig(BaseModel):
         extra="forbid",
     )
     mode: Mode | None = Field(
-        "deny_all",
-        description="The egress mode. deny_all blocks all egress. allow_list restricts egress to the specified allowed destinations.",
+        None,
+        description="The egress mode. deny_all blocks all egress. allow_list restricts egress to the specified allowed destinations. When omitted, it is allow_list if allow_internet is true or allow has rules, and deny_all otherwise. An explicit deny_all ignores and drops allow_internet and allow.",
     )
     allow_internet: bool | None = Field(
         False,
-        description="Escape hatch: if true, allows all outbound traffic (0.0.0.0/0 and ::/0). Applies only in allow_list mode; deny_all ignores it.",
+        description="Escape hatch: if true, allows all outbound traffic (0.0.0.0/0 and ::/0). Implies allow_list when mode is omitted; dropped when mode is deny_all.",
     )
     allow: list[SandboxEgressRule] | None = Field(
         None, description="List of egress rules for host/IP destinations to allow."
     )
+
+
+class AuditAPI(BaseModel):
+    operation: str = Field(
+        ...,
+        description="The call, such as `pty_command`, `ssh`, `exec`, `process.start`, `fs.read` or `interpreter.run`.",
+    )
+    request: AuditAPIRequest | None = None
+
+
+class AuditCloud(BaseModel):
+    provider: str = Field(..., description="Always NeevCloud.")
+    account: AuditAccount | None = None
+    project_uid: str | None = Field(None, description="The project id.")
+
+
+class AuditMetadata(BaseModel):
+    version: str = Field(..., description="The OCSF schema version the event follows.")
+    product: AuditProduct
+    uid: str = Field(..., description="Stable id of this event, unique within the trail.")
+    tenant_uid: str | None = Field(None, description="The organization id.")
+    sequence: int | None = Field(
+        None,
+        description="Ordinal of a terminal command within its terminal. Absent otherwise.",
+    )
+
+
+class AuditActor(BaseModel):
+    user: AuditActorUser
+    session: AuditActorSession | None = None
 
 
 class Agent(BaseModel):
@@ -960,3 +1053,64 @@ class SandboxListResponse(BaseModel):
     total: int
     page: int
     limit: int
+
+
+class AuditEvent(BaseModel):
+    class_uid: ClassUid = Field(..., description="OCSF class, API Activity.")
+    class_name: str = Field(..., description="Always API Activity.")
+    category_uid: CategoryUid = Field(..., description="OCSF category, Application Activity.")
+    category_name: str = Field(..., description="Always Application Activity.")
+    activity_id: ActivityId = Field(
+        ...,
+        description="1 Create (a write, a started process, a terminal), 2 Read, 3 Update (a move), 4 Delete (a removed file, a killed process), 99 Other.",
+    )
+    activity_name: str = Field(..., description="The name of activity_id, such as Create.")
+    type_uid: int = Field(..., description="class_uid * 100 + activity_id, such as 600301.")
+    type_name: str = Field(..., description="Such as API Activity: Create.")
+    time: int = Field(
+        ...,
+        description="When the call was recorded, in milliseconds since the Unix epoch.",
+    )
+    duration: int | None = Field(
+        None,
+        description="How long the call took, in milliseconds; for exec, how long the command ran. Absent on a terminal command, which has no measured run time.",
+    )
+    severity_id: SeverityId = Field(..., description="Always 1, Informational.")
+    severity: str = Field(..., description="Always Informational.")
+    status_id: StatusId = Field(..., description="1 Success or 2 Failure.")
+    status: str = Field(..., description="Success or Failure.")
+    status_code: str | None = Field(
+        None,
+        description="Why it ended that way: `ok`, `permission_denied`, `internal`.",
+    )
+    status_detail: str | None = Field(
+        None,
+        description="How a code-interpreter cell ended: `ok`, `error`, `deadline_exceeded`, `kernel_restarted`, `memory_exceeded`, `unavailable`, `invalid_response`, or `client_gone` when the caller disconnected first.",
+    )
+    actor: AuditActor
+    api: AuditAPI
+    resources: list[AuditResource] | None = Field(
+        None,
+        description="What the call touched: the sandbox, then any file or process it named, the program it ran, and the terminal it ran in.",
+    )
+    cloud: AuditCloud
+    src_endpoint: AuditEndpoint
+    osint: list[dict[str, Any]] = Field(
+        ..., description="Threat intelligence about the call. Always empty."
+    )
+    metadata: AuditMetadata
+
+
+class AuditTrailResponse(BaseModel):
+    from_: AwareDatetime = Field(..., alias="from")
+    to: AwareDatetime
+    retention_days: int = Field(..., description="How many days of trail are available.")
+    window_truncated: bool = Field(
+        ...,
+        description="True when the requested window reaches further back than the available trail, so it begins later than asked.",
+    )
+    data: list[AuditEvent] = Field(..., description="The events in this page, newest first.")
+    next_cursor: str | None = Field(
+        None,
+        description="Pass as `cursor` for the next, older page. Absent when the window is exhausted.",
+    )
