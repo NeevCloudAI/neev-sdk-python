@@ -99,3 +99,43 @@ uv run ruff format .      # Fix formatting
 The CI workflow runs linting, formatting checks, Pyright and mypy type
 checks, type generation verification, tests, and a build step. It is
 defined in `.github/workflows/python-ci.yml`.
+
+## Keeping the API docs current
+
+Any PR that modifies public SDK exports must update:
+
+- [`docs/api-reference.md`](./api-reference.md) — API lists and inline snippet table (this file)
+- [`docs/api-inventory.md`](./api-inventory.md) — method signatures, type field tables, symbol index
+- [`docs/example-coverage.md`](./example-coverage.md) — example catalog and API → examples lookup
+- [`docs/getting-started.md`](./getting-started.md) — if install, env vars, or quick-start flows change
+- [`examples/`](../examples/) — if a new capability lacks a runnable example
+
+Type field tables live in [`api-inventory.md`](./api-inventory.md) only — not here.
+After `scripts/gen_types.py`, verify type tables in the inventory against
+`src/neevai/generated/`.
+
+## Keeping the inventory current
+
+Update manually when the public API changes. Cross-check against `src/neevai/`.
+
+On API changes, also update:
+
+- [`docs/getting-started.md`](./getting-started.md) — if install, env vars, or quick-start flows change
+- [`docs/api-reference.md`](./api-reference.md) — API/sandbox runtime lists and inline snippet table
+- [`docs/example-coverage.md`](./example-coverage.md) — example catalog and API → examples lookup
+- [`examples/`](../examples/) — if a new capability lacks an example
+
+After `scripts/gen_types.py`, verify type field tables **here only** match
+`src/neevai/generated/`. Type tables live in this inventory, not in
+`api-reference.md`.
+
+## Keeping example coverage current
+
+When you add or change an example, or introduce a new public API:
+
+1. Update the [example catalog](example-coverage.md#example-catalog) row.
+2. Update the [inverse index](example-coverage.md#api--examples-inverse-index) so each new or
+   changed API points at the right example(s) and includes a representative
+   snippet (prefer the pattern used in the linked example; fall back to
+   [`api-reference.md`](api-reference.md) one-liners when they match).
+3. Cross-check [`api-reference.md`](api-reference.md) runnable-example links.

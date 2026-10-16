@@ -12,7 +12,6 @@ Run it with your project credentials::
     NEEV_API_KEY=...            # project API key
     NEEV_ORG_ID=org-...
     NEEV_PROJECT_ID=prj-...     # a real project id, distinct from the org id
-    NEEV_BASE_URL=...           # optional; defaults to the public Neev API
     NEEV_SANDBOX_TEMPLATE_ID=sb-ubuntu-26-04-dev   # optional
     uv run python examples/e2e_live_update.py
 

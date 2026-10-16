@@ -1,350 +1,141 @@
 # Examples
 
-Runnable examples for the NeevAI Python SDK (`neevai`). Install the package from
-the repo root, set credentials, then run scripts with `uv run`. For an API →
-example lookup and minimal snippets per symbol, see
-[`docs/example-coverage.md`](../docs/example-coverage.md).
+Runnable scripts for the NeevCloud SDK for Python (`neevai`). Each one creates real
+sandboxes and cleans them up when it finishes.
 
-## Quick setup (once)
+## Contents
+
+- [Setup](#setup)
+- [Sandboxes](#sandboxes)
+- [Agents](#agents)
+- [Agent tools](#agent-tools)
+- [Workflows](#workflows)
+- [Environment variables](#environment-variables)
+- [Notes](#notes)
+
+## Setup
 
 From the repository root:
 
-```sh
+```bash
 uv sync
+export NEEV_API_KEY="your-api-key"
+export NEEV_ORG_ID="your-org-id"
+export NEEV_PROJECT_ID="your-project-id"
 ```
 
-**Linux / macOS (bash/zsh):**
+On Windows PowerShell, use `$env:NEEV_API_KEY = "..."` and so on.
 
-```sh
-export NEEV_API_KEY=...        # sandbox API key (required)
-export NEEV_ORG_ID=...
-export NEEV_PROJECT_ID=...
+Run any example from the repository root:
+
+```bash
+uv run python examples/<script>.py
 ```
 
-**Windows PowerShell:**
+Examples create from `sb-ubuntu-26-04-dev` unless you set `NEEV_SANDBOX_TEMPLATE_ID`.
 
-```powershell
-$env:NEEV_API_KEY = "..."
-$env:NEEV_ORG_ID = "..."
-$env:NEEV_PROJECT_ID = "..."
-```
+## Sandboxes
 
-By default examples target the **production** API
-(`https://api.ai.neevcloud.com/agent`).
+These need only your credentials. Start with `templates_list.py`.
 
-Template id defaults to `sb-ubuntu-26-04-dev`; override with:
+| Example | Shows |
+| --- | --- |
+| [`templates_list.py`](templates_list.py) | List templates, get one, create a sandbox from it |
+| [`sandbox_lifecycle.py`](sandbox_lifecycle.py) | Create, wait, metrics, pause, delete |
+| [`sandbox_lifecycle_windows.py`](sandbox_lifecycle_windows.py) | Idle timeout and maximum lifetime, `keepalive`, `update_timeout` |
+| [`sandbox_update.py`](sandbox_update.py) | Resize a running sandbox, then change its egress |
+| [`update_resize_egress.py`](update_resize_egress.py) | Resize and change egress in one call; `egress_add` and `egress_remove` |
+| [`e2e_live_update.py`](e2e_live_update.py) | A pass/fail check of a combined resize and egress update |
+| [`last_crash.py`](last_crash.py) | Force an out-of-memory crash and read `last_crash` |
+| [`sandbox_labels.py`](sandbox_labels.py) | Label sandboxes and find them by label |
+| [`byoi_create.py`](byoi_create.py) | Create a sandbox from your own image |
+| [`snapshot_fork_restore.py`](snapshot_fork_restore.py) | Snapshot, restore into a new sandbox, fork |
+| [`async_sandbox.py`](async_sandbox.py) | The same workflow with `AsyncNeevAI` |
+| [`files_api.py`](files_api.py) | Write, read and list files |
+| [`upload_download.py`](upload_download.py) | Upload and download a large file with progress |
+| [`preview_ports.py`](preview_ports.py) | Serve a port, get its preview URL, rotate it, revoke it |
+| [`audit_trail.py`](audit_trail.py) | Run commands, then page through the audit trail |
+| [`pty.py`](pty.py) | An interactive terminal |
+| [`ssh_tunnel.py`](ssh_tunnel.py) | SSH, `rsync` and port forwarding through one tunnel |
+| [`streaming_exec.py`](streaming_exec.py) | Stream command output line by line |
+| [`processes.py`](processes.py) | Start, follow, read logs of and stop a process |
+| [`process_pool.py`](process_pool.py) | Run processes in parallel, stop them all |
+| [`code_interpreter.py`](code_interpreter.py) | Python runs that keep state, errors as results, a second context |
+| [`docker.py`](docker.py) | Start Docker in a sandbox and run a container |
+| [`parallel_fanout.py`](parallel_fanout.py) | Three sandboxes working in parallel |
+| [`sandbox_metrics.py`](sandbox_metrics.py) | Metrics while the sandbox is under load |
+| [`raw_request.py`](raw_request.py) | Call an API route directly with `client.raw.request` |
+| [`sandbox_lifecycle_controller.py`](sandbox_lifecycle_controller.py) | A small command-line tool for sandbox operations |
 
-```sh
-export NEEV_SANDBOX_TEMPLATE_ID=sb-ubuntu-26-04-dev
-```
+The lifecycle controller is handy for trying things by hand:
 
-For platform agent create (`create_agent.py`), pick a catalogue template name:
-
-```sh
-export NEEV_AGENT_TEMPLATE=claude-code   # default when unset
-```
-
-Run every command below from the **repo root** unless noted otherwise.
-
-## Platform agents vs model integration
-
-Two different "agent" concepts appear in this repo:
-
-- **Platform agents** (`client.agents`, Tier 1 [`create_agent.py`](./create_agent.py))
-  — provision a packaged agent from the catalogue onto its own backing sandbox.
-  No inference key required.
-- **Model integration** (Tier 2 [`agent_patterns/`](./agent_patterns/)) — wire
-  `gpt-oss-120b` (or another model) into a sandbox as a code-execution tool.
-  See [`agent_patterns/README.md`](./agent_patterns/README.md).
-
-Tier 3 [`workflow_examples/`](./workflow_examples/) builds on the model
-integration helpers for end-to-end demos with local artifacts.
-
-## Learning path
-
-Examples are organized in three tiers — start at Tier 1 and work your way up:
-
-```text
-examples/
-├── templates_list.py             ← Tier 1: Core Sandbox
-├── create_agent.py               ← Tier 1: Agent lifecycle (platform agents API)
-├── sandbox_lifecycle.py
-├── sandbox_update.py
-├── snapshot_fork_restore.py
-├── async_sandbox.py
-├── files_api.py
-├── streaming_exec.py
-├── processes.py
-├── code_interpreter.py
-├── process_pool.py
-├── sandbox_metrics.py
-├── parallel_fanout.py
-├── raw_request.py
-├── sandbox_lifecycle_controller.py
-│
-├── agent_patterns/               ← Tier 2: Agent Integration
-│   ├── minimal_agent.py          ← start here
-│   ├── agent_tools_loop.py
-│   └── langchain_agent.py
-│
-└── workflow_examples/            ← Tier 3: Real-World Workflows
-    ├── repo_analyzer.py          ← start here
-    └── browser_agent.py
-```
-
-| Tier | Focus | Start here |
-|------|-------|------------|
-| **1 — Core Sandbox** | Pure SDK: templates, sandbox lifecycle, **platform agents**, async, files, streaming exec, metrics | [`templates_list.py`](./templates_list.py) |
-| **2 — Agent Integration** | Wire a model into a sandbox as a code-execution tool (not `client.agents`) | [`agent_patterns/minimal_agent.py`](./agent_patterns/minimal_agent.py) |
-| **3 — Real-World Workflows** | End-to-end model-driven agent workflows with artifacts | [`workflow_examples/repo_analyzer.py`](./workflow_examples/repo_analyzer.py) |
-
-## Tier 1 — Core Sandbox (no model needed)
-
-These scripts only need sandbox credentials (`NEEV_API_KEY`, org, project). Each provisions a real sandbox or platform agent and deletes it in a
-`finally` block (or explicit cleanup). [`create_agent.py`](./create_agent.py)
-uses the **platform agents API** — not the model-driven patterns in Tier 2.
-
-| File | SDK features | Run |
-|------|--------------|-----|
-| [`templates_list.py`](./templates_list.py) | `templates.list`, `templates.get`, `sandboxes.create`, `wait_until_ready`, `delete` | `uv run python examples/templates_list.py` |
-| [`create_agent.py`](./create_agent.py) | `agent_templates.list`, `agents.create`, `wait_until_ready`, `sandbox()`, `update`, `pause`, `delete` | `uv run python examples/create_agent.py` |
-| [`sandbox_lifecycle.py`](./sandbox_lifecycle.py) | `sandboxes.create`, `wait_until_ready`, `metrics`, `pause`, `delete` | `uv run python examples/sandbox_lifecycle.py` |
-| [`sandbox_update.py`](./sandbox_update.py) | `sandboxes.update` / `sandbox.update` — in-place resize, then live egress re-scope via `allow_egress` | `uv run python examples/sandbox_update.py` |
-| [`update_resize_egress.py`](./update_resize_egress.py) | `sandbox.update` — resize + re-scope egress in one call, then `egress_add` / `egress_remove` to edit the allow-list in place | `uv run python examples/update_resize_egress.py` |
-| [`e2e_live_update.py`](./e2e_live_update.py) | Live PASS/FAIL check of a combined resize + egress `update` against the real API | `uv run python examples/e2e_live_update.py` |
-| [`sandbox_lifecycle_windows.py`](./sandbox_lifecycle_windows.py) | `create` with `lifecycle`, `keepalive` loop, `update_timeout` (change + clear windows) | `uv run python examples/sandbox_lifecycle_windows.py` |
-| [`last_crash.py`](./last_crash.py) | `sandbox.last_crash` — force an OOM, poll for the crash, check `storage_reset` against a marker file | `uv run python examples/last_crash.py` |
-| [`sandbox_labels.py`](./sandbox_labels.py) | `create` with `labels`, `list(labels=...)` to find sandboxes by label, `sandbox.labels`, `delete` | `uv run python examples/sandbox_labels.py` |
-| [`byoi_create.py`](./byoi_create.py) | BYOI `create` with `image` + `command`, `wait_until_ready`, `exec`, `delete` | `uv run python examples/byoi_create.py` |
-| [`snapshot_fork_restore.py`](./snapshot_fork_restore.py) | `snapshot`, `get_snapshot`, `create` with `restore`, `fork`, `delete_snapshot` | `uv run python examples/snapshot_fork_restore.py` |
-| [`async_sandbox.py`](./async_sandbox.py) | `AsyncNeevAI`, `sandboxes.create`, `wait_until_ready`, `exec`, `delete` | `uv run python examples/async_sandbox.py` |
-| [`files_api.py`](./files_api.py) | `files.write`, `read_text`, `list(recursive=True)` | `uv run python examples/files_api.py` |
-| [`preview_ports.py`](./preview_ports.py) | `get_url(port)` — serve on a port, get its preview URL, rotate its slug, `list_ports`, `revoke_port` | `uv run python examples/preview_ports.py` |
-| [`upload_download.py`](./upload_download.py) | `files.upload_file` with progress, `files.download_file`, compare sizes | `uv run python examples/upload_download.py` |
-| [`audit_trail.py`](./audit_trail.py) | `sandbox.audit()` — run commands, then page through the audit trail | `uv run python examples/audit_trail.py` |
-| [`agent_ports_audit.py`](./agent_ports_audit.py) | Agent `expose_port(slug=...)`, `keepalive`, `audit` | `uv run python examples/agent_ports_audit.py` |
-| [`pty.py`](./pty.py) | `pty.create(...)` — interactive PTY over WebSocket: `on_data`, `send_input`, `wait` | `uv run python examples/pty.py` |
-| [`ssh_tunnel.py`](./ssh_tunnel.py) | `sandbox.ssh()` over a BYOI image — exec, `rsync` upload, and `ssh -L` port-forward through one tunnel | `uv run python examples/ssh_tunnel.py` |
-| [`streaming_exec.py`](./streaming_exec.py) | `exec_stream` — stdout/stderr streamed line-by-line | `uv run python examples/streaming_exec.py` |
-| [`processes.py`](./processes.py) | `refresh` (connect_url poll), `wait_until_ready`, `processes.list` (runtime probe), `start`, `follow`, `logs`, `kill`, `wait` | `uv run python examples/processes.py` |
-| [`code_interpreter.py`](./code_interpreter.py) | `sandbox.code` — state kept between runs, an exception as a result, a second context | `uv run python examples/code_interpreter.py` |
-| [`process_pool.py`](./process_pool.py) | Same wait pattern as `processes.py`, parallel `start`, `list`, `kill_all`, `wait` | `uv run python examples/process_pool.py` |
-| [`docker.py`](./docker.py) | `sandboxes.create` from `sb-ubuntu-26-04-docker`, `exec` `start-docker`, then `docker run --network=host` | `uv run python examples/docker.py` |
-| [`parallel_fanout.py`](./parallel_fanout.py) | Multiple `sandboxes.create`, parallel `exec` via `ThreadPoolExecutor` | `uv run python examples/parallel_fanout.py` |
-| [`sandbox_metrics.py`](./sandbox_metrics.py) | `metrics()` polled under simulated CPU load | `uv run python examples/sandbox_metrics.py` |
-| [`raw_request.py`](./raw_request.py) | `client.raw.request` — untyped API access | `uv run python examples/raw_request.py` |
-| [`sandbox_lifecycle_controller.py`](./sandbox_lifecycle_controller.py) | CLI over `client.sandboxes` — create, list, get, pause, resume, delete, metrics | `uv run python examples/sandbox_lifecycle_controller.py --help` |
-
-**Lifecycle controller** — useful for manual testing without writing a script:
-
-```sh
+```bash
 uv run python examples/sandbox_lifecycle_controller.py create --name my-sandbox --wait
 uv run python examples/sandbox_lifecycle_controller.py list --limit 20
 uv run python examples/sandbox_lifecycle_controller.py metrics <sandbox-id>
 ```
 
-## Tier 2 — Agent Integration (with an AI model)
+## Agents
 
-These drive NeevCloud `gpt-oss-120b` over the OpenAI-compatible inference
-endpoint. Add an inference key (falls back to `NEEV_API_KEY` when sandbox
-and inference keys are the same):
+These need only your credentials.
 
-```sh
-export NEEV_INFERENCE_API_KEY=...          # preferred; falls back to NEEV_API_KEY
-# inference endpoint defaults to https://inference.ai.neevcloud.com/v1
-```
+| Example | Shows |
+| --- | --- |
+| [`create_agent.py`](create_agent.py) | Create an agent, use its sandbox, update, pause, delete |
+| [`agent_ports_audit.py`](agent_ports_audit.py) | An agent's preview URL, keepalive and audit trail |
 
-| File | SDK features | Extra install | Run |
-|------|--------------|---------------|-----|
-| [`agent_patterns/minimal_agent.py`](./agent_patterns/minimal_agent.py) | `sandboxes.create`, `wait_until_ready`, `exec_stream`, `delete` | none (`neevai` + `httpx`) | `uv run python examples/agent_patterns/minimal_agent.py` |
-| [`agent_patterns/agent_tools_loop.py`](./agent_patterns/agent_tools_loop.py) | `neevai.agent_tools`: `SandboxTools`, `DESCRIPTIONS`, `PARAMETERS`, `call` | none (`neevai` + `httpx`) | `uv run python examples/agent_patterns/agent_tools_loop.py` |
-| [`agent_patterns/langchain_agent.py`](./agent_patterns/langchain_agent.py) | Same sandbox APIs via `SandboxCodeExecutor` | `uv sync --extra agents` | `uv run --extra agents python examples/agent_patterns/langchain_agent.py` |
+## Agent tools
 
-See [`agent_patterns/README.md`](./agent_patterns/README.md) for helper modules
-and framework-specific detail.
+These connect a model to a sandbox as a tool. They use NeevCloud inference and your
+API key unless you set `NEEV_INFERENCE_API_KEY`.
 
-## Tier 3 — Real-World Workflows
+| Example | Shows | Extra install |
+| --- | --- | --- |
+| [`agent_patterns/minimal_agent.py`](agent_patterns/minimal_agent.py) | A small agent loop with streamed tool output | None |
+| [`agent_patterns/agent_tools_loop.py`](agent_patterns/agent_tools_loop.py) | The ready-made `neevai.agent_tools` | None |
+| [`agent_patterns/langchain_agent.py`](agent_patterns/langchain_agent.py) | A LangGraph agent | `uv sync --extra agents` |
 
-[`workflow_examples/`](./workflow_examples/) contains two hand-rolled agent demos
-backed by a shared [`StreamingAgentLoop`](./agent_patterns/utils/agent_loop.py).
-Each registers a `run_shell` tool — the model writes shell, it executes in the
-sandbox, and artifacts are saved locally on exit.
+Run the LangChain example with `uv run --extra agents python examples/agent_patterns/langchain_agent.py`.
+See [`agent_patterns/README.md`](agent_patterns/README.md) for details.
 
-| Example | SDK features | Artifact |
-|---------|--------------|----------|
-| [`repo_analyzer.py`](./workflow_examples/repo_analyzer.py) | `sandboxes.create`, `exec`, `files.write` (bootstrap), `delete` | `workflow_examples/output/repo-analysis.md` |
-| [`browser_agent.py`](./workflow_examples/browser_agent.py) | `sandboxes.create`, `exec`, `files.read` (artifact pull), `delete` | `workflow_examples/output/results.md` |
+## Workflows
 
-See [`workflow_examples/README.md`](./workflow_examples/README.md) for CLI flags,
-template recommendations, and environment variables.
+Complete agent workflows that save their results locally.
 
-```sh
-# Hero example — repo analyzer
+| Example | Shows | Saves |
+| --- | --- | --- |
+| [`workflow_examples/repo_analyzer.py`](workflow_examples/repo_analyzer.py) | Clone and review a repository | `workflow_examples/output/repo-analysis.md` |
+| [`workflow_examples/browser_agent.py`](workflow_examples/browser_agent.py) | Browse a site and summarise it | `workflow_examples/output/results.md` |
+
+```bash
 uv run python examples/workflow_examples/repo_analyzer.py
-
-# Browser automation (Hacker News scrape)
 uv run python examples/workflow_examples/browser_agent.py --query "AI"
 ```
 
-## Two agent stacks
+See [`workflow_examples/README.md`](workflow_examples/README.md) for options.
 
-The agent examples use two complementary integration patterns:
-
-- **`SandboxCodeExecutor`** — used by [`langchain_agent.py`](./agent_patterns/langchain_agent.py).
-  Provisions one sandbox and exposes `run_python` / `run_shell` as tool methods.
-- **Hand-rolled / `StreamingAgentLoop`** — used by [`minimal_agent.py`](./agent_patterns/minimal_agent.py)
-  and the workflow examples. Implements (or wraps) a tool-dispatch loop that
-  streams tool output live and pulls artifacts from the sandbox on exit.
-
-Shared helpers live under [`agent_patterns/utils/`](./agent_patterns/utils/):
-
-| Module | Used by |
-|--------|---------|
-| [`model_config.py`](./agent_patterns/utils/model_config.py) | All model-driven examples |
-| [`sandbox_tool.py`](./agent_patterns/utils/sandbox_tool.py) | `langchain_agent.py` |
-| [`agent_loop.py`](./agent_patterns/utils/agent_loop.py) | `workflow_examples/*` |
-
-## Step-by-step: run every example
-
-Do the [Quick setup](#quick-setup-once) once, then run each in order. Each
-example provisions a real sandbox, so the project needs available credits.
-
-**1. Templates and create**
-
-```sh
-uv run python examples/templates_list.py
-```
-
-**1b. Platform agent lifecycle**
-
-```sh
-uv run python examples/create_agent.py
-```
-
-**2. Lifecycle**
-
-```sh
-uv run python examples/sandbox_lifecycle.py
-```
-
-**3. Snapshot, restore, and fork**
-
-```sh
-uv run python examples/snapshot_fork_restore.py
-```
-
-**4. Async workflow**
-
-```sh
-uv run python examples/async_sandbox.py
-```
-
-**5. Files API**
-
-```sh
-uv run python examples/files_api.py
-```
-
-**6. Streaming exec**
-
-```sh
-uv run python examples/streaming_exec.py
-```
-
-**7. Supervised processes** — connect_url wait, Ready, runtime probe, then
-start / follow / logs / kill
-
-```sh
-uv run python examples/processes.py
-```
-
-**8. Process pool** — parallel starts and `kill_all`
-
-```sh
-uv run python examples/process_pool.py
-```
-
-**9. Parallel fan-out** — three sandboxes analyze public repos in parallel and
-print aggregated file counts
-
-```sh
-uv run python examples/parallel_fanout.py
-```
-
-**10. Metrics under load**
-
-```sh
-uv run python examples/sandbox_metrics.py
-```
-
-**11. Raw request** (optional)
-
-```sh
-uv run python examples/raw_request.py
-```
-
-The remaining examples need an AI model — set `NEEV_INFERENCE_API_KEY` (see [Tier 2](#tier-2--agent-integration-with-an-ai-model)).
-
-**12. Minimal agent** (no extra deps)
-
-```sh
-uv run python examples/agent_patterns/minimal_agent.py
-```
-
-**13. LangChain**
-
-```sh
-uv sync --extra agents
-uv run --extra agents python examples/agent_patterns/langchain_agent.py
-```
-
-**14. Repository analyzer**
-
-```sh
-uv run python examples/workflow_examples/repo_analyzer.py
-```
-
-**15. Browser automation**
-
-```sh
-uv run python examples/workflow_examples/browser_agent.py
-```
-
-**16. (Optional) Browser with query filter**
-
-```sh
-uv run python examples/workflow_examples/browser_agent.py --query "AI"
-```
-
-## Environment reference
+## Environment variables
 
 | Variable | Used by | Default |
-|----------|---------|---------|
-| `NEEV_API_KEY` | all | — (required) |
-| `NEEV_ORG_ID` | all | — (required) |
-| `NEEV_PROJECT_ID` | all | — (required) |
-| `NEEV_BASE_URL` | all | `https://api.ai.neevcloud.com/agent` |
-| `NEEV_SANDBOX_TEMPLATE_ID` | sandbox create | `sb-ubuntu-26-04-dev` |
+| --- | --- | --- |
+| `NEEV_API_KEY` | All | Required |
+| `NEEV_ORG_ID` | All | Required |
+| `NEEV_PROJECT_ID` | All | Required |
+| `NEEV_SANDBOX_TEMPLATE_ID` | Sandbox examples | `sb-ubuntu-26-04-dev` |
 | `NEEV_AGENT_TEMPLATE` | `create_agent.py` | `claude-code` |
-| `NEEV_INFERENCE_API_KEY` | model examples | falls back to `NEEV_API_KEY` |
-| `NEEV_INFERENCE_BASE_URL` | model examples | `https://inference.ai.neevcloud.com/v1` |
-| `NEEV_MODEL` | model + workflow_examples | `gpt-oss-120b` |
-| `NEEVAI_WORKFLOW_MAX_STEPS` | workflow_examples | `35` (`repo_analyzer`), `70` (`browser_agent`) |
-| `NEEVAI_WAIT_TIMEOUT_MS` | `sandbox_lifecycle.py`, `snapshot_fork_restore.py`, `processes.py`, `process_pool.py`, lifecycle controller | `300000` |
+| `NEEV_INFERENCE_API_KEY` | Agent and workflow examples | `NEEV_API_KEY` |
+| `NEEV_INFERENCE_BASE_URL` | Agent and workflow examples | `https://inference.ai.neevcloud.com/v1` |
+| `NEEV_MODEL` | Agent and workflow examples | `gpt-oss-120b` |
+| `NEEVAI_WORKFLOW_MAX_STEPS` | Workflow examples | 35 (`repo_analyzer`), 70 (`browser_agent`) |
+| `NEEVAI_WAIT_TIMEOUT_MS` | Lifecycle, snapshot and process examples | `300000` |
 | `NEEVAI_POLL_INTERVAL_MS` | `processes.py`, `process_pool.py` | `2000` |
 | `NEEVAI_SNAPSHOT_POLL_MS` | `snapshot_fork_restore.py` | `3000` |
 | `NEEVAI_STEP_DELAY_SEC` | `sandbox_lifecycle.py` | `3` |
-| `NEEV_GIT_STATIC_URL` | `repo_analyzer.py` | — (optional static git binary URL) |
+| `NEEV_GIT_STATIC_URL` | `repo_analyzer.py` | Optional |
 
 ## Notes
 
-- Sandbox file paths are relative to the workspace or absolute within it — the sandbox refuses paths outside it.
-- The default `sb-ubuntu-26-04-dev` template ships `bash`, `python3` and `node`. List the
-  catalogue with `client.templates.list()`.
-- Python examples call `wait_until_ready()` explicitly before `exec` / `exec_stream`
-  (the TS SDK auto-waits on first use).
-- `processes.py` and `process_pool.py` poll until `connect_url` is set, call
-  `wait_until_ready()`, then probe the sandbox runtime with `sandbox.processes.list()`
-  before `processes.start` (tunable via `NEEVAI_WAIT_TIMEOUT_MS` /
-  `NEEVAI_POLL_INTERVAL_MS`).
-- Progress/transcript output goes to **stderr**; an example's result goes to **stdout**.
+- File paths are relative to the workspace, or absolute inside it.
+- Examples call `wait_until_ready()` before running commands.
+- Progress goes to stderr; each example's result goes to stdout.
+- For which example covers which API, see [example coverage](../docs/example-coverage.md).

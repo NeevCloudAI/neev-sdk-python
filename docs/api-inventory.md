@@ -1,18 +1,11 @@
-# NeevAI Python SDK — API Inventory
+# API inventory
 
-Complete, hand-maintained inventory of the public `neevai` package: per-method
-reference, type field tables, symbol index, and contract notes. Use this document
-when you need exhaustive detail on the entire SDK surface.
-
-For installation, credentials, and first scripts, see
-[`getting-started.md`](./getting-started.md). For lifecycle vs runtime API
-lists and copy-paste snippets, see [`api-reference.md`](./api-reference.md). For
-which examples demonstrate which APIs, see
-[`example-coverage.md`](./example-coverage.md).
+The complete reference for the public `neevai` package: every method's parameters,
+type fields, errors and a symbol index. For a task-oriented overview, see the
+[API reference](api-reference.md); to get set up, see [Getting started](getting-started.md).
 
 ## Table of contents
 
-- Getting started → [`getting-started.md`](./getting-started.md)
 - [Top-level exports](#top-level-exports)
 - [Client](#client)
 - [Sandboxes resource](#sandboxes-resource)
@@ -20,15 +13,16 @@ which examples demonstrate which APIs, see
   - [list](#clientsandboxeslistpagenone-limitnone-namenone-statusnone-sandbox_idnone-org_idnone-project_idnone--labelsnone)
   - [get](#clientsandboxesgetid-org_idnone-project_idnone)
   - [update](#clientsandboxesupdateid-params-org_idnone-project_idnone--allow_internetnone-allow_egressnone)
-  - [pause](#clientsandboxespauseid-org_idnone-project_idnone)
+  - [pause](#clientsandboxespauseid--org_idnone-project_idnone)
   - [resume](#clientsandboxesresumeid-org_idnone-project_idnone)
   - [keepalive](#clientsandboxeskeepaliveid-org_idnone-project_idnone)
   - [update_timeout](#clientsandboxesupdate_timeoutid-params-org_idnone-project_idnone)
   - [delete](#clientsandboxesdeleteid-org_idnone-project_idnone)
-  - [metrics](#clientsandboxesmetricsid-from_none-to-none-step-none-org_idnone-project_idnone)
+  - [metrics](#clientsandboxesmetricsid-from_none-tonone-stepnone-org_idnone-project_idnone)
   - [create_snapshot](#clientsandboxescreate_snapshotid-paramsnone-org_idnone-project_idnone)
-  - [list_snapshots](#clientsandboxeslist_snapshotsid-page-none-limit-none-org_idnone-project_idnone)
+  - [list_snapshots](#clientsandboxeslist_snapshotsid-pagenone-limitnone-org_idnone-project_idnone)
   - [get_snapshot](#clientsandboxesget_snapshotsnapshot_id-org_idnone-project_idnone)
+  - [wait_for_snapshot](#clientsandboxeswait_for_snapshotsnapshot_id-timeout_ms300000-poll_interval_ms2000-org_idnone-project_idnone)
   - [delete_snapshot](#clientsandboxesdelete_snapshotsnapshot_id-org_idnone-project_idnone)
   - [rollback](#clientsandboxesrollbackid-snapshot_id-org_idnone-project_idnone)
   - [fork](#clientsandboxesforkid-name-org_idnone-project_idnone)
@@ -49,9 +43,7 @@ which examples demonstrate which APIs, see
 - [Sync/async parity](#syncasync-parity)
 - [Symbol index by module](#symbol-index-by-module)
 - [Contract notes](#contract-notes)
-- [Maintaining this inventory](#maintaining-this-inventory)
 
----
 
 ## Top-level exports
 
@@ -157,7 +149,6 @@ Types exported from `neevai.types.__all__`:
 | `CreateSnapshotRequest` / `ForkSandboxRequest` / `RestoreSandboxRequest` | model | generated |
 | `WatchEvent` | model | `types.py` |
 
----
 
 ## Client
 
@@ -178,7 +169,6 @@ Synchronous platform client. Exposes three resource namespaces:
 | `api_key` | `str \| None` | `NEEV_API_KEY` | Bearer token |
 | `org_id` | `str \| None` | `NEEV_ORG_ID` | Default org scope |
 | `project_id` | `str \| None` | `NEEV_PROJECT_ID` | Default project scope |
-| `base_url` | `str \| None` | `https://api.ai.neevcloud.com/agent` | Lifecycle URL |
 | `timeout_ms` | `int` | `60000` | Per-request timeout |
 | `max_retries` | `int` | `2` | Retries on network / 429 / 5xx |
 | `client` | `httpx.Client \| None` | new client | Inject custom HTTP client |
@@ -203,7 +193,6 @@ Async variant with identical constructor parameters and resource layout. Use
 `async with AsyncNeevAI() as client:` and `await client.aclose()` when not using a
 context manager.
 
----
 
 ## Sandboxes resource
 
@@ -480,8 +469,9 @@ while True:
 
 ### `client.sandboxes.create_snapshot(id, params=None, org_id=None, project_id=None)`
 
-Creates a filesystem snapshot of a sandbox. Returns immediately with
-`status=Pending`; poll `get_snapshot` until `Ready` before restoring.
+Creates a snapshot of a sandbox's full state: its files and the memory of its running
+processes. Returns immediately with `status=Pending`; call `wait_for_snapshot` before
+restoring.
 
 **Parameters:**
 
@@ -535,6 +525,26 @@ if current.status == SnapshotStatus.Ready:
 **Async:** `current = await client.sandboxes.get_snapshot(...)`
 
 **Example:** [`snapshot_fork_restore.py`](../examples/snapshot_fork_restore.py)
+
+### `client.sandboxes.wait_for_snapshot(snapshot_id, timeout_ms=300000, poll_interval_ms=2000, org_id=None, project_id=None)`
+
+Polls a snapshot until it is `Ready` and returns it.
+
+| Parameter | Default | Meaning |
+| --- | --- | --- |
+| `timeout_ms` | `300000` | How long to wait for `Ready` |
+| `poll_interval_ms` | `2000` | Delay between status checks |
+
+**Returns:** the `Ready` `Snapshot`.
+
+**Raises:** `NeevAIError` if the snapshot `Failed` (the message carries its reason), if it
+is not `Ready` within `timeout_ms`, or if a timing is not a positive number.
+
+```python
+snap = client.sandboxes.wait_for_snapshot(str(pending.id))
+```
+
+**Async:** `snap = await client.sandboxes.wait_for_snapshot(...)`
 
 ### `client.sandboxes.delete_snapshot(snapshot_id, org_id=None, project_id=None)`
 
@@ -599,7 +609,6 @@ restored.wait_until_ready()
 
 **Example:** [`snapshot_fork_restore.py`](../examples/snapshot_fork_restore.py)
 
----
 
 ## Agents resource
 
@@ -678,7 +687,6 @@ The agent's audit trail, with the same events, filters and recording rules as
 
 **Example:** [`agent_ports_audit.py`](../examples/agent_ports_audit.py)
 
----
 
 ## Agent templates resource
 
@@ -695,7 +703,6 @@ Paths: `/api/v1beta1/agent-templates`.
 
 **Example:** [`create_agent.py`](../examples/create_agent.py)
 
----
 
 ## Templates resource
 
@@ -726,7 +733,6 @@ tmpl = client.templates.get("tmpl-abc123")
 print(tmpl.description)
 ```
 
----
 
 ## Agent handle
 
@@ -779,7 +785,6 @@ Delegate to `client.agents` with scope threading. Empty `update({})` raises loca
 
 **Example:** [`create_agent.py`](../examples/create_agent.py)
 
----
 
 ## Sandbox handle
 
@@ -967,14 +972,17 @@ Requires the `websockets` package (a dependency of the SDK).
 
 **Example:** [`ssh_tunnel.py`](../examples/ssh_tunnel.py)
 
-### `sandbox.snapshot(params=None)` / `sandbox.snapshots()`
+### `sandbox.snapshot(params=None, *, wait_until_ready=False, timeout_ms=300000, poll_interval_ms=2000)` / `sandbox.snapshots()`
 
 Convenience wrappers for `create_snapshot` and `list_snapshots` on this sandbox.
+With `wait_until_ready=True`, `snapshot` waits as `wait_for_snapshot` does and returns
+the `Ready` snapshot.
 
 `snapshot` returns a `Snapshot` model (not a handle). `snapshots` returns `list[Snapshot]`.
 
 ```python
 pending = sandbox.snapshot({"name": "demo-snap"})
+ready = sandbox.snapshot({"name": "checkpoint"}, wait_until_ready=True)
 all_snaps = sandbox.snapshots()
 ```
 
@@ -1012,7 +1020,6 @@ fork = sandbox.fork("fork-name")
 Returns the raw API record as a JSON-compatible `dict` suitable for
 `json.dumps(sandbox.to_json())`.
 
----
 
 ## Exec and streaming
 
@@ -1089,7 +1096,6 @@ Sync: `for event in sandbox.exec_stream(...)`. Async:
 
 **Example:** [`streaming_exec.py`](../examples/streaming_exec.py)
 
----
 
 ## Files API
 
@@ -1210,7 +1216,6 @@ for event in sandbox.files.watch(".", recursive=True):
 
 **Examples:** [`files_api.py`](../examples/files_api.py)
 
----
 
 ## Processes API
 
@@ -1448,7 +1453,6 @@ for event in proc.follow():
 **Examples:** [`processes.py`](../examples/processes.py),
 [`process_pool.py`](../examples/process_pool.py)
 
----
 
 ## Runtime connection
 
@@ -1485,7 +1489,6 @@ finally:
     conn.close()
 ```
 
----
 
 ## Agent tools
 
@@ -1604,7 +1607,6 @@ Adapters in `neevai.agent_tools` (each needs its framework, installed through th
 `ToolResult` is the union of all of them; `ToolName` is a `Literal` of the
 thirteen tool names.
 
----
 
 ## Raw client
 
@@ -1641,7 +1643,6 @@ created = client.raw.request(
 
 **Example:** [`raw_request.py`](../examples/raw_request.py)
 
----
 
 ## Types reference
 
@@ -2077,7 +2078,6 @@ sends `15`).
 | `Signal.KILL` | `9` |
 | `Signal.TERM` | `15` |
 
----
 
 ## Errors
 
@@ -2122,7 +2122,6 @@ except NeevAIError as e:
     print(f"SDK error: {e}")
 ```
 
----
 
 ## Pagination types
 
@@ -2167,7 +2166,6 @@ Returned from `list()` methods; not exported at package root.
 List methods for agents and agent templates omit `page`/`limit` from the query
 when unset (server defaults apply).
 
----
 
 ## Sync/async parity
 
@@ -2196,7 +2194,6 @@ No sync-only or async-only public methods. Pagination types mirror each other
 (`SandboxPage` / `AsyncSandboxPage`, `TemplatePage` / `AsyncTemplatePage`,
 `AgentPage` / `AsyncAgentPage`, `AgentTemplatePage` / `AsyncAgentTemplatePage`).
 
----
 
 ## Symbol index by module
 
@@ -2208,7 +2205,7 @@ Compact reviewer index. Each symbol should also appear in
 | Symbol | Kind | Description |
 | ------ | ---- | ----------- |
 | `NeevAI` | class | Sync platform client; exposes `.sandboxes`, `.agents`, `.agent_templates`, `.templates`, `.raw` |
-| `NeevAI.__init__` | method | `api_key`, `org_id`, `project_id`, `base_url`, `timeout_ms`, `max_retries`, `client` |
+| `NeevAI.__init__` | method | `api_key`, `org_id`, `project_id`, `timeout_ms`, `max_retries`, `client` |
 | `NeevAI.close` | method | Release HTTP transport |
 | `AsyncNeevAI` | class | Async platform client |
 | `AsyncNeevAI.aclose` | method | Release async HTTP transport |
@@ -2231,6 +2228,7 @@ Compact reviewer index. Each symbol should also appear in
 | `Sandboxes.create_snapshot` | method | `Snapshot` |
 | `Sandboxes.list_snapshots` | method | `list[Snapshot]` |
 | `Sandboxes.get_snapshot` | method | `Snapshot` |
+| `Sandboxes.wait_for_snapshot` | method | `Snapshot` |
 | `Sandboxes.delete_snapshot` | method | `None` |
 | `Sandboxes.rollback` | method | `Sandbox` |
 | `Sandboxes.fork` | method | `Sandbox` |
@@ -2369,7 +2367,6 @@ Compact reviewer index. Each symbol should also appear in
 | `RawClient.request` | method | Untyped API |
 | `AsyncRawClient.request` | method | Async variant |
 
----
 
 ## Contract notes
 
@@ -2381,8 +2378,7 @@ Compact reviewer index. Each symbol should also appear in
   deprecated `error` text.
 - `Scope` is exported from both `neevai` and `neevai.types` intentionally.
 - Pagination types are public but not in top-level `__all__`.
-- Client env vars: `NEEV_API_KEY`, `NEEV_ORG_ID`, `NEEV_PROJECT_ID`, and
-  `NEEV_BASE_URL` (default: `https://api.ai.neevcloud.com/agent`).
+- Client env vars: `NEEV_API_KEY`, `NEEV_ORG_ID` and `NEEV_PROJECT_ID`.
 - Sandbox create uses `sandbox_template_id` in params (not `template_id`).
 - `Sandbox.pause()` / `.resume()` return updated handles (not `None`).
 - `connect_url` is a property on `Sandbox`, not a method.
@@ -2392,26 +2388,9 @@ Compact reviewer index. Each symbol should also appear in
   against `{connect_url}/v1/processes/*` with no transport retries. Wait for
   `connect_url`, `phase == "Ready"`, and a successful `processes.list()` probe
   before `start` — see [Processes API](#processes-api).
-- Snapshot create returns `Pending` immediately; poll `get_snapshot` until `Ready`.
+- Snapshot create returns `Pending` immediately; `wait_for_snapshot` waits until `Ready`.
 - To recover into a new sandbox, prefer `sandboxes.create({..., "restore": snapshot_id})`
   over in-place `rollback()`, which can come back with an empty workspace. `from_snapshot` is a deprecated alias for the create `restore` field.
 - `rollback()`, `pause()`, and `resume()` invalidate the cached runtime connection
   on the handle; call `wait_until_ready()` again before file/exec/process operations when
   needed.
-
----
-
-## Maintaining this inventory
-
-Update manually when the public API changes. Cross-check against `src/neevai/`.
-
-On API changes, also update:
-
-- [`docs/getting-started.md`](./getting-started.md) — if install, env vars, or quick-start flows change
-- [`docs/api-reference.md`](./api-reference.md) — API/sandbox runtime lists and inline snippet table
-- [`docs/example-coverage.md`](./example-coverage.md) — example catalog and API → examples lookup
-- [`examples/`](../examples/) — if a new capability lacks an example
-
-After `scripts/gen_types.py`, verify type field tables **here only** match
-`src/neevai/generated/`. Type tables live in this inventory, not in
-`api-reference.md`.

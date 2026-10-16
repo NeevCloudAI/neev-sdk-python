@@ -1,357 +1,415 @@
-# NeevAI Python SDK
+# NeevCloud SDK for Python
 
-Official Python client for the [NeevCloud](https://neevcloud.com) AI platform. Use it to
-provision sandboxes, run commands, manage files, and integrate with agent workflows.
+The official Python client for NeevCloud, published as `neevai`.
 
-## Prerequisites
+[![PyPI](https://img.shields.io/pypi/v/neevai)](https://pypi.org/project/neevai/)
+[![Python](https://img.shields.io/pypi/pyversions/neevai)](https://pypi.org/project/neevai/)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
+[![CI](https://github.com/NeevCloudAI/neev-sdk-python/actions/workflows/python-ci.yml/badge.svg)](https://github.com/NeevCloudAI/neev-sdk-python/actions/workflows/python-ci.yml)
 
-- **Python ≥ 3.10**
-- **Supported OS:** Windows, macOS, Linux
-- **[uv](https://docs.astral.sh/uv/)** (recommended for running examples from this repo; optional if you use pip and a virtual environment)
+One package for the NeevCloud products you build with: Sandboxes, Agents and Agent tools
+today, with more to come. It works sync or async, with one client, one API key, and
+typed requests, responses and errors.
 
-See [`docs/getting-started.md`](docs/getting-started.md) for per-OS `uv` install commands and a full walkthrough.
+## Contents
 
-## Installation
+- [Install](#install)
+- [Quick start](#quick-start)
+- [Products](#products)
+- [Sandboxes](#sandboxes)
+- [Agents](#agents)
+- [Agent tools](#agent-tools)
+- [Errors](#errors)
+- [Configuration](#configuration)
+- [Examples](#examples)
+- [Documentation](#documentation)
+- [Security](#security)
+- [License](#license)
+
+## Install
 
 ```bash
 pip install neevai
+# or
+uv add neevai
 ```
 
-### Install from source (contributors)
+Requires Python 3.10 or later, on Linux, macOS or Windows.
 
-Clone the repository and install in editable mode with [uv](https://docs.astral.sh/uv/):
+## Quick start
 
-```bash
-git clone https://github.com/NeevCloudAI/neev-sdk-python.git
-cd neev-sdk-python
-uv sync
-```
-
-`uv sync` creates a local environment and installs the package in editable mode. Run examples from the repo root with `uv run python ...`.
-
-## Configure credentials
-
-Set these environment variables before running scripts, or pass equivalent kwargs to `NeevAI(...)` / `AsyncNeevAI(...)`.
-
-| Variable | Purpose |
-| -------- | ------- |
-| `NEEV_API_KEY` | Bearer token (**required**) |
-| `NEEV_ORG_ID` | Default organization ID |
-| `NEEV_PROJECT_ID` | Default project ID |
-| `NEEV_BASE_URL` | Base URL (default: `https://api.ai.neevcloud.com/agent`) |
-| `NEEV_SANDBOX_TEMPLATE_ID` | Optional sandbox template id (defaults to `sb-ubuntu-26-04-dev` in examples) |
-| `NEEV_AGENT_TEMPLATE` | Optional agent template **name** for `create_agent.py` (default: `claude-code`) |
-
-**Linux / macOS (bash/zsh)** — current session:
+Set your credentials:
 
 ```bash
 export NEEV_API_KEY="your-api-key"
-export NEEV_ORG_ID="org-abc123"
-export NEEV_PROJECT_ID="proj-xyz789"
+export NEEV_ORG_ID="your-org-id"
+export NEEV_PROJECT_ID="your-project-id"
 ```
 
-**Windows PowerShell** — current session:
+Find your organization and project IDs as described in [Organizations and projects](https://docs.ai.neevcloud.com/getting-started/org-and-project#find-your-organization-id-and-project-id).
 
-```powershell
-$env:NEEV_API_KEY = "your-api-key"
-$env:NEEV_ORG_ID = "org-abc123"
-$env:NEEV_PROJECT_ID = "proj-xyz789"
-```
-
-**Windows CMD** — current session:
-
-```cmd
-set NEEV_API_KEY=your-api-key
-set NEEV_ORG_ID=org-abc123
-set NEEV_PROJECT_ID=proj-xyz789
-```
-
-You can also pass credentials directly when creating the client:
+Create a sandbox, run a command, read a file, and clean up:
 
 ```python
 from neevai import NeevAI
 
-with NeevAI(api_key="...", org_id="...", project_id="...") as client:
-    ...
+with NeevAI() as client:  # reads the NEEV_* variables
+    sandbox = client.sandboxes.create({"sandbox_template_id": "sb-ubuntu-26-04-dev"})
+    try:
+        sandbox.wait_until_ready()
+        result = sandbox.exec(["python3", "-c", "print(6 * 7)"])
+        print(result.stdout)  # 42
+
+        sandbox.files.write("hello.txt", "hello from NeevCloud\n")
+        print(sandbox.files.read_text("hello.txt"))
+    finally:
+        sandbox.delete()
 ```
 
-## Quick start (from clone)
+`AsyncNeevAI` offers the same API with `async`/`await`. See
+[`async_sandbox.py`](examples/async_sandbox.py).
 
-If you just cloned the repo, follow these steps to reach your first successful run:
+## Products
 
-1. Clone and enter the repo (see [Install from source (contributors)](#install-from-source-contributors) above if you have not already).
-2. Install dependencies: `uv sync`.
-4. Verify the install:
+| Product | What it is | Entry point | Guide |
+| --- | --- | --- | --- |
+| Sandboxes | Isolated machines that run your code, commands and servers | `client.sandboxes`, `client.templates` | [Sandboxes](#sandboxes) |
+| Agents | Ready-made coding agents, such as Claude Code, each on its own sandbox | `client.agents`, `client.agent_templates` | [Agents](#agents) |
+| Agent tools | A sandbox tool set, with model-ready schemas, for the agent you build | `neevai.agent_tools` | [Agent tools](#agent-tools) |
 
-   ```bash
-   uv run python -c "from neevai import NeevAI; print('ok')"
-   ```
+## Sandboxes
 
-5. Run your first example:
+A sandbox is an isolated machine for running code, commands and servers. You create it
+from a template, work inside it, and pause or delete it when you are done.
 
-   ```bash
-   uv run python examples/templates_list.py
-   ```
+| Capability | API | Example |
+| --- | --- | --- |
+| [Sandbox lifecycle](#sandbox-lifecycle) | `client.sandboxes.create / list / get / update / pause / resume / delete` | [`sandbox_lifecycle.py`](examples/sandbox_lifecycle.py) |
+| [Templates](#templates) | `client.templates.list / get` | [`templates_list.py`](examples/templates_list.py) |
+| [Files](#files) | `sandbox.files` | [`files_api.py`](examples/files_api.py) |
+| [Commands and processes](#commands-and-processes) | `sandbox.exec()`, `sandbox.processes` | [`processes.py`](examples/processes.py) |
+| [Terminals and SSH](#terminals-and-ssh) | `sandbox.pty`, `sandbox.ssh()` | [`pty.py`](examples/pty.py) |
+| [Preview URLs](#preview-urls) | `sandbox.get_url()`, `sandbox.expose_port()` | [`preview_ports.py`](examples/preview_ports.py) |
+| [Snapshots, fork and rollback](#snapshots-fork-and-rollback) | `sandbox.snapshot() / fork() / rollback()` | [`snapshot_fork_restore.py`](examples/snapshot_fork_restore.py) |
+| [Network egress](#network-egress) | `allow_internet`, `allow_egress`, `egress` | [`update_resize_egress.py`](examples/update_resize_egress.py) |
+| [Labels](#labels) | `labels=` on create and list | [`sandbox_labels.py`](examples/sandbox_labels.py) |
+| [Metrics](#metrics) | `sandbox.metrics()` | [`sandbox_metrics.py`](examples/sandbox_metrics.py) |
+| [Audit trail](#audit-trail) | `sandbox.audit()` | [`audit_trail.py`](examples/audit_trail.py) |
+| [Code interpreter](#code-interpreter) | `sandbox.code` | [`code_interpreter.py`](examples/code_interpreter.py) |
 
-6. **Expected outcome:** the script lists available sandbox templates, fetches one by id, creates a sandbox from it, waits until it is ready, then deletes it.
-7. **Next:** read [`docs/getting-started.md`](docs/getting-started.md) for full sync/async quick-start scripts and the documentation map.
+### Sandbox lifecycle
 
-## Minimal code example
+`create`, `get` and `list` return a `Sandbox` handle. Its lifecycle methods act on that
+sandbox, and `get` accepts an id or a name.
 
 ```python
-from neevai import NeevAI
+sandbox = client.sandboxes.create({"name": "build-1", "sandbox_template_id": "sb-ubuntu-26-04-dev"})
+sandbox.wait_until_ready()
 
-with NeevAI(api_key="...", org_id="...", project_id="...") as client:
-    sandbox = client.sandboxes.create({})
-    sandbox.wait_until_ready()
-    result = sandbox.exec("echo Hello World")
-    print(result.stdout)
-    client.sandboxes.delete(sandbox.id)
+sandbox.pause()  # release compute; files and running processes are kept
+sandbox.resume()
+sandbox.update({"resources": {"cpu": 2, "memory_gb": 4}})  # resize in place
+
+page = client.sandboxes.list(status="Paused", limit=50)
+sandbox.delete()
 ```
 
-## Detecting a crash
+Lifecycle windows stop a sandbox from running forever. Durations are in seconds.
 
-A sandbox that hits an OOM kill or another unexpected stop is restarted for you, so it
-reads back as `Ready` — but its filesystem may be gone. `last_crash` is how you tell:
+| Option | Meaning |
+| --- | --- |
+| `idle_timeout_seconds` | Act after this long with no activity |
+| `on_idle` | `"pause"` or `"delete"` |
+| `max_lifetime_seconds` | Hard limit on total lifetime |
+
+Set them in `lifecycle` at create time, change them with `sandbox.update_timeout(...)`,
+and reset the idle timer with `sandbox.keepalive()`.
+
+See [`sandbox_lifecycle.py`](examples/sandbox_lifecycle.py) · [`sandbox_lifecycle_windows.py`](examples/sandbox_lifecycle_windows.py) · [reference](docs/api-reference.md#clientsandboxes)
+
+### Templates
+
+A template is the image a sandbox starts from. Omit `sandbox_template_id` to use the
+default, or pick one from the catalogue.
 
 ```python
-crash = sandbox.last_crash  # None if this sandbox has never crashed
-if crash and crash.storage_reset:
-    # The sandbox restarted with an empty filesystem: files under /workspace,
-    # and anything installed since create, are gone. Re-provision before using it.
-    print(f"{crash.reason} at {crash.at}")
+page = client.templates.list()
+template = client.templates.get("sb-ubuntu-26-04-dev")
 ```
 
-`crash.storage_reset is False` means it restarted with its files intact. The field records
-a past event and is **not** cleared when the sandbox recovers, so check `crash.at` before
-reacting to it. Restoring from a snapshot taken before a stop that reset storage brings
-the files back and clears `last_crash` once the restore completes. Agents expose the same
-`agent.last_crash`. See [`last_crash.py`](examples/last_crash.py).
+Templates you can start from:
 
-## Files
+| Template | Use it for |
+| --- | --- |
+| `sb-ubuntu-26-04-dev` | General development: git, gh, Python 3, Node 24 LTS |
+| `sb-ubuntu-26-04-docker` | Docker, Compose and Buildx; run `start-docker` first, and run containers with `--network=host` |
+| `sb-ubuntu-26-04-interpreter` | The [code interpreter](#code-interpreter): Python kernels that keep their state |
+| `sb-ubuntu-26-04-playwright` | Browser testing: a desktop with Node 24, Playwright and Chromium, headless or headed (`DISPLAY=:1`) |
 
-Paths are relative to the workspace or absolute within it. `files.write` sends content
-up to 1 MiB in one request and anything larger in chunks automatically. For large files
-on disk, `upload_file` / `download_file` stream without holding the file in memory:
+The catalogue grows over time, so `templates.list()` is the source of truth. To use your
+own image instead, pass `image` (a public OCI image with a tag or digest).
+
+Playwright and Chromium come preinstalled on the Playwright template, so a project that
+pins the same Playwright version runs its tests with nothing to download:
 
 ```python
-sandbox.files.write("notes.txt", "hello\n")
-
-# Chunked and resumable: a chunk lost to a dropped connection continues from the
-# last byte the sandbox received. chunk_size is 1 MiB by default (64 KiB-1 MiB).
-sandbox.files.upload_file("dataset.parquet", "data/dataset.parquet",
-                          on_progress=lambda sent, total: print(f"{sent}/{total}"))
-
-# Written beside the target and moved into place when complete: no partial file.
-sandbox.files.download_file("data/dataset.parquet", "copy.parquet")
+browser = client.sandboxes.create({"sandbox_template_id": "sb-ubuntu-26-04-playwright"})
+browser.wait_until_ready()
+run = browser.exec(["npx", "playwright", "test"], cwd="app", timeout_ms=300_000)
 ```
 
-`files.upload(path, data)` takes bytes, str, or a seekable binary file object. See
-[`upload_download.py`](examples/upload_download.py).
+See [`docker.py`](examples/docker.py) · [`byoi_create.py`](examples/byoi_create.py) · [reference](docs/api-reference.md#templates)
 
-## Preview URLs
+### Files
 
-Ports are private until exposed. `get_url(port)` exposes one and returns its public,
-credential-free URL. The slug in the URL is the only thing gating it, so treat the URL
-as a secret; if it leaks, expose the port again with a new `slug` to rotate it:
+Paths are relative to the sandbox workspace, or absolute inside it.
 
 ```python
-url = sandbox.get_url(3000)
-sandbox.expose_port(3000, slug="k3x9q2mz")  # replaces the slug; the old URL stops working
-sandbox.revoke_port(3000)
+sandbox.files.write("main.py", "print('hi')")
+text = sandbox.files.read_text("main.py")
+entries = sandbox.files.list(".")
+
+sandbox.files.move("main.py", "app.py")
+sandbox.files.remove("build", recursive=True)
 ```
 
-Agents have the same `expose_port` / `list_ports` / `revoke_port` / `get_url`.
+Large writes are sent in resumable chunks automatically. `upload_file` and
+`download_file` move files between local disk and the sandbox without buffering them,
+and `files.watch` streams changes as they happen.
 
-## Audit trail
+See [`files_api.py`](examples/files_api.py) · [`upload_download.py`](examples/upload_download.py) · [reference](docs/api-reference.md#files)
 
-`sandbox.audit()` (and `agent.audit()`) reads what ran inside, newest first — terminal
-commands, SSH, process and file operations — as events in `data`, each with who made the call
-(`actor`) and how it ended (`status`). Program names are recorded without their arguments.
-`time` is milliseconds since the Unix epoch. Filter with `operation`, `status`, `actor_type`,
-`actor_uid` or `credential_uid`, and page with `next_cursor`:
+### Commands and processes
+
+`exec` runs a command to completion and returns its output. A non-zero exit code is
+returned, not raised.
 
 ```python
-trail = sandbox.audit(limit=50, operation=["exec", "pty_command"])
-for e in trail.data:
-    print(e.time, e.api.operation, e.actor.user.name or e.actor.user.uid, e.status)
-older = sandbox.audit(limit=50, cursor=trail.next_cursor) if trail.next_cursor else None
+result = sandbox.exec(["ls", "-la"])
+print(result.exit_code, result.stdout)
+
+# Stream output as it is produced.
+for event in sandbox.exec_stream(["npm", "test"]):
+    print(event)
 ```
 
-See [`audit_trail.py`](examples/audit_trail.py).
-
-## Labels
-
-Tag a sandbox with key-value labels at create time, then find it again by them:
+For work that should outlive one call, such as a dev server or a watcher, start a
+background process instead:
 
 ```python
-client.sandboxes.create(
-    {"name": "ci", "sandbox_template_id": "..."},
-    labels={"team": "payments", "ci-run": "4821"},
-)
-page = client.sandboxes.list(labels={"team": "payments"})  # every label must match
-print(page.items[0].labels)  # {'team': 'payments', 'ci-run': '4821'}
-```
-
-A sandbox takes at most 16 labels. Keys are 1-63 lowercase letters, digits, `.`, `_` or
-`-`, starting and ending with a letter or digit; values are up to 63 letters, digits,
-`.`, `_` or `-`. More than 16 labels or a value over 63 characters raises
-`ResponseValidationError` before the request is sent; a key or value in the wrong
-format is rejected by the server with `BadRequestError`.
-
-## Network egress
-
-Sandboxes (and agents) are **deny-all by default** — no outbound network. Open egress at
-create time with the convenience keyword args, on either `sandboxes.create` or
-`agents.create`:
-
-```python
-# allow the whole internet
-client.sandboxes.create({"name": "web", "sandbox_template_id": "..."}, allow_internet=True)
-
-# allow only specific hosts (FQDN or CIDR; wildcards supported)
-client.sandboxes.create({"name": "ci", "sandbox_template_id": "..."}, allow_egress=["github.com", "*.npmjs.org"])
-
-# same on agents
-client.agents.create({"name": "coder", "agent_template": "claude-code"}, allow_internet=True)
-```
-
-`allow_internet=True` opens all outbound traffic (`0.0.0.0/0` and `::/0`). For finer control
-(ports, protocols, a mix of rules) pass a full `egress` object in `params` instead — it
-takes precedence over the convenience args.
-
-On a running sandbox or agent, `update` either replaces the policy (`egress`) or edits the
-allow-list in place, leaving every other rule untouched:
-
-```python
-sandbox.update({
-    "egress_add": {"allow": [{"host": "pypi.org", "ports": [443]}]},
-    "egress_remove": {"allow": [{"host": "github.com"}]},
-})
-```
-
-## Errors
-
-Every failure raises a `NeevAIError` subclass: `NotFoundError` (404), `ConflictError`
-(409), `RateLimitError` (429), `ServiceUnavailableError` (503, worth retrying shortly; a
-subclass of `InternalServerError`), and so on. `APIError.code` is a machine-readable
-classification such as `not_found` or `sandbox_quota_exceeded` — branch on it rather than
-on the message text — and `APIError.scope` names the limit a quota refusal hit:
-
-```python
-from neevai.errors import APIError
-
-try:
-    client.sandboxes.create({"sandbox_template_id": "sb-ubuntu-26-04-dev"})
-except APIError as e:
-    if e.code == "sandbox_quota_exceeded":
-        print(f"quota reached for this {e.scope}")
-    else:
-        raise
-```
-
-## Long-running processes
-
-For detached workloads that outlive a single HTTP request, use `sandbox.processes`
-(unlike request-scoped `sandbox.exec`). Before `processes.start`, wait for
-`connect_url` (it may appear before `phase == "Ready"`), then
-`sandbox.wait_until_ready()`, then probe the sandbox runtime with
-`sandbox.processes.list()` (retry transient 502/503/504). Tune polling with
-`NEEVAI_WAIT_TIMEOUT_MS` and `NEEVAI_POLL_INTERVAL_MS`. See
-[Processes API — end-to-end flow](docs/api-inventory.md#processes-api) for auth,
-raw endpoints, and troubleshooting.
-
-```python
-proc = sandbox.processes.start(["sh", "-c", "echo started; sleep 30"])
-for event in proc.follow():
+server = sandbox.processes.start(["python3", "-m", "http.server", "8000"])
+for event in server.follow():
     if event["type"] == "stdout":
         print(event["data"], end="")
-    elif event["type"] == "exit":
-        print(f"exit {event['exit_code']}")
         break
-final = proc.wait()
+server.kill()
 ```
 
-See [`examples/processes.py`](examples/processes.py) and
-[`examples/process_pool.py`](examples/process_pool.py).
+See [`processes.py`](examples/processes.py) · [`streaming_exec.py`](examples/streaming_exec.py) · [reference](docs/api-reference.md#commands-and-processes)
 
-## Code interpreter
+### Terminals and SSH
 
-A sandbox created from the interpreter template runs Python in persistent kernels.
-Variables, imports and loaded data stay between runs in the same context, so each run
-builds on the last:
+`sandbox.pty` opens an interactive terminal. You send keystrokes and receive output
+through a callback.
+
+```python
+term = sandbox.pty.create(program="bash", cols=80, rows=24,
+                          on_data=lambda data: print(data.decode(), end=""))
+term.send_input("ls -la\n")
+```
+
+`sandbox.ssh()` opens a local port that forwards to the sandbox, so `ssh`, `scp`,
+`rsync` and IDE remote development work with no keys to manage.
+
+```python
+with sandbox.ssh() as tunnel:
+    print(f"ssh -p {tunnel.port} neev@localhost")
+```
+
+See [`pty.py`](examples/pty.py) · [`ssh_tunnel.py`](examples/ssh_tunnel.py) · [reference](docs/api-reference.md#terminals-and-ssh)
+
+### Preview URLs
+
+Expose a port and get a public HTTPS URL for it. `get_url` waits until the URL answers.
+
+```python
+sandbox.processes.start(["python3", "-m", "http.server", "3000"])
+url = sandbox.get_url(3000)
+```
+
+Anyone with the URL can open it, so treat it as a secret. Rotate it with
+`sandbox.expose_port(3000, slug=...)`, and close the port with `sandbox.revoke_port(3000)`.
+
+See [`preview_ports.py`](examples/preview_ports.py) · [reference](docs/api-reference.md#clientsandboxes)
+
+### Snapshots, fork and rollback
+
+A snapshot captures a sandbox's full state: its files and the memory of its running
+processes. Roll the sandbox back to it later, fork the
+sandbox's current state into a new one, or restore a snapshot into a new sandbox.
+
+```python
+snap = sandbox.snapshot({"name": "checkpoint"}, wait_until_ready=True)
+sandbox.rollback(snap.id)  # back to the snapshot, in place
+copy = sandbox.fork("my-fork")  # a new sandbox from the current state
+restored = client.sandboxes.create({"restore": snap.id})  # a new sandbox from the snapshot
+```
+
+See [`snapshot_fork_restore.py`](examples/snapshot_fork_restore.py) · [reference](docs/api-reference.md#snapshots-fork-and-rollback)
+
+### Network egress
+
+A sandbox has no outbound network unless you allow it, apart from any its template
+allows (the Docker template allows Docker Hub and GHCR).
+
+```python
+client.sandboxes.create({"sandbox_template_id": "sb-ubuntu-26-04-dev"}, allow_internet=True)
+client.sandboxes.create({"sandbox_template_id": "sb-ubuntu-26-04-dev"}, allow_egress=["github.com", "*.pypi.org"])
+
+# Edit a running sandbox's allow-list in place.
+sandbox.update({"egress_add": {"allow": [{"host": "pypi.org", "ports": [443]}]}})
+```
+
+For ports and protocols, pass a full `egress` policy instead.
+
+See [`update_resize_egress.py`](examples/update_resize_egress.py) · [reference](docs/api-reference.md#clientsandboxes)
+
+### Labels
+
+Tag sandboxes at create time and find them again by label.
+
+```python
+client.sandboxes.create({"sandbox_template_id": "sb-ubuntu-26-04-dev"}, labels={"team": "payments"})
+page = client.sandboxes.list(labels={"team": "payments"})
+```
+
+See [`sandbox_labels.py`](examples/sandbox_labels.py) · [reference](docs/api-reference.md#clientsandboxes)
+
+### Metrics
+
+Read CPU, memory and disk usage over a time window.
+
+```python
+metrics = sandbox.metrics(step="60s")
+```
+
+See [`sandbox_metrics.py`](examples/sandbox_metrics.py) · [reference](docs/api-reference.md#clientsandboxes)
+
+### Audit trail
+
+Read what was run inside a sandbox, newest first: commands, terminal and SSH sessions,
+and file and process operations. Each event says who made the call and how it ended.
+Programs are recorded by name only, never with their arguments.
+
+```python
+trail = sandbox.audit(operation="exec", status="failure")
+for e in trail.data:
+    print(e.time, e.api.operation, e.actor.user.uid, e.status)
+```
+
+Filter with `operation`, `status`, `actor_type`, `actor_uid` or `credential_uid`, and
+page back with `cursor=trail.next_cursor`. Events take a few seconds to appear after a
+call.
+
+See [`audit_trail.py`](examples/audit_trail.py) · [reference](docs/api-reference.md#clientsandboxes)
+
+### Code interpreter
+
+Sandboxes created from `sb-ubuntu-26-04-interpreter` run Python in kernels that keep
+their state between runs.
 
 ```python
 sandbox = client.sandboxes.create({"sandbox_template_id": "sb-ubuntu-26-04-interpreter"})
-sandbox.wait_until_ready()
 
 sandbox.code.run("import pandas as pd\ndf = pd.DataFrame({'x': [1, 2, 3]})")
-run = sandbox.code.run(
-    "print(df.x.sum())\ndf.describe()",
-    on_stdout=lambda out: print(out.line, end=""),  # OutputMessage(line, timestamp, error)
-)
-run.stdout            # "6\n"
-run.text              # the last expression's text, here the describe() table
-run.results[0].html   # text, html, markdown, svg, png, jpeg, pdf, latex, json; formats()
-run.execution_count   # 2
-run.end_reason        # "ok"
+run = sandbox.code.run("int(df.x.sum())")
+print(run.text)  # "6"
 ```
 
-Code that raises is returned, not raised: `end_reason` is `"error"` and `run.error`
-holds `name`, `value` and `traceback`. A run that outlives `timeout_ms` is interrupted
-with `end_reason == "deadline_exceeded"` and the context keeps its state;
-`"kernel_restarted"` and `"memory_exceeded"` mean the state was lost, which a change in
-`run.generation` also tells you. A run on a context that is still busy raises an
-`APIError` with `reason == "context_busy"`. A run or context call on a paused sandbox
-wakes it and waits up to two minutes, within `request_timeout_ms`.
+An exception in your code is returned in `run.error`, not raised. Use
+`sandbox.code.create_context()` for separate kernels with their own state.
 
-Run options: `context` (a context or its id), `language` (`"python"`, the default
-context's language), `envs` (environment variables for this run only, seen by
-subprocesses too), `timeout_ms` (the cell's timeout; the sandbox's ceiling is the
-default), `request_timeout_ms` (a bound on the whole request), and the `on_stdout` /
-`on_stderr` / `on_result` / `on_error` callbacks. `run.logs` holds the output pieces as
-they arrived.
+See [`code_interpreter.py`](examples/code_interpreter.py) · [reference](docs/api-reference.md#code-interpreter)
+
+## Agents
+
+An agent is a ready-made coding agent, such as Claude Code, running on its own sandbox.
+You choose an agent template, and the SDK manages the agent's life and gives you its
+sandbox to work with.
+
+| Capability | API | Example |
+| --- | --- | --- |
+| [Agent lifecycle](#agent-lifecycle) | `client.agents.create / list / get / update / pause / resume / delete` | [`create_agent.py`](examples/create_agent.py) |
+| [Agent templates](#agent-templates) | `client.agent_templates.list / get` | [`create_agent.py`](examples/create_agent.py) |
+| [Preview URLs and audit trail](#preview-urls-and-audit-trail) | `agent.get_url()`, `agent.expose_port()`, `agent.audit()` | [`agent_ports_audit.py`](examples/agent_ports_audit.py) |
+| [Working inside the agent's sandbox](#working-inside-the-agents-sandbox) | `agent.sandbox()` | [`create_agent.py`](examples/create_agent.py) |
+
+### Agent lifecycle
+
+`create`, `get` and `list` return an `Agent` handle, and `get` accepts an id or a name.
 
 ```python
-sandbox.code.run("import os\nprint(os.environ['STAGE'])", envs={"STAGE": "test"})
+agent = client.agents.create({"name": "my-coder", "agent_template": "claude-code"})
+agent.wait_until_ready()
+
+agent.update({"idle_timeout_seconds": 1800})  # also resources and egress
+agent.pause()
+agent.resume()
+agent.keepalive()  # reset the idle timer
+agent.delete()
 ```
 
-Each context is a separate kernel with its own state, started in its own working
-directory; a run sent while its kernel is still starting waits for it. Runs without a
-`context` use the `default` context:
+`agent.rollback(snapshot_id)` restores the agent's sandbox to a snapshot in place.
+
+See [`create_agent.py`](examples/create_agent.py) · [reference](docs/api-reference.md#agents)
+
+### Agent templates
+
+An agent template is the agent you run, such as `claude-code`. Pass its name as
+`agent_template` when you create an agent.
 
 ```python
-ctx = sandbox.code.create_context(cwd="project")  # CreatedCodeContext(context_id, generation, language, cwd)
-sandbox.code.run("import os\nprint(os.getcwd())", context=ctx)
-sandbox.code.list_contexts()       # [CodeContext(context_id, state, generation, language, cwd, rss_mib)]
-sandbox.code.restart_context(ctx)  # drops its state, returns the new generation
-sandbox.code.delete_context(ctx)
+page = client.agent_templates.list()
 ```
 
-See [`examples/code_interpreter.py`](examples/code_interpreter.py).
+See [`create_agent.py`](examples/create_agent.py) · [reference](docs/api-reference.md#agent-templates)
+
+### Preview URLs and audit trail
+
+Agents expose ports and keep an audit trail the same way sandboxes do.
+
+```python
+url = agent.get_url(3000)
+trail = agent.audit(limit=50)
+```
+
+See [`agent_ports_audit.py`](examples/agent_ports_audit.py) · [reference](docs/api-reference.md#agents)
+
+### Working inside the agent's sandbox
+
+`agent.sandbox()` returns the agent's sandbox as a `Sandbox` handle, so files, commands
+and processes work exactly as they do on any sandbox.
+
+```python
+sandbox = agent.sandbox()
+sandbox.files.write("task.md", "# scratch\n")
+result = sandbox.exec(["ls"])
+```
+
+See [`create_agent.py`](examples/create_agent.py) · [reference](docs/api-reference.md#agents)
 
 ## Agent tools
 
-`neevai.agent_tools` ships the sandbox tool contract for your own agent: tools
-like `run_command`, `write_file`, `read_file`, `stat_path`, `move_path` and
-`delete_path`, with model-ready descriptions
-and JSON Schemas, capped output, and errors the model can act on returned as
-`{"error": ...}`. Preview URLs, checkpoints and background processes are
-opt-in. It has no framework dependency: build tool specs from `DESCRIPTIONS`
-and `PARAMETERS` (with display titles in `TITLES`), and pass each tool call to
-`call(name, args)`.
-`AsyncSandboxTools` wraps an `AsyncSandbox` the same way.
+`neevai.agent_tools` gives the agent you build a ready-made set of sandbox tools, with
+descriptions and JSON schemas written for a model. Use it with any model API, or
+through an adapter for your agent framework.
 
-`read_file` returns a whole file cut in the middle past 10 KB, or, given
-`offset` and `length`, one page of whole UTF-8 characters with `next_offset` and
-`eof` so the model can read a large file in full. `allow_processes=True` adds
-`start_process`, `read_process_output`, `stop_process` and `list_processes`,
-which lists each process with the command it was started with.
+| Capability | API | Example |
+| --- | --- | --- |
+| [The tool contract](#the-tool-contract) | `SandboxTools`, `DESCRIPTIONS`, `PARAMETERS`, `FatalGuard` | [`agent_tools_loop.py`](examples/agent_patterns/agent_tools_loop.py) |
+| [Framework adapters](#framework-adapters) | `to_claude`, `to_openai_agents`, `to_langchain` | [`agent_patterns/`](examples/agent_patterns/README.md) |
 
-A command that prints nothing for about 2 minutes is cut off at the network
-edge; `run_command` then returns an error result telling the model to use
-`start_process`, so give it `allow_processes=True` for long or quiet work
-(`start_process` plus `read_process_output` with `wait_s`).
+### The tool contract
 
 ```python
 import json
@@ -360,149 +418,158 @@ from neevai.agent_tools import DESCRIPTIONS, PARAMETERS, SandboxTools
 
 tools = SandboxTools(sandbox, allow_processes=True)
 specs = [
-    {"type": "function", "function": {"name": n, "description": DESCRIPTIONS[n], "parameters": PARAMETERS[n]}}
+    {"name": n, "description": DESCRIPTIONS[n], "parameters": PARAMETERS[n]}
     for n in tools.names()
 ]
-# ... send specs to your model; for each tool call it returns:
-result = tools.call(tool_call.name, json.loads(tool_call.arguments))  # a JSON-serializable dict
+
+# For each tool call from the model:
+result = tools.call(tool_call.name, json.loads(tool_call.arguments))
 ```
 
-See the [tool contract](https://docs.ai.neevcloud.com/build-your-own-agent/tool-contract)
-for every tool's arguments and results, and
-[`examples/agent_patterns/agent_tools_loop.py`](examples/agent_patterns/agent_tools_loop.py)
-for a complete loop.
+| Tools | Enabled |
+| --- | --- |
+| `run_command`, `write_file`, `read_file`, `stat_path`, `move_path`, `delete_path` | Always |
+| `expose_port` | `allow_preview=True` |
+| `checkpoint`, `rollback` | `allow_rollback=True` |
+| `start_process`, `read_process_output`, `stop_process`, `list_processes` | `allow_processes=True` |
 
-### Using the tools with a framework
+Mistakes the model can fix come back as `{"error": ...}`. Authentication, rate-limit,
+server and network failures raise. `FatalGuard` turns those into one fixed error for the
+model, stops later calls, and re-raises the first failure to you. `AsyncSandboxTools`
+works with `AsyncSandbox`.
 
-`tools.specs()` gives each enabled tool's name, title, description, JSON
-Schema and a bound `call(args)`. The adapters in `neevai.agent_tools` turn
-those into one framework's tools, so an example needs no glue of its own.
-Install the framework through its extra.
+See [`agent_tools_loop.py`](examples/agent_patterns/agent_tools_loop.py) · [reference](docs/api-reference.md#agent-tools)
 
-Claude Agent SDK (`pip install "neevai[claude]"`): an in-process MCP server with
-Claude Code's own tools switched off. `watch` stops the run and raises the
-first sandbox error, which the SDK would otherwise hand to Claude:
+### Framework adapters
 
-```python
-from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
-from neevai.agent_tools import SandboxTools
-from neevai.agent_tools.claude import to_claude
+Adapters turn the tools into a framework's own tools. Install the matching extra.
 
-claude = to_claude(SandboxTools(sandbox))
-async with ClaudeSDKClient(ClaudeAgentOptions(**claude.options())) as client:
-    await client.query(task)
-    async for message in claude.watch(client.receive_response()):
-        print(message)
-```
-
-OpenAI Agents SDK (`pip install "neevai[openai-agents]"`):
+| Framework | Extra | Adapter |
+| --- | --- | --- |
+| Claude Agent SDK | `neevai[claude]` | `neevai.agent_tools.claude.to_claude` |
+| OpenAI Agents SDK | `neevai[openai-agents]` | `neevai.agent_tools.openai_agents.to_openai_agents` |
+| LangChain and LangGraph | `neevai[langchain]` | `neevai.agent_tools.langchain.to_langchain` |
 
 ```python
 from agents import Agent, Runner
+
 from neevai.agent_tools import SandboxTools
 from neevai.agent_tools.openai_agents import to_openai_agents
 
-agent = Agent(name="engineer", tools=to_openai_agents(SandboxTools(sandbox)), model=model)
-result = await Runner.run(agent, task)
+agent = Agent(name="coder", tools=to_openai_agents(SandboxTools(sandbox)))
+result = await Runner.run(agent, prompt)
 ```
 
-LangChain and LangGraph (`pip install "neevai[langchain]"`):
+A sandbox failure that the model can't fix stops the run and is raised to you.
+
+See [`agent_patterns/`](examples/agent_patterns/README.md) · [reference](docs/api-reference.md#framework-adapters)
+
+## Errors
+
+Every failure is a `NeevAIError`. API failures are `APIError` subclasses with the HTTP
+status (`status_code`), a machine-readable `code` and a `request_id` for support.
 
 ```python
-from langchain.agents import create_agent
-from neevai.agent_tools import SandboxTools
-from neevai.agent_tools.langchain import to_langchain
+from neevai.errors import APIError, NotFoundError
 
-agent = create_agent(model, to_langchain(SandboxTools(sandbox)))
-result = agent.invoke({"messages": [{"role": "user", "content": task}]})
+try:
+    client.sandboxes.get("missing")
+except NotFoundError:
+    ...  # handle a missing sandbox
+except APIError as e:
+    print(e.status_code, e.code, e.request_id)
 ```
 
-For another framework, wrap each `spec.call` with a `FatalGuard` if the
-framework turns a tool's exception into a message for the model: the guard
-answers with a fixed error instead, and `guard.raise_if_failed()` raises the
-first exception once the run ends.
+| Error | When |
+| --- | --- |
+| `BadRequestError` | 400: invalid request |
+| `AuthenticationError` | 401: missing or invalid API key |
+| `PermissionDeniedError` | 403: not allowed |
+| `NotFoundError` | 404: no such resource |
+| `ConflictError` | 409: conflicting state |
+| `RateLimitError` | 429: too many requests |
+| `InternalServerError` | 5xx (`ServiceUnavailableError` for 503) |
+| `APIConnectionError`, `APITimeoutError` | The request did not complete |
 
-## Agents
+Branch on `e.code` rather than the message text. Network errors, 429 and 5xx are
+retried automatically. Calls inside a sandbox, such as `exec` and `files.write`, are not
+retried, because running them twice could repeat their effect.
 
-Provision a packaged agent from the catalogue template (`agent_template` is the
-template **name**, e.g. `"claude-code"`), wait for it to become `Ready`, then
-reach its environment through the backing sandbox:
+## Configuration
 
-```python
-from neevai import NeevAI
+Pass options to `NeevAI(...)`, or set the matching environment variables. They apply to
+every product.
 
-with NeevAI(api_key="...", org_id="...", project_id="...") as client:
-    agent = client.agents.create({
-        "name": "my-agent",
-        "agent_template": "claude-code",
-    })
-    agent.wait_until_ready()
-    sandbox = agent.sandbox()
-    sandbox.files.write("notes.md", "# scratch\n")
-    agent.update({"resources": {"cpu": 2, "memory_gb": 4}, "idle_timeout_seconds": 1800})
-    agent.keepalive()  # reset the idle timer while work is in progress
-    agent.pause()
-    agent.delete()
-```
+| Option | Environment variable | Default |
+| --- | --- | --- |
+| `api_key` | `NEEV_API_KEY` | Required |
+| `org_id` | `NEEV_ORG_ID` | Required for most calls |
+| `project_id` | `NEEV_PROJECT_ID` | Required for most calls |
+| `timeout_ms` | | `60000` |
+| `max_retries` | | `2` |
 
-Agents can also be fetched by name (`client.agents.get("my-agent")`), rolled back to a
-snapshot (`agent.rollback(snapshot_id)`), serve preview URLs (`agent.expose_port(port)`),
-and read their audit trail (`agent.audit()`). See
-[`agent_ports_audit.py`](examples/agent_ports_audit.py).
+Find your organization and project IDs as described in [Organizations and projects](https://docs.ai.neevcloud.com/getting-started/org-and-project#find-your-organization-id-and-project-id).
 
-Browse templates with `client.agent_templates.list()` / `.get(id)`. `region` is
-optional on agent create. See [`examples/create_agent.py`](examples/create_agent.py).
+Every method also accepts `org_id` and `project_id` to override the client's defaults for
+one call.
+
+For an endpoint the SDK does not wrap yet, `client.raw.request(method, path)` sends a
+request with the same authentication, retries and errors.
 
 ## Examples
 
-Runnable examples live under [`examples/`](examples/). From the repo root, run any example with:
+Runnable scripts live in [`examples/`](examples); see its
+[README](examples/README.md) for setup and the full list.
 
-```bash
-uv run python examples/<script>.py
-```
-
-See [`examples/README.md`](examples/README.md) for the full catalogue and learning path.
+### Sandboxes
 
 | Example | What it shows |
-| ------- | ------------- |
-| [`templates_list.py`](examples/templates_list.py) | List templates → get by id → create sandbox |
-| [`create_agent.py`](examples/create_agent.py) | Agent templates → create agent → sandbox → update/pause/delete |
-| [`sandbox_lifecycle.py`](examples/sandbox_lifecycle.py) | Create → wait → metrics → pause → delete |
-| [`last_crash.py`](examples/last_crash.py) | Force an OOM kill → read `last_crash` → check `storage_reset` |
-| [`snapshot_fork_restore.py`](examples/snapshot_fork_restore.py) | Snapshot → `restore` → fork |
-| [`async_sandbox.py`](examples/async_sandbox.py) | End-to-end `AsyncNeevAI` workflow |
-| [`files_api.py`](examples/files_api.py) | `files.write` / `read_text` / `list` |
-| [`code_interpreter.py`](examples/code_interpreter.py) | `sandbox.code` — state kept between runs, an exception as a result, a second context |
-| [`update_resize_egress.py`](examples/update_resize_egress.py) | Resize + re-scope egress in one update → `egress_add` / `egress_remove` |
-| [`upload_download.py`](examples/upload_download.py) | Chunked `upload_file` with progress → `download_file` → compare sizes |
-| [`preview_ports.py`](examples/preview_ports.py) | Serve a port → preview URL → rotate the slug → revoke |
-| [`audit_trail.py`](examples/audit_trail.py) | Run commands → page through the sandbox audit trail |
-| [`agent_ports_audit.py`](examples/agent_ports_audit.py) | Agent preview URL with a slug, keepalive, audit trail |
-| [`streaming_exec.py`](examples/streaming_exec.py) | Live `sandbox.exec_stream()` output |
-| [`processes.py`](examples/processes.py) | Supervised process lifecycle (start, follow, logs, kill) |
-| [`docker.py`](examples/docker.py) | Docker template → `start-docker` → `docker run --network=host` |
-| [`process_pool.py`](examples/process_pool.py) | Parallel processes with `kill_all` |
-| [`parallel_fanout.py`](examples/parallel_fanout.py) | 3 sandboxes, parallel repo analysis, aggregated file counts |
-| [`sandbox_metrics.py`](examples/sandbox_metrics.py) | Metrics under CPU load |
-| [`raw_request.py`](examples/raw_request.py) | Untyped `client.raw.request()` |
-| [`agent_patterns/minimal_agent.py`](examples/agent_patterns/minimal_agent.py) | Hand-rolled agent with streaming tool output |
-| [`agent_patterns/langchain_agent.py`](examples/agent_patterns/langchain_agent.py) | LangGraph ReAct agent (`uv sync --extra agents`) |
-| [`workflow_examples/repo_analyzer.py`](examples/workflow_examples/repo_analyzer.py) | Clone & audit untrusted repos in a sandbox |
-| [`sandbox_lifecycle_controller.py`](examples/sandbox_lifecycle_controller.py) | CLI for individual sandbox CRUD ops |
+| --- | --- |
+| [`sandbox_lifecycle.py`](examples/sandbox_lifecycle.py) | Create, wait, metrics, pause, delete |
+| [`templates_list.py`](examples/templates_list.py) | Browse templates and create a sandbox |
+| [`files_api.py`](examples/files_api.py) | Write, read and list files |
+| [`upload_download.py`](examples/upload_download.py) | Large file upload and download |
+| [`processes.py`](examples/processes.py) | Background processes: start, follow, kill |
+| [`streaming_exec.py`](examples/streaming_exec.py) | Live command output |
+| [`pty.py`](examples/pty.py) | Interactive terminal |
+| [`ssh_tunnel.py`](examples/ssh_tunnel.py) | SSH, scp and rsync through a local port |
+| [`preview_ports.py`](examples/preview_ports.py) | Serve a port at a public URL |
+| [`snapshot_fork_restore.py`](examples/snapshot_fork_restore.py) | Snapshot, restore and fork |
+| [`audit_trail.py`](examples/audit_trail.py) | Read and filter the audit trail |
+| [`code_interpreter.py`](examples/code_interpreter.py) | Python with state kept between runs |
+| [`docker.py`](examples/docker.py) | Docker inside a sandbox |
+| [`async_sandbox.py`](examples/async_sandbox.py) | The async client |
+
+### Agents
+
+| Example | What it shows |
+| --- | --- |
+| [`create_agent.py`](examples/create_agent.py) | Create and drive an agent |
+| [`agent_ports_audit.py`](examples/agent_ports_audit.py) | An agent's preview URL, keepalive and audit trail |
+
+### Agent tools
+
+| Example | What it shows |
+| --- | --- |
+| [`agent_tools_loop.py`](examples/agent_patterns/agent_tools_loop.py) | Sandbox tools for your own agent |
+| [`agent_patterns/`](examples/agent_patterns/README.md) | Agents that use a sandbox as a tool, with and without a framework |
 
 ## Documentation
 
-Start with [`docs/getting-started.md`](docs/getting-started.md) for installation, credentials, and your first sync/async script.
+| Guide | For |
+| --- | --- |
+| [Getting started](docs/getting-started.md) | Install, credentials and a first sandbox, step by step |
+| [API reference](docs/api-reference.md) | Every product and method, with snippets |
+| [API inventory](docs/api-inventory.md) | Full signatures, types and errors |
+| [Example coverage](docs/example-coverage.md) | Which example shows which API |
+| [Changelog](.github/CHANGELOG.md) | What changed in each release |
+| [NeevCloud documentation](https://docs.ai.neevcloud.com) | Platform guides and concepts |
 
-| Doc | Purpose |
-| --- | ------- |
-| [`getting-started.md`](docs/getting-started.md) | Install, env vars, quick starts, doc map |
-| [`api-reference.md`](docs/api-reference.md) | Lifecycle vs sandbox runtime lists + copy-paste snippets |
-| [`api-inventory.md`](docs/api-inventory.md) | Full method signatures, types, errors, symbol index |
-| [`example-coverage.md`](docs/example-coverage.md) | Example catalog and API → examples lookup |
+## Security
 
-Contributors: update docs when the public API changes. See [`docs/development.md`](docs/development.md) for the contributor workflow, typing notes, and test commands.
+Report vulnerabilities as described in [SECURITY.md](SECURITY.md). Keep your API key out
+of source control and logs. Contributions are welcome; see [docs/development.md](docs/development.md).
 
 ## License
 
-[Apache 2.0](LICENSE)
+[Apache-2.0](LICENSE) © NeevCloud

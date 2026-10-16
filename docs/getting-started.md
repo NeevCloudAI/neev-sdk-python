@@ -1,342 +1,240 @@
-# NeevAI Python SDK — Getting Started
+# Getting started
 
-Install the SDK, configure credentials, and run your first synchronous or
-asynchronous script. For a shorter overview, see the [README](../README.md).
-When you need API lists, method signatures, or example line numbers, use the
-[documentation map](#documentation-map) below.
+This guide takes you from install to a running sandbox, step by step. For a shorter
+overview, see the [README](../README.md).
 
-## Prerequisites
+## Contents
 
-Before installing, confirm you have:
+1. [Before you begin](#before-you-begin)
+2. [Install](#install)
+3. [Set your credentials](#set-your-credentials)
+4. [Your first sandbox](#your-first-sandbox)
+5. [Choose a template](#choose-a-template)
+6. [Long-running processes](#long-running-processes)
+7. [The async client](#the-async-client)
+8. [Other products](#other-products)
+9. [Next steps](#next-steps)
 
-- **Python ≥ 3.10** (`python --version` or `python3 --version`)
-- A supported OS: **Windows**, **macOS**, or **Linux**
-- A NeevCloud API key and org/project values (from your NeevCloud account)
+## Before you begin
 
-The package depends on `httpx` and `pydantic` for HTTP transport and response
-validation. These are installed automatically with the SDK.
+You need:
 
-### Install uv (recommended)
+- Python 3.10 or later, on Linux, macOS or Windows
+- A NeevCloud API key, organization id and project id, from your NeevCloud account
 
-[uv](https://docs.astral.sh/uv/) is the easiest way to install from this repo and
-run examples. It creates a local virtual environment and installs the package in
-editable mode.
-
-**Linux / macOS:**
-
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-```
-
-Or use your system package manager if available.
-
-**Windows (PowerShell):**
-
-```powershell
-powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-```
-
-If you prefer not to use `uv`, see the pip + virtual environment fallback in
-[Option B](#option-b--install-from-github-recommended-today) below.
-
----
-
-## Installation and setup
-
-### Option A — PyPI (coming soon; try first)
-
-When the package is published, this is the primary install path:
+## Install
 
 ```bash
 pip install neevai
 ```
 
-When this succeeds, you are done — skip Option B.
-
-If `pip install neevai` fails with **package not found**, use Option B today.
-
-### Option B — Install from GitHub (recommended today)
-
-Clone the repository:
+Or, with [uv](https://docs.astral.sh/uv/):
 
 ```bash
-git clone https://github.com/NeevCloudAI/neev-sdk-python.git
-cd neev-sdk-python
+uv add neevai
 ```
 
-**Recommended (uv):**
-
-```bash
-uv sync
-```
-
-`uv sync` creates a local environment and installs the package in editable mode.
-Run examples from the repo root with `uv run python ...`.
-
-**Fallback (pip + virtual environment):**
-
-| Platform | Commands |
-| -------- | -------- |
-| **Linux / macOS** | `python3 -m venv .venv && source .venv/bin/activate && pip install -e .` |
-| **Windows PowerShell** | `python -m venv .venv; .\.venv\Scripts\Activate.ps1; pip install -e .` |
-| **Windows CMD** | `python -m venv .venv && .venv\Scripts\activate.bat && pip install -e .` |
-
-### Verify installation
-
-From the repo root (after Option B) or any environment where the package is
-installed (after Option A):
-
-```bash
-uv run python -c "from neevai import NeevAI; print('ok')"
-```
-
-If you used pip and an activated virtual environment instead of `uv`, run:
+Check that it worked:
 
 ```bash
 python -c "from neevai import NeevAI; print('ok')"
 ```
 
-You should see `ok`. If the import fails, confirm you ran `uv sync` or
-`pip install -e .` from the repo root.
+### Run the examples from a clone
 
-Contributors can run the full test suite without network access — see
-[`development.md`](./development.md) for `uv run pytest` and other commands.
+The [examples](../examples/README.md) run straight from the repository:
 
-### Configure credentials
+```bash
+git clone https://github.com/NeevCloudAI/neev-sdk-python.git
+cd neev-sdk-python
+uv sync
+uv run python examples/templates_list.py
+```
 
-The SDK reads defaults from environment variables. Set these before running scripts
-or pass equivalent constructor kwargs to `NeevAI(...)` / `AsyncNeevAI(...)`.
+Without uv, create a virtual environment and run `pip install -e .` from the
+repository root instead.
+
+## Set your credentials
+
+The client reads these environment variables:
 
 | Variable | Purpose |
-| -------- | ------- |
-| `NEEV_API_KEY` | Bearer token (**required**) |
-| `NEEV_ORG_ID` | Default organization ID |
-| `NEEV_PROJECT_ID` | Default project ID |
-| `NEEV_BASE_URL` | Base URL (default: `https://api.ai.neevcloud.com/agent`) |
-| `NEEV_SANDBOX_TEMPLATE_ID` | Optional sandbox template id (defaults to `sb-ubuntu-26-04-dev` in examples) |
-| `NEEV_AGENT_TEMPLATE` | Optional agent template **name** for [`create_agent.py`](../examples/create_agent.py) (default: `claude-code`) |
-| `NEEVAI_WAIT_TIMEOUT_MS` | Shared deadline for connect URL, Ready phase, and runtime probe (default: `300000`) |
-| `NEEVAI_POLL_INTERVAL_MS` | Poll interval while waiting for connect URL / sandbox runtime (default: `2000`) |
+| --- | --- |
+| `NEEV_API_KEY` | Your API key (required) |
+| `NEEV_ORG_ID` | Default organization id |
+| `NEEV_PROJECT_ID` | Default project id |
 
-**Linux / macOS (bash/zsh)** — current session:
+Find your organization and project IDs as described in [Organizations and projects](https://docs.ai.neevcloud.com/getting-started/org-and-project#find-your-organization-id-and-project-id).
+
+**Linux and macOS**
 
 ```bash
 export NEEV_API_KEY="your-api-key"
-export NEEV_ORG_ID="org-abc123"
-export NEEV_PROJECT_ID="proj-xyz789"
+export NEEV_ORG_ID="your-org-id"
+export NEEV_PROJECT_ID="your-project-id"
 ```
 
-**Windows PowerShell** — current session:
+**Windows PowerShell**
 
 ```powershell
 $env:NEEV_API_KEY = "your-api-key"
-$env:NEEV_ORG_ID = "org-abc123"
-$env:NEEV_PROJECT_ID = "proj-xyz789"
+$env:NEEV_ORG_ID = "your-org-id"
+$env:NEEV_PROJECT_ID = "your-project-id"
 ```
 
-**Windows CMD** — current session:
+**Windows Command Prompt**
 
 ```cmd
 set NEEV_API_KEY=your-api-key
-set NEEV_ORG_ID=org-abc123
-set NEEV_PROJECT_ID=proj-xyz789
+set NEEV_ORG_ID=your-org-id
+set NEEV_PROJECT_ID=your-project-id
 ```
 
-**Persistence:** The commands above apply only to your current terminal session.
-To keep credentials across restarts, set them as user-level environment variables
-in your OS settings (Windows System Properties → Environment Variables, macOS/Linux
-shell profile, or your preferred secrets manager). The SDK does not load a
-`.env` file automatically.
+These last for the current terminal session. To keep them, add them to your shell
+profile or your system's environment settings. The SDK does not read `.env` files.
 
-You can override org and project on individual API calls via `org_id` and
-`project_id` keyword arguments without changing the client defaults.
-
-### Imports
+You can also pass credentials to the client directly:
 
 ```python
-from neevai import NeevAI, AsyncNeevAI, Sandbox
-from neevai.types import CreateSandboxParams, ExecResult, SandboxPhase
-from neevai.errors import NeevAIError, NotFoundError, AuthenticationError
+from neevai import NeevAI
+
+client = NeevAI(api_key="...", org_id="...", project_id="...")
 ```
 
-The top-level `neevai` package re-exports clients, handles, connection types,
-errors, and `Scope`. Lifecycle models live in `neevai.types` and should be
-imported from there (not from generated modules directly).
+Most methods take `org_id` and `project_id` to override the defaults for one call.
 
----
+## Your first sandbox
 
-## From clone to your first sandbox
-
-This section walks through the full path from a fresh clone to a running sandbox.
-
-1. **Clone and install**
-
-   ```bash
-   git clone https://github.com/NeevCloudAI/neev-sdk-python.git
-   cd neev-sdk-python
-   uv sync
-   ```
-
-2. **Set credentials** using the [platform-specific blocks](#configure-credentials)
-   above. You need at minimum `NEEV_API_KEY`, `NEEV_ORG_ID`, and `NEEV_PROJECT_ID`.
-
-3. **Verify the install** (see [Verify installation](#verify-installation)).
-
-4. **Run the first example:**
-
-   ```bash
-   uv run python examples/templates_list.py
-   ```
-
-5. **Interpret the output.** The script will:
-   - List available sandbox templates (id, name, status)
-   - Fetch full detail for one template
-   - Create a sandbox from that template and wait until it is ready
-   - Delete the sandbox in a `finally` block
-
-   If you see authentication or permission errors, double-check your API key and
-   org/project ids. If the package is not found, re-run `uv sync` from the repo
-   root.
-
-6. **Continue learning** with the sync quick-start below, or follow the tiered
-   path in [`examples/README.md`](../examples/README.md).
-
----
-
-## Quick start — synchronous
-
-This walkthrough creates a sandbox, waits for it to become ready, runs a command,
-writes a file, and cleans up.
-
-Save the script below as `quickstart.py` in the repo root (or any directory where
-the `neevai` package is installed), then run:
-
-```bash
-uv run python quickstart.py
-```
-
-If you use an activated virtual environment instead of `uv`:
-
-```bash
-python quickstart.py
-```
+Save this as `quickstart.py` and run it with `python quickstart.py`:
 
 ```python
 from neevai import NeevAI
 
 with NeevAI() as client:
-    # 1. Pick a template from the catalogue
-    templates = client.templates.list(limit=5)
-    template_id = templates.items[0].id
-    print(f"Using template: {templates.items[0].name} ({template_id})")
+    sandbox = client.sandboxes.create({"sandbox_template_id": "sb-ubuntu-26-04-dev"})
+    print("created", sandbox.id)
 
-    sandbox = client.sandboxes.create({
-        "sandbox_template_id": template_id,
-    })
-    print(f"Created sandbox {sandbox.id}, phase={sandbox.phase}")
+    try:
+        sandbox.wait_until_ready()
 
-    # 3. Poll until the sandbox runtime is reachable
-    sandbox.wait_until_ready(timeout_ms=120_000)
-    print(f"Ready — connect_url={sandbox.connect_url}")
+        result = sandbox.exec(["sh", "-c", "echo hello from the sandbox"])
+        print(result.stdout, "exit code", result.exit_code)
 
-    # 4. Run a buffered command
-    result = sandbox.exec(["sh", "-c", "echo hello from sandbox"])
-    print(f"stdout={result.stdout!r}, exit_code={result.exit_code}")
-
-    # 5. Write and read a file (paths are workspace-relative)
-    sandbox.files.write("notes.txt", "written by the SDK\n")
-    text = sandbox.files.read_text("notes.txt")
-    print(f"File contents: {text!r}")
-
-    # 6. Clean up
-    sandbox.delete()
-    print("Sandbox deleted")
+        sandbox.files.write("notes.txt", "written by the SDK\n")
+        print(sandbox.files.read_text("notes.txt"))
+    finally:
+        sandbox.delete()
 ```
 
-Key points:
+Good to know:
 
-- Use `sandbox_template_id` in create params (not `template_id`). See
-  [`api-inventory.md`](./api-inventory.md#clientsandboxescreateparams-org_idnone-project_idnone)
-  for the full parameter table.
-- When you omit `resources` (or any field), the platform assigns
-  **1 vCPU / 2 GB memory / 10 GB disk**. Valid ranges are cpu 0.5–8 (step 0.5),
-  memory 1–16 GB, disk 10–100 GB (step 10). See
-  [`SandboxResources`](./api-inventory.md#sandboxresources). Agents created from a
-  template inherit that template's sizing instead — see
-  [Agent resources](./api-inventory.md#agent-resources).
-- `connect_url` is a property on the handle; it may appear while `phase` is still
-  `Pending` or `NotReady`. Wait until `phase == "Ready"` **and** the sandbox runtime
-  accepts requests before `exec`, `files`, or `processes`.
-- `sandbox.pause()` and `sandbox.resume()` return updated `Sandbox` handles (they do
-  not return `None`).
-- Always call `wait_until_ready()` before runtime operations: it waits for
-  `phase == "Ready"` and for the sandbox to be addressable, which a new sandbox
-  briefly is not. For supervised processes, also probe with
-  `sandbox.processes.list()` (see [Supervised processes](#supervised-processes)).
-- Sandboxes and agents can be fetched by name as well as by id:
-  `client.sandboxes.get("my-sandbox")`.
-- `sandbox.files.write` sends content up to 1 MiB in one request and anything
-  larger in resumable chunks; `files.upload_file` / `files.download_file` move
-  local files without holding them in memory. See
-  [`upload_download.py`](../examples/upload_download.py).
-- Errors carry a machine-readable `code` (for example `not_found` or
-  `sandbox_quota_exceeded`); branch on it rather than on the message. See
-  [Errors](./api-inventory.md#errors).
+| Topic | Detail |
+| --- | --- |
+| Templates | Pass `sandbox_template_id`. Find ids with `client.templates.list()`. |
+| Size | Without `resources`, a sandbox gets 1 vCPU, 2 GB memory and 10 GB disk. You can ask for 0.5–8 vCPU (steps of 0.5), 1–16 GB memory and 10–100 GB disk (steps of 10). See [`SandboxResources`](api-inventory.md#sandboxresources). |
+| Readiness | Call `wait_until_ready()` before running commands or using files. |
+| Names | `client.sandboxes.get()` accepts a sandbox's id or its name. |
+| Handles | `pause()` and `resume()` return an updated `Sandbox`. |
+| Files | `files.write` handles any size. For large files on disk, use `files.upload_file` and `files.download_file`. |
+| Errors | Errors carry a `code` such as `not_found`; branch on it. See [Errors](api-inventory.md#errors). |
 
-**Examples:** [`sandbox_lifecycle.py`](../examples/sandbox_lifecycle.py),
-[`files_api.py`](../examples/files_api.py)
+Next, try [`sandbox_lifecycle.py`](../examples/sandbox_lifecycle.py) and
+[`files_api.py`](../examples/files_api.py), or snapshots with
+[`snapshot_fork_restore.py`](../examples/snapshot_fork_restore.py).
 
-For snapshot capture, restore via `restore`, and fork workflows, see
-[`snapshot_fork_restore.py`](../examples/snapshot_fork_restore.py) and the
-[Snapshots](./api-reference.md#snapshots) section in the API reference.
+## Choose a template
 
----
+A template is the image a sandbox starts from. `sb-ubuntu-26-04-dev` is a good default;
+the others add something specific.
 
-## Create an agent
+| Template | Use it for |
+| --- | --- |
+| `sb-ubuntu-26-04-dev` | General development: git, gh, Python 3, Node 24 LTS |
+| `sb-ubuntu-26-04-docker` | Docker, Compose and Buildx; run `start-docker` first, and run containers with `--network=host` |
+| `sb-ubuntu-26-04-interpreter` | The code interpreter: Python kernels that keep their state (`sandbox.code`) |
+| `sb-ubuntu-26-04-playwright` | Browser testing: a desktop with Node 24, Playwright and Chromium, headless or headed (`DISPLAY=:1`) |
 
-Platform **agents** (`client.agents`) provision a packaged agent from the
-**agent template catalogue** (`client.agent_templates`). This is separate from
-the model-driven demos under [`examples/agent_patterns/`](../examples/agent_patterns/)
-— those wire an inference model into a sandbox as a code-execution tool.
+The catalogue grows over time, so `client.templates.list()` is the source of truth.
 
-1. **Browse templates** — list or get catalogue entries (global, no org scope):
+```python
+browser = client.sandboxes.create({"sandbox_template_id": "sb-ubuntu-26-04-playwright"})
+browser.wait_until_ready()
+run = browser.exec(["npx", "playwright", "test"], cwd="app", timeout_ms=300_000)
+```
 
-   ```python
-   page = client.agent_templates.list()
-   for tmpl in page.items:
-       print(tmpl.name, tmpl.id)  # name is what you pass at create
-   ```
+## Long-running processes
 
-2. **Create** — pass the template **name** (e.g. `"claude-code"`) as
-   `agent_template` at create — not the catalogue id (`agent_template_id` is a
-   read-only property on the handle).
+`exec` waits for a command to finish. For a server or a worker that keeps running, use
+`sandbox.processes`: the process keeps going after your request ends, and you can
+follow its output, read its logs or stop it later.
 
-3. **Wait and use the backing sandbox** — `agent.sandbox()` returns a
-   `Sandbox` handle for exec, files, and processes.
+```python
+sandbox.wait_until_ready()
 
-4. **Lifecycle** — `update`, `pause`, `resume`, and `delete` mirror sandbox
-   lifecycle patterns. Call `resume()` before `wait_until_ready()` if the agent
-   was paused.
+proc = sandbox.processes.start(["sh", "-c", "echo started; sleep 3"])
+for event in proc.follow():
+    if event["type"] == "stdout":
+        print(event["data"], end="")
+proc.wait()
+```
 
-Set `NEEV_AGENT_TEMPLATE` to pick a catalogue name without editing code (see
-[`create_agent.py`](../examples/create_agent.py)).
+Right after a sandbox becomes ready, the first call can briefly fail with a 502, 503 or
+504. [`processes.py`](../examples/processes.py) shows a small retry helper for that;
+[`process_pool.py`](../examples/process_pool.py) runs several processes at once.
+
+## The async client
+
+`AsyncNeevAI` has the same API. Use `async with` and `await`:
+
+```python
+import asyncio
+
+from neevai import AsyncNeevAI
+
+async def main() -> None:
+    async with AsyncNeevAI() as client:
+        sandbox = await client.sandboxes.create({"sandbox_template_id": "sb-ubuntu-26-04-dev"})
+        try:
+            await sandbox.wait_until_ready()
+            result = await sandbox.exec(["echo", "async hello"])
+            print(result.stdout.strip())
+
+            async for event in sandbox.exec_stream(["sh", "-c", "seq 1 3"]):
+                if event["type"] == "stdout":
+                    print(event["data"], end="")
+        finally:
+            await sandbox.delete()
+
+asyncio.run(main())
+```
+
+See [`async_sandbox.py`](../examples/async_sandbox.py).
+
+## Other products
+
+The same client covers every NeevCloud product in this SDK.
+
+| Product | Start here |
+| --- | --- |
+| Agents: ready-made coding agents, each on its own sandbox | [Create an agent](#create-an-agent), then [README: Agents](../README.md#agents) |
+| Agent tools: sandbox tools for the agent you build | [README: Agent tools](../README.md#agent-tools) |
+
+### Create an agent
+
+An agent is a packaged AI assistant, such as Claude Code, running in its own sandbox.
+Pick one from the agent template catalogue and pass its **name** as `agent_template`:
 
 ```python
 from neevai import NeevAI
 
 with NeevAI() as client:
-    templates = client.agent_templates.list()
-    print("available:", [t.name for t in templates.items])
+    print([t.name for t in client.agent_templates.list().items])
 
-    agent = client.agents.create({
-        "name": "my-agent",
-        "agent_template": "claude-code",  # template name, not id
-    })
+    agent = client.agents.create({"name": "my-agent", "agent_template": "claude-code"})
     agent.wait_until_ready()
+
     sandbox = agent.sandbox()
-    sandbox.files.write("notes.md", "# scratch\n")
-    result = sandbox.exec(["ls", "-la"])
-    print(result.stdout.rstrip())
+    print(sandbox.exec(["ls", "-la"]).stdout)
 
     agent.update({"resources": {"cpu": 2, "memory_gb": 4}})
     agent.pause()
@@ -345,100 +243,17 @@ with NeevAI() as client:
     agent.delete()
 ```
 
-**Example:** [`create_agent.py`](../examples/create_agent.py)
+Agents are different from the [agent examples](../examples/agent_patterns/README.md),
+which connect your own model to a sandbox. See
+[`create_agent.py`](../examples/create_agent.py).
 
----
+## Next steps
 
-## Supervised processes
-
-Detached processes outlive the HTTP request that started them — useful for
-long-running workers, log streaming, and process pools. Before calling
-`sandbox.processes.start`, complete this sequence (shared deadline via
-`NEEVAI_WAIT_TIMEOUT_MS` / `NEEVAI_POLL_INTERVAL_MS`):
-
-1. Poll `sandbox.refresh()` until `connect_url` is set (may appear before
-   `phase == "Ready"`).
-2. Call `sandbox.wait_until_ready()` until `phase == "Ready"` and the sandbox is
-   addressable.
-3. Probe the sandbox runtime with `sandbox.processes.list()` — retry transient
-   `502` / `503` / `504` until the sandbox accepts requests.
-
-[`examples/processes.py`](../examples/processes.py) implements the full wait
-helpers (`_wait_for_connect_url`, `_wait_for_runtime`, `_wait_before_processes`).
-Use it as the reference for production code.
-
-```python
-# Minimal inline version (see processes.py for retry helpers)
-while not sandbox.connect_url:
-    sandbox.refresh()
-sandbox.wait_until_ready(timeout_ms=120_000)
-sandbox.processes.list()  # probe sandbox runtime
-
-proc = sandbox.processes.start(["sh", "-c", "echo started; sleep 3"])
-for event in proc.follow():
-    if event["type"] == "stdout":
-        print(event["data"], end="")
-proc.kill()
-proc.wait()
-```
-
-Full end-to-end flow (auth headers, raw HTTP, troubleshooting):
-[`api-inventory.md` → End-to-end flow](./api-inventory.md#end-to-end-flow).
-Runnable examples: [`processes.py`](../examples/processes.py),
-[`process_pool.py`](../examples/process_pool.py).
-
----
-
-## Quick start — asynchronous
-
-The async client mirrors the sync API. Use `async with`, `await`, and `async for`
-where appropriate.
-
-Save as `quickstart_async.py` and run with `uv run python quickstart_async.py`
-(or `python quickstart_async.py` inside an activated venv).
-
-```python
-import asyncio
-from neevai import AsyncNeevAI
-
-async def main() -> None:
-    async with AsyncNeevAI() as client:
-        template_id = (await client.templates.list(limit=1)).items[0].id
-
-        sandbox = await client.sandboxes.create({
-            "sandbox_template_id": template_id,
-        })
-        await sandbox.wait_until_ready()
-
-        # Buffered exec
-        result = await sandbox.exec(["echo", "async hello"])
-        print(result.stdout.strip())
-
-        # Streaming exec
-        async for event in sandbox.exec_stream(["sh", "-c", "seq 1 3"]):
-            if event["type"] == "stdout":
-                print(event["data"], end="")
-            elif event["type"] == "exit":
-                print(f"\nexit {event['exit_code']}")
-
-        await sandbox.delete()
-
-asyncio.run(main())
-```
-
-**Example:** [`async_sandbox.py`](../examples/async_sandbox.py)
-
----
-
-## Documentation map
-
-| Document | What you'll find |
-| -------- | ---------------- |
-| [README](../README.md) | Short install overview, clone-to-first-run checklist, examples table |
-| **Getting started** (this file) | Full install walkthrough, env vars, first sync/async script, [create an agent](#create-an-agent), [supervised processes](#supervised-processes) |
-| [`api-reference.md`](./api-reference.md) | Lifecycle vs sandbox runtime lists and copy-paste snippets |
-| [`api-inventory.md`](./api-inventory.md) | Full method signatures, parameter tables, types, errors, symbol index |
-| [`api-inventory.md` → Processes E2E](./api-inventory.md#end-to-end-flow) | connect_url wait, auth, raw HTTP, curl/PowerShell, troubleshooting |
-| [`example-coverage.md`](./example-coverage.md) | Example catalog and API → examples lookup |
-| [`development.md`](./development.md) | Contributor workflow and doc maintenance |
-| [`examples/README.md`](../examples/README.md) | Tiered learning path and run commands |
+| Guide | For |
+| --- | --- |
+| [README](../README.md) | An overview of every feature |
+| [API reference](api-reference.md) | Every product and method, grouped by product, with snippets |
+| [API inventory](api-inventory.md) | Full signatures, parameter tables, types and errors |
+| [Example coverage](example-coverage.md) | Which example shows which API |
+| [Examples](../examples/README.md) | Runnable scripts, from basics to complete workflows |
+| [Development](development.md) | Contributing to this SDK |
