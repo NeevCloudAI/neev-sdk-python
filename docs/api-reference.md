@@ -243,6 +243,11 @@ agent, with model-ready descriptions and JSON Schemas. No framework dependency.
 | Run a model tool call | `tools.call(name, args)` | `await tools.call(name, args)` |
 | Tool methods | `run_command`, `write_file`, `read_file`, `stat_path`, `move_path`, `delete_path`, `expose_port`, `checkpoint`, `rollback`, `start_process`, `read_process_output`, `stop_process`, `list_processes` | same, with `await` |
 | Descriptions / schemas / titles | `DESCRIPTIONS[name]`, `PARAMETERS[name]`, `TITLES[name]` | same |
+| Specs for a framework | `tools.specs()` (`spec.call(args)` returns the result) | `tools.specs()` (`await spec.call(args)`) |
+| Stop a run on a fatal error | `FatalGuard().call(spec, args)`, then `guard.raise_if_failed()` | `await guard.acall(spec, args)` |
+| Claude Agent SDK | `neevai.agent_tools.claude.to_claude(tools)` → `.options()`, `.watch(messages)`, `.guard` | — |
+| OpenAI Agents SDK | `neevai.agent_tools.openai_agents.to_openai_agents(tools)` | — |
+| LangChain / LangGraph | `neevai.agent_tools.langchain.to_langchain(tools)` | — |
 
 Every tool returns a JSON-serializable `TypedDict`; errors the model can fix come
 back as `{"error": ...}`.

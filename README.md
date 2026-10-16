@@ -372,6 +372,56 @@ for every tool's arguments and results, and
 [`examples/agent_patterns/agent_tools_loop.py`](examples/agent_patterns/agent_tools_loop.py)
 for a complete loop.
 
+### Using the tools with a framework
+
+`tools.specs()` gives each enabled tool's name, title, description, JSON
+Schema and a bound `call(args)`. The adapters in `neevai.agent_tools` turn
+those into one framework's tools, so an example needs no glue of its own.
+Install the framework through its extra.
+
+Claude Agent SDK (`pip install "neevai[claude]"`): an in-process MCP server with
+Claude Code's own tools switched off. `watch` stops the run and raises the
+first sandbox error, which the SDK would otherwise hand to Claude:
+
+```python
+from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
+from neevai.agent_tools import SandboxTools
+from neevai.agent_tools.claude import to_claude
+
+claude = to_claude(SandboxTools(sandbox))
+async with ClaudeSDKClient(ClaudeAgentOptions(**claude.options())) as client:
+    await client.query(task)
+    async for message in claude.watch(client.receive_response()):
+        print(message)
+```
+
+OpenAI Agents SDK (`pip install "neevai[openai-agents]"`):
+
+```python
+from agents import Agent, Runner
+from neevai.agent_tools import SandboxTools
+from neevai.agent_tools.openai_agents import to_openai_agents
+
+agent = Agent(name="engineer", tools=to_openai_agents(SandboxTools(sandbox)), model=model)
+result = await Runner.run(agent, task)
+```
+
+LangChain and LangGraph (`pip install "neevai[langchain]"`):
+
+```python
+from langchain.agents import create_agent
+from neevai.agent_tools import SandboxTools
+from neevai.agent_tools.langchain import to_langchain
+
+agent = create_agent(model, to_langchain(SandboxTools(sandbox)))
+result = agent.invoke({"messages": [{"role": "user", "content": task}]})
+```
+
+For another framework, wrap each `spec.call` with a `FatalGuard` if the
+framework turns a tool's exception into a message for the model: the guard
+answers with a fixed error instead, and `guard.raise_if_failed()` raises the
+first exception once the run ends.
+
 ## Agents
 
 Provision a packaged agent from the catalogue template (`agent_template` is the

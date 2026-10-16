@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import copy
+import dataclasses
 import inspect
 import json
 import pickle
@@ -17,10 +19,14 @@ from neevai import agent_tools
 from neevai.agent_tools import (
     _MAX_ERROR_CHARS,
     DESCRIPTIONS,
+    FATAL_ERROR,
+    FATAL_RESULT,
     PARAMETERS,
     TITLES,
     AsyncSandboxTools,
+    FatalGuard,
     SandboxTools,
+    ToolSpec,
     _truncate,
 )
 from neevai.errors import (
@@ -323,6 +329,10 @@ def test_public_names():
             "StartProcessToolResult",
             "ReadProcessOutputToolResult",
             "StopProcessToolResult",
+            "FATAL_ERROR",
+            "FATAL_RESULT",
+            "FatalGuard",
+            "ToolSpec",
             "StatPathToolResult",
             "MovePathToolResult",
             "DeletePathToolResult",
@@ -1753,3 +1763,116 @@ async def test_async_stat_path_404_with_only_a_code_is_an_error():
     tools, sandbox = async_tools_for()
     sandbox.fail = NotFoundError(404, {"code": "not_found"}, None)
     assert await tools.stat_path("a.txt") == {"error": "HTTP 404 not_found"}
+
+
+@pytest.mark.parametrize(
+    "options,names",
+    [
+        ({}, SAFE_TOOLS),
+        ({"allow_processes": True}, [*SAFE_TOOLS, *PROCESS_TOOLS]),
+        ({"allow_preview": True, "allow_rollback": True, "allow_processes": True}, ENABLED_ORDER),
+    ],
+)
+def test_specs_follow_names_and_carry_the_shared_metadata(
+    options: dict[str, Any], names: list[str]
+):
+    tools, _ = tools_for(**options)
+    specs = tools.specs()
+    assert [s.name for s in specs] == names == tools.names()
+    for spec in specs:
+        assert spec.title == TITLES[spec.name]
+        assert spec.description == DESCRIPTIONS[spec.name]
+        assert spec.parameters is PARAMETERS[spec.name]
+
+
+def test_spec_call_routes_to_its_tool():
+    tools, sandbox = tools_for(allow_rollback=True)
+    by_name = {s.name: s for s in tools.specs()}
+    assert by_name["write_file"].call({"path": "a.txt", "content": "hi"}) == {"bytes_written": 2}
+    assert sandbox.workspace == {"a.txt": "hi"}
+    assert by_name["checkpoint"].call(None) == {"checkpoint_id": "snap-1"}
+    assert by_name["read_file"].call({}) == {
+        "error": 'invalid arguments for read_file: missing a required argument: "path"'
+    }
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        by_name["read_file"].name = "x"  # type: ignore[misc]
+
+
+async def test_async_spec_call_is_a_coroutine():
+    tools, sandbox = async_tools_for(allow_processes=True)
+    specs = tools.specs()
+    assert [s.name for s in specs] == [*SAFE_TOOLS, *PROCESS_TOOLS]
+    assert specs[0].parameters is PARAMETERS["run_command"]
+    assert await specs[0].call({"command": "ls"}) == {"exit_code": 0, "stdout": "ok", "stderr": ""}
+    assert sandbox.calls == [("exec", "sh", ["-lc", "ls"], None, 60_000)]
+
+
+def test_fatal_result_is_a_fixed_read_only_error():
+    assert FATAL_ERROR == "The sandbox call failed and the run is stopping."
+    assert FATAL_RESULT == {"error": FATAL_ERROR}
+    with pytest.raises(TypeError, match="read-only"):
+        FATAL_RESULT["error"] = "x"  # type: ignore[typeddict-readonly-mutated]
+    assert (
+        json.dumps(FATAL_RESULT) == '{"error": "The sandbox call failed and the run is stopping."}'
+    )
+
+
+def failing_spec(error: Exception, calls: list[Any]) -> ToolSpec[Any]:
+    def call(args: Any) -> Any:
+        calls.append(args)
+        raise error
+
+    return ToolSpec("run_command", "t", "d", PARAMETERS["run_command"], call)
+
+
+def test_guard_passes_results_through_while_clean():
+    guard = FatalGuard()
+    tools, _ = tools_for()
+    spec = tools.specs()[0]
+    assert guard.call(spec, {"command": "ls"}) == {"exit_code": 0, "stdout": "ok", "stderr": ""}
+    assert guard.call(spec, {}) == {
+        "error": 'invalid arguments for run_command: missing a required argument: "command"'
+    }
+    assert not guard.failed and guard.error is None
+    guard.raise_if_failed()
+
+
+def test_guard_keeps_the_first_failure_and_stops_further_calls():
+    guard = FatalGuard()
+    calls: list[Any] = []
+    first = AuthenticationError(401, {"message": "https://api.example/orgs/org-1 denied"}, None)
+    assert guard.call(failing_spec(first, calls), {"command": "ls"}) is FATAL_RESULT
+    assert guard.failed and guard.error is first
+    assert guard.call(failing_spec(RuntimeError("second"), calls), {}) is FATAL_RESULT
+    assert calls == [{"command": "ls"}]
+    assert guard.error is first
+    with pytest.raises(AuthenticationError) as raised:
+        guard.raise_if_failed()
+    assert raised.value is first
+
+
+async def test_guard_acall_matches_call():
+    guard = FatalGuard()
+    tools, sandbox = async_tools_for()
+    spec = tools.specs()[0]
+    assert (await guard.acall(spec, {"command": "ls"}))["exit_code"] == 0  # type: ignore[typeddict-item]
+    guard.raise_if_failed()
+    sandbox.fail = error_from_status(503, None, None)
+    assert await guard.acall(spec, {"command": "ls"}) is FATAL_RESULT
+    assert await guard.acall(spec, {"command": "ls"}) is FATAL_RESULT
+    assert sum(1 for c in sandbox.calls if c[0] == "exec") == 2
+    with pytest.raises(type(sandbox.fail)):
+        guard.raise_if_failed()
+
+
+async def test_guard_does_not_swallow_cancellation():
+    guard = FatalGuard()
+
+    async def cancelled(args: Any) -> Any:
+        raise asyncio.CancelledError
+
+    with pytest.raises(asyncio.CancelledError):
+        await guard.acall(
+            ToolSpec("run_command", "t", "d", PARAMETERS["run_command"], cancelled), {}
+        )
+    assert not guard.failed
