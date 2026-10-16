@@ -1564,6 +1564,23 @@ result = tools.call("run_command", {"command": "ls", "timeout_s": 30})
 
 **Example:** [`agent_tools_loop.py`](../examples/agent_patterns/agent_tools_loop.py)
 
+#### Framework helpers
+
+| API | Returns | Description |
+| --- | ------- | ----------- |
+| `tools.specs()` | `list[ToolSpec]` | One frozen `ToolSpec` per enabled tool in `names()` order: `name`, `title`, `description`, `parameters` (the read-only `PARAMETERS` entry itself; copy it before changing it) and `call(args=None)`, which is `tools.call(name, args)`. On `AsyncSandboxTools`, `call` returns a coroutine |
+| `FatalGuard()` | `FatalGuard` | One per run. `call(spec, args=None)` (sync) and `await acall(spec, args=None)` run `spec.call`; an exception becomes `FATAL_RESULT`, one read-only `{"error": "The sandbox call failed and the run is stopping."}` object (match it with `is`), so its text, which can carry request URLs, never reaches the model. The first exception is kept, and once failed later calls return the same result without running |
+| `guard.failed` / `guard.error` | `bool` / `Exception \| None` | Whether a call failed, and the first exception |
+| `guard.raise_if_failed()` | `None` | Raises the first exception; no-op when none |
+
+Adapters in `neevai.agent_tools` (each needs its framework, installed through the extra):
+
+| Module | Call | Returns | Notes |
+| ------ | ---- | ------- | ----- |
+| `claude` (`neevai[claude]`) | `to_claude(tools: SandboxTools)` | `ClaudeTools` | `.options()` is keyword arguments for `ClaudeAgentOptions`: `tools=[]`, an in-process MCP server `neev`, `strict_mcp_config=True`, `allowed_tools` of `mcp__neev__<name>`, `setting_sources=[]`, `permission_mode="dontAsk"`. `options()` builds a fresh MCP server on each call. Each tool carries its `TITLES` entry as its `title` annotation. Handlers run the call in a worker thread through `.guard` and return the result as JSON text, with `is_error` only for `FATAL_RESULT`. `async .watch(messages)` yields each message, stops once the guard failed and then raises its error, and raises `RuntimeError("host tools were used: <names>")` for any other tool |
+| `openai_agents` (`neevai[openai-agents]`) | `to_openai_agents(tools: SandboxTools)` | `list[FunctionTool]` | `strict_json_schema=False`; arguments that are not JSON return `{"error": "invalid arguments for <name>: not JSON"}`; the result is JSON text. An exception ends `Runner.run` as `agents.exceptions.UserError` with the original as `__cause__`, so no guard |
+| `langchain` (`neevai[langchain]`) | `to_langchain(tools: SandboxTools)` | `list[StructuredTool]` | `args_schema` is the JSON Schema; the result is JSON text. `handle_tool_error` stays off, so exceptions propagate |
+
 #### Result types (`TypedDict`)
 
 | Type | Fields |
@@ -2330,7 +2347,7 @@ Compact reviewer index. Each symbol should also appear in
 | `AsyncSandboxConnection.*` | mirror | `.aclose()` instead of `.close()` |
 | `AsyncSandboxFiles.*` | mirror | Add `await` |
 
-### Agent tools (`agent_tools.py`)
+### Agent tools (`agent_tools/`)
 
 | Symbol | Kind | Notes |
 | ------ | ---- | ----- |
@@ -2340,6 +2357,9 @@ Compact reviewer index. Each symbol should also appear in
 | `PARAMETERS` | constant | `Mapping[str, Mapping[str, Any]]`, read-only |
 | `ToolName` | type alias | `Literal` of the thirteen tool names |
 | `ToolResult` | type alias | Union of the result types |
+| `ToolSpec` | frozen dataclass | One tool for a framework adapter, from `specs()` |
+| `FatalGuard` / `FATAL_RESULT` / `FATAL_ERROR` | class / constants | Stops a run at the first exception; the fixed, read-only error result and its text |
+| `neevai.agent_tools.claude` / `.openai_agents` / `.langchain` | modules | `to_claude` / `to_openai_agents` / `to_langchain` |
 | `ToolErrorResult`, `RunCommandToolResult`, `WriteFileToolResult`, `ReadFileToolResult`, `ExposePortToolResult`, `CheckpointToolResult`, `RollbackToolResult`, `StartProcessToolResult`, `ReadProcessOutputToolResult`, `StopProcessToolResult`, `StatPathToolResult`, `MovePathToolResult`, `DeletePathToolResult`, `ListProcessesToolResult`, `ListedProcess` | `TypedDict` | Tool results |
 
 ### Raw client (`transport/lifecycle.py`)
