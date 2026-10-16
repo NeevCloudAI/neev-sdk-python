@@ -27,6 +27,7 @@ from neevai.types import (
 
 if TYPE_CHECKING:
     from neevai.resources.sandboxes import AsyncSandboxes, Sandboxes
+    from neevai.runtime.code import AsyncSandboxCode, SandboxCode
     from neevai.runtime.connection import (
         AsyncSandboxConnection,
         AsyncSandboxFiles,
@@ -438,6 +439,11 @@ class Sandbox:
     def processes(self) -> SandboxProcesses:
         """Exposes supervised process operations on the sandbox runtime."""
         return self._connection().processes
+
+    @property
+    def code(self) -> SandboxCode:
+        """Runs code in persistent kernels; needs a sandbox from the interpreter template."""
+        return self._connection().code
 
     @property
     def pty(self) -> SandboxPty:
@@ -915,6 +921,11 @@ class AsyncSandbox:
     def processes(self) -> AsyncSandboxProcesses:
         """Exposes supervised process operations on the sandbox runtime."""
         return self._connection().processes
+
+    @property
+    def code(self) -> AsyncSandboxCode:
+        """Runs code in persistent kernels; needs a sandbox from the interpreter template."""
+        return self._connection().code
 
     @property
     def pty(self) -> AsyncSandboxPty:
