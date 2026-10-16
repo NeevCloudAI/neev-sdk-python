@@ -201,6 +201,33 @@ def _list_query(
     return query
 
 
+# Capturing a snapshot can take minutes, so it waits longer than a sandbox readiness wait.
+DEFAULT_SNAPSHOT_WAIT_TIMEOUT_MS = 300_000
+DEFAULT_SNAPSHOT_POLL_INTERVAL_MS = 2_000
+
+
+def check_snapshot_wait(timeout_ms: float, poll_interval_ms: float) -> None:
+    """Raises NeevAIError unless both snapshot-wait timings are positive and finite."""
+    # A zero, negative or NaN timing would spin a near-zero-delay poll or never time out.
+    for name, value in (("timeout_ms", timeout_ms), ("poll_interval_ms", poll_interval_ms)):
+        if not value > 0 or value == float("inf"):
+            raise NeevAIError(f"wait_for_snapshot: {name} must be a positive number (got {value}).")
+
+
+def _snapshot_done(snapshot: Snapshot, snapshot_id: str | UUID) -> bool:
+    if snapshot.status == "Ready":
+        return True
+    if snapshot.status == "Failed":
+        reason = f": {snapshot.error_message}" if snapshot.error_message else ""
+        raise NeevAIError(f"Snapshot {snapshot_id} failed to capture{reason}.")
+    return False
+
+
+def _snapshot_timeout(snapshot: Snapshot, snapshot_id: str | UUID, timeout_ms: float) -> str:
+    status = getattr(snapshot.status, "value", snapshot.status)
+    return f"Snapshot {snapshot_id} was not Ready within {timeout_ms}ms (status: {status})."
+
+
 class Sandboxes:
     """Operations on the /sandboxes API endpoint (synchronous)."""
 
@@ -607,6 +634,31 @@ class Sandboxes:
         )
         raw = self._client._transport.request("GET", path)
         return coerce_model(Snapshot, raw)
+
+    def wait_for_snapshot(
+        self,
+        snapshot_id: str | UUID,
+        timeout_ms: int = DEFAULT_SNAPSHOT_WAIT_TIMEOUT_MS,
+        poll_interval_ms: int = DEFAULT_SNAPSHOT_POLL_INTERVAL_MS,
+        org_id: str | None = None,
+        project_id: str | None = None,
+    ) -> Snapshot:
+        """Polls a snapshot until it is Ready and returns it.
+
+        Raises:
+            NeevAIError: the snapshot Failed, was not Ready within ``timeout_ms``, or a
+                timing is not a positive number.
+        """
+        check_snapshot_wait(timeout_ms, poll_interval_ms)
+        deadline = time.monotonic() * 1000.0 + timeout_ms
+        while True:
+            snapshot = self.get_snapshot(snapshot_id, org_id=org_id, project_id=project_id)
+            if _snapshot_done(snapshot, snapshot_id):
+                return snapshot
+            remaining = deadline - time.monotonic() * 1000.0
+            if remaining <= 0:
+                raise NeevAIError(_snapshot_timeout(snapshot, snapshot_id, timeout_ms))
+            time.sleep(min(poll_interval_ms, remaining) / 1000.0)
 
     def delete_snapshot(
         self,
@@ -1066,6 +1118,31 @@ class AsyncSandboxes:
         )
         raw = await self._client._transport.request("GET", path)
         return coerce_model(Snapshot, raw)
+
+    async def wait_for_snapshot(
+        self,
+        snapshot_id: str | UUID,
+        timeout_ms: int = DEFAULT_SNAPSHOT_WAIT_TIMEOUT_MS,
+        poll_interval_ms: int = DEFAULT_SNAPSHOT_POLL_INTERVAL_MS,
+        org_id: str | None = None,
+        project_id: str | None = None,
+    ) -> Snapshot:
+        """Polls a snapshot asynchronously until it is Ready and returns it.
+
+        Raises:
+            NeevAIError: the snapshot Failed, was not Ready within ``timeout_ms``, or a
+                timing is not a positive number.
+        """
+        check_snapshot_wait(timeout_ms, poll_interval_ms)
+        deadline = time.monotonic() * 1000.0 + timeout_ms
+        while True:
+            snapshot = await self.get_snapshot(snapshot_id, org_id=org_id, project_id=project_id)
+            if _snapshot_done(snapshot, snapshot_id):
+                return snapshot
+            remaining = deadline - time.monotonic() * 1000.0
+            if remaining <= 0:
+                raise NeevAIError(_snapshot_timeout(snapshot, snapshot_id, timeout_ms))
+            await asyncio.sleep(min(poll_interval_ms, remaining) / 1000.0)
 
     async def delete_snapshot(
         self,
