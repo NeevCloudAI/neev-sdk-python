@@ -34,7 +34,7 @@ Required environment variables:
 Optional overrides:
 
 - ``NEEV_SANDBOX_TEMPLATE_ID`` — template to provision (default:
-  ``sb-ubuntu-26-04-minimal``)
+  ``sb-ubuntu-26-04-dev``)
 
 Flow
 ----
@@ -64,7 +64,7 @@ Example Output
 Run::
 
     NEEV_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=... \\
-    NEEV_SANDBOX_TEMPLATE_ID=sb-ubuntu-26-04-minimal \\
+    NEEV_SANDBOX_TEMPLATE_ID=sb-ubuntu-26-04-dev \\
     uv run python examples/streaming_exec.py
 """
 
@@ -77,7 +77,7 @@ import time
 from neevai import NeevAI
 
 # Tunable defaults — override via environment variables listed in the docstring.
-TEMPLATE = os.environ.get("NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-minimal")
+TEMPLATE = os.environ.get("NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-dev")
 
 start = time.time() * 1000
 

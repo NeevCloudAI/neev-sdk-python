@@ -160,7 +160,7 @@ def test_control_transport_sanity(control_transport):
         "/v1/sandboxes",
         body={
             "name": "s1",
-            "sandbox_template_id": "sb-ubuntu-24-04-minimal",
+            "sandbox_template_id": "sb-ubuntu-26-04-dev",
         },
     )
     assert created["name"] == "s1"

@@ -35,7 +35,7 @@ class SandboxCodeExecutor:
     ):
         self._client = NeevAI()
         self._template_id = template_id or os.environ.get(
-            "NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-minimal"
+            "NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-dev"
         )
         self._sandbox: Sandbox | None = None
 

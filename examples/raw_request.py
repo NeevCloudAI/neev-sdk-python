@@ -35,7 +35,7 @@ Example Output
 ::
 
     raw templates: 3 item(s)
-      sb-ubuntu-26-04-minimal — Ubuntu Minimal
+      sb-ubuntu-26-04-dev — Ubuntu 26.04 Dev
       sb-python-3-12 — Python 3.12
       sb-node-22 — Node.js 22
     raw sandboxes: 12 total in project

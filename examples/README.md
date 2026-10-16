@@ -32,10 +32,10 @@ $env:NEEV_PROJECT_ID = "..."
 By default examples target the **production** API
 (`https://api.ai.neevcloud.com/agent`).
 
-Template id defaults to `sb-ubuntu-26-04-minimal`; override with:
+Template id defaults to `sb-ubuntu-26-04-dev`; override with:
 
 ```sh
-export NEEV_SANDBOX_TEMPLATE_ID=sb-ubuntu-26-04-minimal
+export NEEV_SANDBOX_TEMPLATE_ID=sb-ubuntu-26-04-dev
 ```
 
 For platform agent create (`create_agent.py`), pick a catalogue template name:
@@ -127,6 +127,7 @@ uses the **platform agents API** — not the model-driven patterns in Tier 2.
 | [`streaming_exec.py`](./streaming_exec.py) | `exec_stream` — stdout/stderr streamed line-by-line | `uv run python examples/streaming_exec.py` |
 | [`processes.py`](./processes.py) | `refresh` (connect_url poll), `wait_until_ready`, `processes.list` (runtime probe), `start`, `follow`, `logs`, `kill`, `wait` | `uv run python examples/processes.py` |
 | [`process_pool.py`](./process_pool.py) | Same wait pattern as `processes.py`, parallel `start`, `list`, `kill_all`, `wait` | `uv run python examples/process_pool.py` |
+| [`docker.py`](./docker.py) | `sandboxes.create` from `sb-ubuntu-26-04-docker`, `exec` `start-docker`, then `docker run --network=host` | `uv run python examples/docker.py` |
 | [`parallel_fanout.py`](./parallel_fanout.py) | Multiple `sandboxes.create`, parallel `exec` via `ThreadPoolExecutor` | `uv run python examples/parallel_fanout.py` |
 | [`sandbox_metrics.py`](./sandbox_metrics.py) | `metrics()` polled under simulated CPU load | `uv run python examples/sandbox_metrics.py` |
 | [`raw_request.py`](./raw_request.py) | `client.raw.request` — untyped API access | `uv run python examples/raw_request.py` |
@@ -321,7 +322,7 @@ uv run python examples/workflow_examples/browser_agent.py --query "AI"
 | `NEEV_ORG_ID` | all | — (required) |
 | `NEEV_PROJECT_ID` | all | — (required) |
 | `NEEV_BASE_URL` | all | `https://api.ai.neevcloud.com/agent` |
-| `NEEV_SANDBOX_TEMPLATE_ID` | sandbox create | `sb-ubuntu-26-04-minimal` |
+| `NEEV_SANDBOX_TEMPLATE_ID` | sandbox create | `sb-ubuntu-26-04-dev` |
 | `NEEV_AGENT_TEMPLATE` | `create_agent.py` | `claude-code` |
 | `NEEV_INFERENCE_API_KEY` | model examples | falls back to `NEEV_API_KEY` |
 | `NEEV_INFERENCE_BASE_URL` | model examples | `https://inference.ai.neevcloud.com/v1` |
@@ -336,8 +337,8 @@ uv run python examples/workflow_examples/browser_agent.py --query "AI"
 ## Notes
 
 - Sandbox file paths are relative to the workspace or absolute within it — the sandbox refuses paths outside it.
-- Standard minimal templates ship `sh` only (no `bash`, no `python3`); `sh -c`
-  works on every template. `run_python` needs a python-capable template.
+- The default `sb-ubuntu-26-04-dev` template ships `bash`, `python3` and `node`. List the
+  catalogue with `client.templates.list()`.
 - Python examples call `wait_until_ready()` explicitly before `exec` / `exec_stream`
   (the TS SDK auto-waits on first use).
 - `processes.py` and `process_pool.py` poll until `connect_url` is set, call

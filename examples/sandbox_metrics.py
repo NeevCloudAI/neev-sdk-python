@@ -37,7 +37,7 @@ Required environment variables:
 Optional overrides:
 
 - ``NEEV_SANDBOX_TEMPLATE_ID`` — template to provision (default:
-  ``sb-ubuntu-26-04-minimal``)
+  ``sb-ubuntu-26-04-dev``)
 
 Module constants (not env-overridable):
 
@@ -61,7 +61,7 @@ Example Output
 
 ::
 
-    [metrics] creating sandbox (sb-ubuntu-26-04-minimal)…
+    [metrics] creating sandbox (sb-ubuntu-26-04-dev)…
     [metrics] ready: sb-abc123
     [metrics] starting report generation job
     [metrics] batch 1/8 complete — checking sandbox health…
@@ -78,7 +78,7 @@ Example Output
 Run::
 
     NEEV_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=... \\
-    NEEV_SANDBOX_TEMPLATE_ID=sb-ubuntu-26-04-minimal \\
+    NEEV_SANDBOX_TEMPLATE_ID=sb-ubuntu-26-04-dev \\
     uv run python examples/sandbox_metrics.py
 """
 
@@ -93,7 +93,7 @@ from neevai.types import SandboxMetricsResponse
 
 # Tunable defaults — override via environment variables listed in the docstring.
 # BATCHES and BATCH_SECONDS are module constants (see docstring).
-TEMPLATE = os.environ.get("NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-minimal")
+TEMPLATE = os.environ.get("NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-dev")
 BATCHES = 8
 BATCH_SECONDS = 15
 

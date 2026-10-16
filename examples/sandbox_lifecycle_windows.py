@@ -19,7 +19,7 @@ Required environment variables:
 Optional overrides:
 
 - ``NEEV_SANDBOX_TEMPLATE_ID`` — template to provision (default:
-  ``sb-ubuntu-26-04-minimal``)
+  ``sb-ubuntu-26-04-dev``)
 - ``NEEVAI_WAIT_TIMEOUT_MS`` — max time to wait for ready state (default: ``300000``)
 - ``NEEVAI_IDLE_TIMEOUT_SEC`` — idle window to set at create (default: ``60``)
 - ``NEEVAI_KEEPALIVE_ITERS`` — number of keepalive pings (default: ``5``)
@@ -53,7 +53,7 @@ from neevai import NeevAI
 from neevai.errors import NeevAIError
 
 WAIT_TIMEOUT_MS = int(os.environ.get("NEEVAI_WAIT_TIMEOUT_MS", "300000"))
-SANDBOX_TEMPLATE_ID = os.environ.get("NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-minimal")
+SANDBOX_TEMPLATE_ID = os.environ.get("NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-dev")
 IDLE_TIMEOUT_SEC = int(os.environ.get("NEEVAI_IDLE_TIMEOUT_SEC", "60"))
 KEEPALIVE_ITERS = int(os.environ.get("NEEVAI_KEEPALIVE_ITERS", "5"))
 KEEPALIVE_INTERVAL_SEC = float(os.environ.get("NEEVAI_KEEPALIVE_INTERVAL_SEC", "20"))

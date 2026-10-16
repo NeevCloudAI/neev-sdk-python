@@ -20,15 +20,15 @@ def test_templates_list(mock_transport):
     client = _make_client(mock_transport)
     page = client.templates.list()
     assert page.total == 1
-    assert page.items[0].id == "sb-ubuntu-26-04-minimal"
+    assert page.items[0].id == "sb-ubuntu-26-04-dev"
     assert page.items[0].status.value == "active"
     client.close()
 
 
 def test_templates_get(mock_transport):
     client = _make_client(mock_transport)
-    template = client.templates.get("sb-ubuntu-26-04-minimal")
-    assert template.id == "sb-ubuntu-26-04-minimal"
+    template = client.templates.get("sb-ubuntu-26-04-dev")
+    assert template.id == "sb-ubuntu-26-04-dev"
     client.close()
 
 
@@ -52,5 +52,5 @@ async def test_async_templates_get():
         project_id="proj1",
         client=httpx.AsyncClient(transport=MockControlTransport()),
     ) as client:
-        template = await client.templates.get("sb-ubuntu-26-04-minimal")
-        assert template.name == "Ubuntu 26.04 Minimal"
+        template = await client.templates.get("sb-ubuntu-26-04-dev")
+        assert template.name == "Ubuntu 26.04 Dev"

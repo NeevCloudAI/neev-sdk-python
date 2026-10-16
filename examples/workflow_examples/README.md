@@ -48,7 +48,7 @@ tries GitHub archive fallback (HTTPS GitHub URLs only) or a static binary from
 
 ### Browser Automation (`browser_agent.py`)
 
-Uses `NEEV_SANDBOX_TEMPLATE_ID` (default `sb-ubuntu-26-04-minimal`). Bootstrap
+Uses `NEEV_SANDBOX_TEMPLATE_ID` (default `sb-ubuntu-26-04-dev`). Bootstrap
 runs `pip install playwright` and `playwright install chromium` before the agent
 loop. The agent scrapes [Hacker News](https://news.ycombinator.com) for story
 titles matching `--query` (case-insensitive) and saves matches to
@@ -77,7 +77,7 @@ partial results after max steps). Exits with code 1 if the artifact is missing.
 | `NEEV_INFERENCE_API_KEY` | yes | — | All |
 | `NEEV_INFERENCE_BASE_URL` | no | `https://inference.ai.neevcloud.com/v1` | All |
 | `NEEV_MODEL` | no | `gpt-oss-120b` | All |
-| `NEEV_SANDBOX_TEMPLATE_ID` | no | `sb-ubuntu-26-04-minimal` | All |
+| `NEEV_SANDBOX_TEMPLATE_ID` | no | `sb-ubuntu-26-04-dev` | All |
 | `NEEVAI_WORKFLOW_MAX_STEPS` | no | `35` (`repo_analyzer`), `70` (`browser_agent`) | All |
 | `NEEV_GIT_STATIC_URL` | no | — | `repo_analyzer.py` (optional static git binary) |
 

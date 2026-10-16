@@ -32,7 +32,7 @@ Inference (see ``utils/model_config.py`` for key resolution):
 Optional overrides:
 
 - ``NEEV_SANDBOX_TEMPLATE_ID`` — template to provision (default:
-  ``sb-ubuntu-26-04-minimal``)
+  ``sb-ubuntu-26-04-dev``)
 - ``NEEV_MODEL`` — inference model name (default: ``gpt-oss-120b``)
 - ``NEEV_INFERENCE_BASE_URL`` — OpenAI-compatible
   endpoint (default: ``https://inference.ai.neevcloud.com/v1``)

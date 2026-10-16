@@ -158,7 +158,7 @@ def _install_git_static(sandbox: Sandbox) -> bool:
 
 
 def _bootstrap_failure_message(tool: str, details: str, *, required: bool) -> str:
-    template_id = os.environ.get("NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-minimal")
+    template_id = os.environ.get("NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-dev")
     requirement = "required" if required else "optional"
     return (
         f"Could not install {tool} ({requirement}) in the sandbox.\n"
@@ -174,7 +174,7 @@ def _bootstrap_failure_message(tool: str, details: str, *, required: bool) -> st
 
 
 def create_standard_sandbox(client: NeevAI, region: str | None = None) -> Sandbox:
-    template_id = os.environ.get("NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-minimal")
+    template_id = os.environ.get("NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-dev")
     print(f"[sandbox] creating (template={template_id})…", file=sys.stderr)
     sandbox = client.sandboxes.create(
         {

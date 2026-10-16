@@ -16,7 +16,7 @@ Required environment variables:
 Optional overrides:
 
 - ``NEEV_SANDBOX_TEMPLATE_ID`` — template to provision (default:
-  ``sb-ubuntu-26-04-minimal``)
+  ``sb-ubuntu-26-04-dev``)
 - ``NEEVAI_WAIT_TIMEOUT_MS`` — max time to wait for connect URL, Ready phase,
   and runtime in ms (default: ``300000``)
 - ``NEEVAI_POLL_INTERVAL_MS`` — poll interval while waiting in ms (default:
@@ -51,7 +51,7 @@ from neevai.errors import APIConnectionError, APIError, APITimeoutError, NeevAIE
 from neevai.handles.sandbox import Sandbox
 
 # Tunable defaults — override via environment variables listed in the docstring.
-TEMPLATE = os.environ.get("NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-minimal")
+TEMPLATE = os.environ.get("NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-dev")
 WAIT_TIMEOUT_MS = int(os.environ.get("NEEVAI_WAIT_TIMEOUT_MS", "300000"))
 POLL_INTERVAL_MS = int(os.environ.get("NEEVAI_POLL_INTERVAL_MS", "2000"))
 WORKER_COUNT = 3

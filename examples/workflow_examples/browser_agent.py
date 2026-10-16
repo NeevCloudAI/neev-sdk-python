@@ -53,7 +53,7 @@ OUTPUT_DIR = HERE / "output"
 
 
 def create_browser_sandbox(client: NeevAI, region: str | None = None) -> Sandbox:
-    template_id = os.environ.get("NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-minimal")
+    template_id = os.environ.get("NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-dev")
     print(
         f"[sandbox] creating browser sandbox (template={template_id})…",
         file=sys.stderr,

@@ -693,7 +693,9 @@ Paths: `/api/v1beta1/agent-templates`.
 
 ## Templates resource
 
-Access via `client.templates`. Read-only catalogue with no org/project scope.
+Access via `client.templates`. Read-only catalogue with no org/project scope. The catalogue
+changes over time, so list it rather than hard-coding template ids; `sb-ubuntu-26-04-dev`
+(with `bash`, `python3` and `node`) is the one the examples use.
 
 ### `client.templates.list(page=None, limit=None)`
 
@@ -1322,7 +1324,7 @@ POLL_MS = int(os.environ.get("NEEVAI_POLL_INTERVAL_MS", "2000"))
 with NeevAI() as client:
     sandbox = client.sandboxes.create({
         "name": "processes-demo",
-        "sandbox_template_id": "sb-ubuntu-26-04-minimal",
+        "sandbox_template_id": "sb-ubuntu-26-04-dev",
     })
     deadline = time.time() + WAIT_MS / 1000.0
 
@@ -1907,6 +1909,8 @@ Omit a field for the account default; send `0` to turn that limit off.
 | `icon` | `str \| None` | no (display icon, e.g. an SVG document) |
 | `category` | enum | yes |
 | `status` | enum | yes |
+| `interpreter` | `bool \| None` | no (`True` when sandboxes from it run the code interpreter) |
+| `min_memory_gb` | `int \| None` | no (smallest memory a sandbox from it may have; `None` when there is no minimum) |
 | `created_at` | `datetime` | yes |
 | `updated_at` | `datetime` | yes |
 

@@ -39,7 +39,7 @@ Set these environment variables before running scripts, or pass equivalent kwarg
 | `NEEV_ORG_ID` | Default organization ID |
 | `NEEV_PROJECT_ID` | Default project ID |
 | `NEEV_BASE_URL` | Base URL (default: `https://api.ai.neevcloud.com/agent`) |
-| `NEEV_SANDBOX_TEMPLATE_ID` | Optional sandbox template id (defaults to `sb-ubuntu-26-04-minimal` in examples) |
+| `NEEV_SANDBOX_TEMPLATE_ID` | Optional sandbox template id (defaults to `sb-ubuntu-26-04-dev` in examples) |
 | `NEEV_AGENT_TEMPLATE` | Optional agent template **name** for `create_agent.py` (default: `claude-code`) |
 
 **Linux / macOS (bash/zsh)** — current session:
@@ -240,7 +240,7 @@ on the message text — and `APIError.scope` names the limit a quota refusal hit
 from neevai.errors import APIError
 
 try:
-    client.sandboxes.create({"sandbox_template_id": "sb-ubuntu-26-04-minimal"})
+    client.sandboxes.create({"sandbox_template_id": "sb-ubuntu-26-04-dev"})
 except APIError as e:
     if e.code == "sandbox_quota_exceeded":
         print(f"quota reached for this {e.scope}")
@@ -364,6 +364,7 @@ See [`examples/README.md`](examples/README.md) for the full catalogue and learni
 | [`agent_ports_audit.py`](examples/agent_ports_audit.py) | Agent preview URL with a slug, keepalive, audit trail |
 | [`streaming_exec.py`](examples/streaming_exec.py) | Live `sandbox.exec_stream()` output |
 | [`processes.py`](examples/processes.py) | Supervised process lifecycle (start, follow, logs, kill) |
+| [`docker.py`](examples/docker.py) | Docker template → `start-docker` → `docker run --network=host` |
 | [`process_pool.py`](examples/process_pool.py) | Parallel processes with `kill_all` |
 | [`parallel_fanout.py`](examples/parallel_fanout.py) | 3 sandboxes, parallel repo analysis, aggregated file counts |
 | [`sandbox_metrics.py`](examples/sandbox_metrics.py) | Metrics under CPU load |

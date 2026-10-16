@@ -37,7 +37,7 @@ Inference (see ``utils/model_config.py`` for key resolution):
 Optional overrides:
 
 - ``NEEV_SANDBOX_TEMPLATE_ID`` — template to provision (default:
-  ``sb-ubuntu-26-04-minimal``)
+  ``sb-ubuntu-26-04-dev``)
 - ``NEEV_MODEL`` — inference model name (default: ``gpt-oss-120b``)
 - ``NEEV_INFERENCE_BASE_URL`` — OpenAI-compatible
   endpoint (default: ``https://inference.ai.neevcloud.com/v1``)
@@ -67,7 +67,7 @@ Example Output
     AI code-interpreter (gpt-oss-120b → Neev sandbox)
     task: Print every prime number below 50…
 
-    [sandbox] creating (template=sb-ubuntu-26-04-minimal)…
+    [sandbox] creating (template=sb-ubuntu-26-04-dev)…
 
     ━━━━━ step 1 ━━━━━
     [model] calling gpt-oss-120b with 2 messages…
@@ -125,12 +125,11 @@ from neevai import NeevAI
 
 TASK = (
     "Print every prime number below 50, one per line, then on the last line print "
-    "'count: N' with how many there were. Use the run_shell tool; the sandbox has "
-    "busybox sh only (no bash, no python)."
+    "'count: N' with how many there were. Use the run_shell tool."
 )
 
 # Tunable defaults — override via environment variables listed in the docstring.
-TEMPLATE = os.environ.get("NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-minimal")
+TEMPLATE = os.environ.get("NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-dev")
 MAX_STEPS = 6
 
 TOOLS: list[dict[str, Any]] = [
@@ -209,7 +208,7 @@ def main() -> None:
                 "role": "system",
                 "content": (
                     "You are a coding assistant. You have a run_shell tool that executes POSIX sh "
-                    "in a secure sandbox (busybox sh; no bash, no python). Use as few commands as "
+                    "in a secure sandbox (bash and python3 are available). Use as few commands as "
                     "possible — never re-run a command that already succeeded — then reply with a "
                     "single concise final line."
                 ),

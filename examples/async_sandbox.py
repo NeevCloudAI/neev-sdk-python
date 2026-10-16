@@ -26,7 +26,7 @@ Required environment variables:
 Optional overrides:
 
 - ``NEEV_SANDBOX_TEMPLATE_ID`` — template to provision (default:
-  ``sb-ubuntu-26-04-minimal``)
+  ``sb-ubuntu-26-04-dev``)
 
 Flow
 ----
@@ -41,7 +41,7 @@ Example Output
 
 ::
 
-    [async] creating sandbox (sb-ubuntu-26-04-minimal)…
+    [async] creating sandbox (sb-ubuntu-26-04-dev)…
     created sb-abc123 (phase: Provisioning)
     [async] waiting until ready…
     ready at https://connect.example/sb-abc123
@@ -57,7 +57,7 @@ Stdout / stderr
 Run::
 
     NEEV_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=... \\
-    NEEV_SANDBOX_TEMPLATE_ID=sb-ubuntu-26-04-minimal \\
+    NEEV_SANDBOX_TEMPLATE_ID=sb-ubuntu-26-04-dev \\
     uv run python examples/async_sandbox.py
 """
 
@@ -71,7 +71,7 @@ from neevai import AsyncNeevAI
 from neevai.errors import NeevAIError
 
 # Tunable defaults — override via environment variables listed in the docstring.
-TEMPLATE = os.environ.get("NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-minimal")
+TEMPLATE = os.environ.get("NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-dev")
 
 
 def log(message: str) -> None:
