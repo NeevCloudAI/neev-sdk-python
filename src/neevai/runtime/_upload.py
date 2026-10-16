@@ -415,3 +415,67 @@ async def adownload(
         await chunks.aclose()  # releases the response if the loop stopped early
         _finish(handle, temp, local_path, ok)
     return written
+
+
+def check_range(offset: object, length: object) -> None:
+    """Raises ValueError unless offset is an int of 0 or more and length an int of 1 or more."""
+    for name, value, least in (("offset", offset, 0), ("length", length, 1)):
+        if value is None:
+            continue
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ValueError(f"{name} must be an integer, got {value!r}")
+        if value < least:
+            raise ValueError(f"{name} must be {least} or more, got {value}")
+
+
+def _take(chunk: bytes, seen: int, offset: int, end: int | None) -> bytes:
+    """Returns the part of ``chunk``, which starts at byte ``seen``, inside [offset, end)."""
+    return chunk[max(offset - seen, 0) : None if end is None else end - seen]
+
+
+def read_range(
+    transport: RuntimeTransport, path: str, cwd: str | None, offset: int, length: int | None
+) -> bytes:
+    """Reads ``length`` bytes from ``offset`` (to the end when None) of a streamed read.
+
+    The read API has no range, so bytes before ``offset`` are discarded and the
+    response is closed once the range is complete.
+    """
+    chunks: Generator[bytes, None, None] = transport.stream_bytes(
+        "POST", "/v1/files/read", headers=_READ_HEADERS, body=_read_body(path, cwd)
+    )
+    end = None if length is None else offset + length
+    out, seen = bytearray(), 0
+    try:
+        for chunk in chunks:
+            out += _take(chunk, seen, offset, end)
+            seen += len(chunk)
+            if end is not None and seen >= end:
+                break
+    finally:
+        chunks.close()
+    return bytes(out)
+
+
+async def aread_range(
+    transport: AsyncRuntimeTransport,
+    path: str,
+    cwd: str | None,
+    offset: int,
+    length: int | None,
+) -> bytes:
+    """Asynchronous ``read_range``: same early close once the range is complete."""
+    chunks: AsyncGenerator[bytes, None] = transport.stream_bytes(
+        "POST", "/v1/files/read", headers=_READ_HEADERS, body=_read_body(path, cwd)
+    )
+    end = None if length is None else offset + length
+    out, seen = bytearray(), 0
+    try:
+        async for chunk in chunks:
+            out += _take(chunk, seen, offset, end)
+            seen += len(chunk)
+            if end is not None and seen >= end:
+                break
+    finally:
+        await chunks.aclose()
+    return bytes(out)

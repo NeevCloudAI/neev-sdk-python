@@ -136,8 +136,24 @@ class SandboxFiles:
             "bytes_written": _upload.download(self._conn._transport, remote_path, local_path, cwd)
         }
 
-    def read(self, path: str, cwd: str | None = None) -> bytes:
-        """Reads a file from the sandbox and returns its raw binary bytes."""
+    def read(
+        self,
+        path: str,
+        cwd: str | None = None,
+        offset: int | None = None,
+        length: int | None = None,
+    ) -> bytes:
+        """Reads a file from the sandbox and returns its raw binary bytes.
+
+        With ``offset`` or ``length``, returns at most ``length`` bytes starting at
+        ``offset`` (default 0), streaming only as far as the range needs.
+
+        Raises:
+            ValueError: ``offset`` is negative or ``length`` is below 1.
+        """
+        if offset is not None or length is not None:
+            _upload.check_range(offset, length)
+            return _upload.read_range(self._conn._transport, path, cwd, offset or 0, length)
         response = self._conn._transport.request(
             method="POST",
             path="/v1/files/read",
@@ -149,9 +165,19 @@ class SandboxFiles:
         )
         return response.content
 
-    def read_text(self, path: str, cwd: str | None = None) -> str:
-        """Reads a file from the sandbox and decodes it as UTF-8 string."""
-        return self.read(path, cwd=cwd).decode("utf-8")
+    def read_text(
+        self,
+        path: str,
+        cwd: str | None = None,
+        offset: int | None = None,
+        length: int | None = None,
+    ) -> str:
+        """Reads a file from the sandbox and decodes it as UTF-8 string.
+
+        ``offset`` and ``length`` select a byte range as for ``read``, so a range that
+        splits a character fails to decode.
+        """
+        return self.read(path, cwd=cwd, offset=offset, length=length).decode("utf-8")
 
     def list(
         self,
@@ -420,8 +446,20 @@ class AsyncSandboxFiles:
         written = await _upload.adownload(self._conn._transport, remote_path, local_path, cwd)
         return {"bytes_written": written}
 
-    async def read(self, path: str, cwd: str | None = None) -> bytes:
-        """Reads a file asynchronously, returning its raw binary bytes."""
+    async def read(
+        self,
+        path: str,
+        cwd: str | None = None,
+        offset: int | None = None,
+        length: int | None = None,
+    ) -> bytes:
+        """Reads a file asynchronously, returning its raw binary bytes.
+
+        ``offset`` and ``length`` select a byte range as for :meth:`SandboxFiles.read`.
+        """
+        if offset is not None or length is not None:
+            _upload.check_range(offset, length)
+            return await _upload.aread_range(self._conn._transport, path, cwd, offset or 0, length)
         response = await self._conn._transport.request(
             method="POST",
             path="/v1/files/read",
@@ -433,9 +471,15 @@ class AsyncSandboxFiles:
         )
         return response.content
 
-    async def read_text(self, path: str, cwd: str | None = None) -> str:
-        """Reads a file asynchronously, decoding as UTF-8."""
-        raw_bytes = await self.read(path, cwd=cwd)
+    async def read_text(
+        self,
+        path: str,
+        cwd: str | None = None,
+        offset: int | None = None,
+        length: int | None = None,
+    ) -> str:
+        """Reads a file asynchronously, decoding as UTF-8; ``offset`` and ``length`` as for ``read``."""
+        raw_bytes = await self.read(path, cwd=cwd, offset=offset, length=length)
         return raw_bytes.decode("utf-8")
 
     async def list(

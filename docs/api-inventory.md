@@ -1129,13 +1129,19 @@ result = sandbox.files.download_file("data/dataset.parquet", "copy.parquet")  # 
 
 **Example:** [`upload_download.py`](../examples/upload_download.py)
 
-### `sandbox.files.read(path, cwd=None)` / `read_text(path, cwd=None)`
+### `sandbox.files.read(path, cwd=None, offset=None, length=None)` / `read_text(path, cwd=None, offset=None, length=None)`
 
-Read raw bytes or UTF-8 decoded text.
+Read raw bytes or UTF-8 decoded text. With `offset` (default 0) or `length`
+(default: to the end), only that byte range is returned: the response is
+streamed, bytes before `offset` are discarded, and the stream is closed once
+`offset + length` bytes have arrived. A negative `offset` or a `length` below 1
+raises `ValueError`, as does an `offset` or `length` that is not an `int` (a `bool` or `float` included). A range that splits a character makes `read_text` raise
+`UnicodeDecodeError`.
 
 ```python
 raw = sandbox.files.read("data.bin")
 text = sandbox.files.read_text("README.md")
+header = sandbox.files.read("data.bin", length=512)
 ```
 
 ### `sandbox.files.list(path, cwd=None, recursive=False, max_count=None)`
@@ -1485,7 +1491,7 @@ contract to one sandbox handle for a model to call. No framework dependency.
 | `sandbox` | `Sandbox` the tools act on |
 | `allow_preview` | Enable `expose_port` (makes a port public) |
 | `allow_rollback` | Enable `checkpoint` and `rollback` |
-| `allow_processes` | Enable `start_process`, `read_process_output`, `stop_process` |
+| `allow_processes` | Enable `start_process`, `read_process_output`, `stop_process`, `list_processes` |
 
 **Raises:** `ValueError` if `allow_preview` or `allow_rollback` is set on a handle
 with no client context (`sandbox.sandboxes is None`).
@@ -1496,13 +1502,17 @@ with no client context (`sandbox.sandboxes is None`).
 | `call(name, args=None)` | `ToolResult` | Runs a tool by model-facing name with a dict of args; unknown tool, disabled tool, or args that do not fit return `ToolErrorResult` |
 | `run_command(command, cwd=None, timeout_s=None)` | `RunCommandToolResult \| ToolErrorResult` | `sh -lc`; `timeout_s` clamped 1-600, default 60; output over 10 KB per stream cut in the middle. A command silent for about 2 minutes is cut off at the network edge: before any output the edge answers HTTP 524, which `run_command` returns as the error result `"the command printed nothing for about 2 minutes and the connection was cut; it may still be running. Use start_process for long or quiet commands"`; once output has started the stream is dropped and `APIConnectionError` raises. Long or quiet work belongs in `start_process` |
 | `write_file(path, content)` | `WriteFileToolResult \| ToolErrorResult` | UTF-8 text under `/workspace` |
-| `read_file(path)` | `ReadFileToolResult \| ToolErrorResult` | UTF-8 text, cut like command output |
+| `read_file(path, offset=None, length=None)` | `ReadFileToolResult \| ToolErrorResult` | UTF-8 text, cut like command output. With `offset` or `length`, a page of whole characters: `length` clamped 1-10000 (default 10000), a negative `offset` reads from 0, and the result adds `next_offset` and `eof`. A start inside a character skips to the next one (at most 3 bytes) and an end inside one backs off, so `next_offset` may differ from `offset + length`; a window too short for one whole character grows to hold it, so `next_offset` always advances until `eof` |
+| `stat_path(path)` | `StatPathToolResult \| ToolErrorResult` | `{"exists": False}` for a missing path (a 404 with the runtime's `not_found` reason code; any other 404 is an error result), else `exists`, `type`, `size`, `modified_time` |
+| `move_path(source, destination)` | `MovePathToolResult \| ToolErrorResult` | Move or rename; `{"ok": True}` |
+| `delete_path(path, recursive=None)` | `DeletePathToolResult \| ToolErrorResult` | Delete a file or directory; a non-empty directory needs `recursive=True` (only `True` counts) |
 | `expose_port(port)` | `ExposePortToolResult \| ToolErrorResult` | Public preview URL once routable |
 | `checkpoint(label=None)` | `CheckpointToolResult \| ToolErrorResult` | Snapshot, waiting up to 300 s for `Ready` |
 | `rollback(checkpoint_id)` | `RollbackToolResult \| ToolErrorResult` | In-place rollback |
 | `start_process(command, cwd=None)` | `StartProcessToolResult \| ToolErrorResult` | Background `sh -lc`; a `resource_exhausted` 429 is an error result |
 | `read_process_output(process_id, cursor=None, wait_s=None)` | `ReadProcessOutputToolResult \| ToolErrorResult` | Output since `cursor`; `wait_s` clamped 0-60, default 0, waits for a running process to exit first |
 | `stop_process(process_id)` | `StopProcessToolResult \| ToolErrorResult` | SIGTERM; `ok` is `False` if already exited |
+| `list_processes()` | `ListProcessesToolResult \| ToolErrorResult` | `processes`: `process_id`, `command` (the command given to `start_process`, else program and args joined by spaces), `state`, and `exit_code` once exited |
 
 `timeout_s` and `wait_s` accept numbers or plain decimal strings (`"30"`,
 `"2.5"`; ASCII digits, surrounding ASCII whitespace ignored). Called directly,
@@ -1511,8 +1521,8 @@ bools, NaN, infinities, overflowing values and anything else take the default;
 against `PARAMETERS`, in order: an unknown key, then a missing required key,
 then a property of the wrong type. A string property must be a string, a number
 property a number or decimal string, an integer property a whole number or
-integer string (converted to `int`), and `None` is accepted only for optional
-properties. A mismatch returns `{"error": "invalid arguments for <name>: <reason>"}`,
+integer string (converted to `int`), a boolean property `True` or `False`, and
+`None` is accepted only for optional properties. A mismatch returns `{"error": "invalid arguments for <name>: <reason>"}`,
 for example `got an unexpected keyword argument "shell"`,
 `missing a required argument: "path"` or `content must be string` (key names
 quoted as JSON). Errors the model can act on (bad request, not found,
@@ -1533,6 +1543,7 @@ methods; every tool method and `call` is a coroutine, `names()` is not.
 | Constant | Type | Description |
 | -------- | ---- | ----------- |
 | `DESCRIPTIONS` | `Mapping[str, str]` (read-only `dict`, `json.dumps` works) | Model-facing description per tool |
+| `TITLES` | `Mapping[str, str]` (read-only `dict`, `json.dumps` works) | Short display title per tool, such as `"Run a command"` |
 | `PARAMETERS` | `Mapping[str, Mapping[str, Any]]` (read-only at every level with real lists; `json.dumps` works and `copy`/`deepcopy`/`pickle` give plain dicts and lists) | JSON Schema per tool: object, `additionalProperties: false`, described properties |
 
 ```python
@@ -1552,16 +1563,21 @@ result = tools.call("run_command", {"command": "ls", "timeout_s": 30})
 | `ToolErrorResult` | `error: str` |
 | `RunCommandToolResult` | `exit_code: int`, `stdout: str`, `stderr: str` |
 | `WriteFileToolResult` | `bytes_written: int` |
-| `ReadFileToolResult` | `content: str` |
+| `ReadFileToolResult` | `content: str`, `next_offset: NotRequired[int]`, `eof: NotRequired[bool]` (both present on a paged read) |
 | `ExposePortToolResult` | `preview_url: str` |
 | `CheckpointToolResult` | `checkpoint_id: str` |
 | `RollbackToolResult` | `ok: Literal[True]` |
 | `StartProcessToolResult` | `process_id: str` |
 | `ReadProcessOutputToolResult` | `stdout: str`, `stderr: str`, `cursor: int`, `state: "running" \| "exited"`, `dropped: bool`, `exit_code: NotRequired[int \| None]` (present once exited, while the status is kept) |
 | `StopProcessToolResult` | `ok: bool` |
+| `StatPathToolResult` | `exists: bool`, `type: NotRequired["file" \| "directory" \| "symlink"]`, `size: NotRequired[int]`, `modified_time: NotRequired[str]` (only `exists` when the path is missing) |
+| `MovePathToolResult` | `ok: Literal[True]` |
+| `DeletePathToolResult` | `ok: Literal[True]` |
+| `ListProcessesToolResult` | `processes: list[ListedProcess]` |
+| `ListedProcess` | `process_id: str`, `command: str`, `state: "running" \| "exited"`, `exit_code: NotRequired[int \| None]` (present once exited) |
 
-`ToolResult` is the union of all of them; `ToolName` is a `Literal` of the nine
-tool names.
+`ToolResult` is the union of all of them; `ToolName` is a `Literal` of the
+thirteen tool names.
 
 ---
 
@@ -2308,10 +2324,11 @@ Compact reviewer index. Each symbol should also appear in
 | ------ | ---- | ----- |
 | `SandboxTools` / `AsyncSandboxTools` | class | Tool contract bound to a `Sandbox` / `AsyncSandbox` |
 | `DESCRIPTIONS` | constant | `Mapping[str, str]`, read-only |
+| `TITLES` | constant | `Mapping[str, str]`, read-only |
 | `PARAMETERS` | constant | `Mapping[str, Mapping[str, Any]]`, read-only |
-| `ToolName` | type alias | `Literal` of the nine tool names |
+| `ToolName` | type alias | `Literal` of the thirteen tool names |
 | `ToolResult` | type alias | Union of the result types |
-| `ToolErrorResult`, `RunCommandToolResult`, `WriteFileToolResult`, `ReadFileToolResult`, `ExposePortToolResult`, `CheckpointToolResult`, `RollbackToolResult`, `StartProcessToolResult`, `ReadProcessOutputToolResult`, `StopProcessToolResult` | `TypedDict` | Tool results |
+| `ToolErrorResult`, `RunCommandToolResult`, `WriteFileToolResult`, `ReadFileToolResult`, `ExposePortToolResult`, `CheckpointToolResult`, `RollbackToolResult`, `StartProcessToolResult`, `ReadProcessOutputToolResult`, `StopProcessToolResult`, `StatPathToolResult`, `MovePathToolResult`, `DeletePathToolResult`, `ListProcessesToolResult`, `ListedProcess` | `TypedDict` | Tool results |
 
 ### Raw client (`transport/lifecycle.py`)
 

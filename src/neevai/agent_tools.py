@@ -3,7 +3,8 @@
 ``SandboxTools`` binds the sandbox tool contract to one ``Sandbox`` handle and
 ``AsyncSandboxTools`` to one ``AsyncSandbox``. Register ``names()`` with the
 model, using ``DESCRIPTIONS`` and ``PARAMETERS`` for each tool's description and
-JSON Schema, and pass each tool call to ``call(name, args)``.
+JSON Schema and ``TITLES`` for a display title, and pass each tool call to
+``call(name, args)``.
 
 Each tool returns a JSON-serializable dict for the model to read. Failures the
 model can act on come back as ``{"error": ...}``; auth, permission, rate-limit,
@@ -43,20 +44,26 @@ from neevai.errors import (
 
 if TYPE_CHECKING:
     from neevai.handles.sandbox import AsyncSandbox, Sandbox
-    from neevai.types import ProcessLogsPage, ProcessStatus, Snapshot
+    from neevai.types import FileEntry, ProcessInfo, ProcessLogsPage, ProcessStatus, Snapshot
 
 __all__ = [
     "DESCRIPTIONS",
     "PARAMETERS",
+    "TITLES",
     "AsyncSandboxTools",
     "CheckpointToolResult",
+    "DeletePathToolResult",
     "ExposePortToolResult",
+    "ListProcessesToolResult",
+    "ListedProcess",
+    "MovePathToolResult",
     "ReadFileToolResult",
     "ReadProcessOutputToolResult",
     "RollbackToolResult",
     "RunCommandToolResult",
     "SandboxTools",
     "StartProcessToolResult",
+    "StatPathToolResult",
     "StopProcessToolResult",
     "ToolErrorResult",
     "ToolName",
@@ -74,6 +81,10 @@ ToolName = Literal[
     "start_process",
     "read_process_output",
     "stop_process",
+    "stat_path",
+    "move_path",
+    "delete_path",
+    "list_processes",
 ]
 
 
@@ -98,9 +109,11 @@ class WriteFileToolResult(TypedDict):
 
 
 class ReadFileToolResult(TypedDict):
-    """Result of read_file."""
+    """Result of read_file; next_offset and eof are present on a paged read."""
 
     content: str
+    next_offset: NotRequired[int]
+    eof: NotRequired[bool]
 
 
 class ExposePortToolResult(TypedDict):
@@ -144,6 +157,42 @@ class StopProcessToolResult(TypedDict):
     ok: bool
 
 
+class StatPathToolResult(TypedDict):
+    """Result of stat_path; only exists is present when the path does not exist."""
+
+    exists: bool
+    type: NotRequired[Literal["file", "directory", "symlink"]]
+    size: NotRequired[int]
+    modified_time: NotRequired[str]
+
+
+class MovePathToolResult(TypedDict):
+    """Result of move_path."""
+
+    ok: Literal[True]
+
+
+class DeletePathToolResult(TypedDict):
+    """Result of delete_path."""
+
+    ok: Literal[True]
+
+
+class ListedProcess(TypedDict):
+    """One process in list_processes; exit_code is present once exited."""
+
+    process_id: str
+    command: str
+    state: Literal["running", "exited"]
+    exit_code: NotRequired[int | None]
+
+
+class ListProcessesToolResult(TypedDict):
+    """Result of list_processes."""
+
+    processes: list[ListedProcess]
+
+
 ToolResult: TypeAlias = (
     ToolErrorResult
     | RunCommandToolResult
@@ -155,6 +204,10 @@ ToolResult: TypeAlias = (
     | StartProcessToolResult
     | ReadProcessOutputToolResult
     | StopProcessToolResult
+    | StatPathToolResult
+    | MovePathToolResult
+    | DeletePathToolResult
+    | ListProcessesToolResult
 )
 
 _R = TypeVar("_R")
@@ -280,7 +333,9 @@ DESCRIPTIONS: Mapping[str, str] = _freeze(
         "write_file": "Write a UTF-8 text file in the sandbox. path is relative to /workspace, or absolute inside /workspace.",
         "read_file": (
             "Read a UTF-8 text file from the sandbox. path is relative to /workspace, or absolute inside /workspace. "
-            "Content over 10 KB is cut in the middle."
+            "Without offset or length, content over 10 KB is cut in the middle. "
+            "To read a large file in full, pass offset (bytes, default 0) and length (bytes, 1 to 10000) "
+            "and keep reading from the returned next_offset until eof is true."
         ),
         "expose_port": (
             "Make a server listening on this port in the sandbox reachable at a public HTTPS preview URL, and return it. "
@@ -308,6 +363,44 @@ DESCRIPTIONS: Mapping[str, str] = _freeze(
             "Stop a background process by sending it SIGTERM. ok is false if it had already exited. "
             "An exited process's status is kept for about 10 minutes."
         ),
+        "stat_path": (
+            "Report whether a path exists in the sandbox and, when it does, its type (file, directory or symlink), "
+            "size in bytes and modification time. path is relative to /workspace, or absolute inside /workspace. "
+            "A missing path is exists: false, not an error."
+        ),
+        "move_path": (
+            "Move or rename a file or directory in the sandbox, creating the destination's parent directories. "
+            "Both paths are relative to /workspace, or absolute inside /workspace. "
+            "An existing file at the destination is replaced; an existing directory there is an error."
+        ),
+        "delete_path": (
+            "Delete a file or directory in the sandbox. A directory that is not empty is deleted only with recursive: true. "
+            "A missing path is an error. "
+            "Deletion cannot be undone, so take a checkpoint first if you have it and may need the files back."
+        ),
+        "list_processes": (
+            "List the background processes started in this sandbox, each with its process_id, command, state "
+            "and exit_code once exited. Use it to find a process_id you no longer have. "
+            "An exited process is listed for about 10 minutes."
+        ),
+    }
+)
+
+TITLES: Mapping[str, str] = _freeze(
+    {
+        "run_command": "Run a command",
+        "write_file": "Write a file",
+        "read_file": "Read a file",
+        "expose_port": "Expose a port",
+        "checkpoint": "Save a checkpoint",
+        "rollback": "Roll back to a checkpoint",
+        "start_process": "Start a background process",
+        "read_process_output": "Read a process's output",
+        "stop_process": "Stop a process",
+        "stat_path": "Check a path",
+        "move_path": "Move or rename a path",
+        "delete_path": "Delete a file or directory",
+        "list_processes": "List processes",
     }
 )
 
@@ -331,6 +424,10 @@ _PATH = {
     "description": "File path, relative to /workspace or absolute inside /workspace.",
 }
 _PROCESS_ID = {"type": "string", "description": "process_id returned by start_process."}
+_ANY_PATH = {
+    "type": "string",
+    "description": "Path, relative to /workspace or absolute inside /workspace.",
+}
 
 # _freeze copies every schema, so no two tools share a property dict.
 PARAMETERS: Mapping[str, Mapping[str, Any]] = _freeze(
@@ -356,7 +453,23 @@ PARAMETERS: Mapping[str, Mapping[str, Any]] = _freeze(
             },
             ["path", "content"],
         ),
-        "read_file": _schema({"path": _PATH}, ["path"]),
+        "read_file": _schema(
+            {
+                "path": _PATH,
+                "offset": {
+                    "type": "integer",
+                    "description": "Byte to start reading at. Default 0.",
+                    "minimum": 0,
+                },
+                "length": {
+                    "type": "integer",
+                    "description": "Bytes to read, 1 to 10000. Default 10000 when offset is given.",
+                    "minimum": 1,
+                    "maximum": 10000,
+                },
+            },
+            ["path"],
+        ),
         "expose_port": _schema(
             {
                 "port": {
@@ -401,6 +514,34 @@ PARAMETERS: Mapping[str, Mapping[str, Any]] = _freeze(
             ["process_id"],
         ),
         "stop_process": _schema({"process_id": _PROCESS_ID}, ["process_id"]),
+        "stat_path": _schema({"path": _ANY_PATH}, ["path"]),
+        "move_path": _schema(
+            {
+                "source": {
+                    "type": "string",
+                    "description": "Path to move, relative to /workspace or absolute inside /workspace.",
+                },
+                "destination": {
+                    "type": "string",
+                    "description": "New path, relative to /workspace or absolute inside /workspace.",
+                },
+            },
+            ["source", "destination"],
+        ),
+        "delete_path": _schema(
+            {
+                "path": {
+                    "type": "string",
+                    "description": "Path to delete, relative to /workspace or absolute inside /workspace.",
+                },
+                "recursive": {
+                    "type": "boolean",
+                    "description": "Delete a non-empty directory and everything in it. Default false.",
+                },
+            },
+            ["path"],
+        ),
+        "list_processes": _schema({}, []),
     }
 )
 
@@ -472,13 +613,20 @@ def _seconds(value: float) -> str:
 
 
 def _names(allow_preview: bool, allow_rollback: bool, allow_processes: bool) -> list[ToolName]:
-    names: list[ToolName] = ["run_command", "write_file", "read_file"]
+    names: list[ToolName] = [
+        "run_command",
+        "write_file",
+        "read_file",
+        "stat_path",
+        "move_path",
+        "delete_path",
+    ]
     if allow_preview:
         names.append("expose_port")
     if allow_rollback:
         names.extend(("checkpoint", "rollback"))
     if allow_processes:
-        names.extend(("start_process", "read_process_output", "stop_process"))
+        names.extend(("start_process", "read_process_output", "stop_process", "list_processes"))
     return names
 
 
@@ -524,6 +672,10 @@ def _check_args(name: str, args: object) -> dict[str, Any] | str:
             continue
         if kind == "string":
             if not isinstance(value, str):
+                return f"{field} must be {kind}"
+            continue
+        if kind == "boolean":
+            if not isinstance(value, bool):
                 return f"{field} must be {kind}"
             continue
         number = _parse_number(value)
@@ -615,6 +767,79 @@ def _page_result(page: ProcessLogsPage) -> ReadProcessOutputToolResult:
     }
 
 
+def _read_window(offset: object, length: object) -> tuple[int, int]:
+    """Returns the paged read's start and size, size clamped to 1-10000."""
+    start = max(int(_number(offset, 0)), 0)
+    size = min(max(int(_number(length, _MAX_OUTPUT_BYTES)), 1), _MAX_OUTPUT_BYTES)
+    return start, size
+
+
+def _is_continuation(byte: int) -> bool:
+    return 0x80 <= byte <= 0xBF
+
+
+def _sequence_length(lead: int) -> int:
+    if lead >= 0xF0:
+        return 4 if lead <= 0xF7 else 1
+    if lead >= 0xE0:
+        return 3
+    return 2 if lead >= 0xC0 else 1
+
+
+def _page_text(data: bytes, offset: int, size: int) -> ReadFileToolResult:
+    """Turns up to size + 7 bytes read at offset into a page of whole UTF-8 characters that always advances."""
+    start = 0
+    while start < 3 and start < len(data) and _is_continuation(data[start]):
+        start += 1
+    if start == 3 and len(data) > 3 and _is_continuation(data[3]):
+        raise UnicodeDecodeError("utf-8", data, 3, 4, "invalid continuation byte")
+    end = max(min(size, len(data)), start)
+    # Only a cut window can end mid-character; at the real end it is bad UTF-8.
+    if len(data) > end:
+        lead = end - 1
+        while lead > start and _is_continuation(data[lead]):
+            lead -= 1
+        if lead >= start and _sequence_length(data[lead]) > end - lead:
+            end = lead
+    if end == start and start < len(data):
+        end = min(start + _sequence_length(data[start]), len(data))
+    return {
+        "content": data[start:end].decode("utf-8"),
+        "next_offset": offset + end,
+        "eof": end >= len(data),
+    }
+
+
+def _listed(proc: ProcessInfo) -> ListedProcess:
+    # Show the command the model passed to start_process, not its sh -lc wrapper.
+    if proc.name == "sh" and proc.args[:1] == ["-lc"]:
+        words = proc.args[1:]
+    else:
+        words = [proc.name, *proc.args]
+    listed: ListedProcess = {
+        "process_id": proc.process_id,
+        "command": " ".join(words),
+        "state": proc.state,
+    }
+    if proc.state == "exited":
+        listed["exit_code"] = proc.exit_code
+    return listed
+
+
+def _is_missing_path(e: NotFoundError) -> bool:
+    # Only the runtime's own not_found envelope means the path is missing; a proxy 404 does not.
+    return e.status_code == 404 and e.body is not None and e.body.get("reason_code") == "not_found"
+
+
+def _stat_result(entry: FileEntry) -> StatPathToolResult:
+    return {
+        "exists": True,
+        "type": entry.type,
+        "size": entry.size,
+        "modified_time": entry.modified_time,
+    }
+
+
 class SandboxTools:
     """The sandbox tool contract bound to one ``Sandbox``; opt-in tools stay off unless enabled."""
 
@@ -632,7 +857,8 @@ class SandboxTools:
             sandbox: The sandbox the tools act on.
             allow_preview: Enable expose_port, which makes a sandbox port public.
             allow_rollback: Enable checkpoint and rollback.
-            allow_processes: Enable start_process, read_process_output and stop_process.
+            allow_processes: Enable start_process, read_process_output, stop_process
+                and list_processes.
 
         Raises:
             ValueError: allow_preview or allow_rollback is set on a handle with no client context.
@@ -716,17 +942,76 @@ class SandboxTools:
 
         return self._recover(write)
 
-    def read_file(self, path: str) -> ReadFileToolResult | ToolErrorResult:
-        """Reads a UTF-8 text file, truncated like command output.
+    def read_file(
+        self, path: str, offset: int | None = None, length: int | None = None
+    ) -> ReadFileToolResult | ToolErrorResult:
+        """Reads a UTF-8 text file, truncated like command output unless paged.
 
         Args:
             path: File path, relative to /workspace or absolute inside it.
+            offset: Byte to start a paged read at. Default 0.
+            length: Bytes in a paged read, clamped to 1-10000. Default 10000.
+        """
+        if offset is None and length is None:
+
+            def read() -> ReadFileToolResult:
+                return {"content": _truncate(self._sandbox.files.read_text(path))}
+
+            return self._recover(read)
+        start, size = _read_window(offset, length)
+
+        def page() -> ReadFileToolResult:
+            data = self._sandbox.files.read(path, offset=start, length=size + 7)
+            return _page_text(data, start, size)
+
+        return self._recover(page)
+
+    def stat_path(self, path: str) -> StatPathToolResult | ToolErrorResult:
+        """Reports whether path exists and, if so, its type, size and modification time.
+
+        Args:
+            path: Path, relative to /workspace or absolute inside it.
         """
 
-        def read() -> ReadFileToolResult:
-            return {"content": _truncate(self._sandbox.files.read_text(path))}
+        def stat() -> StatPathToolResult:
+            try:
+                return _stat_result(self._sandbox.files.stat(path))
+            except NotFoundError as e:
+                if not _is_missing_path(e):
+                    raise
+                return {"exists": False}
 
-        return self._recover(read)
+        return self._recover(stat)
+
+    def move_path(self, source: str, destination: str) -> MovePathToolResult | ToolErrorResult:
+        """Moves or renames a file or directory.
+
+        Args:
+            source: Path to move, relative to /workspace or absolute inside it.
+            destination: New path, relative to /workspace or absolute inside it.
+        """
+
+        def move() -> MovePathToolResult:
+            self._sandbox.files.move(source, destination)
+            return {"ok": True}
+
+        return self._recover(move)
+
+    def delete_path(
+        self, path: str, recursive: bool | None = None
+    ) -> DeletePathToolResult | ToolErrorResult:
+        """Deletes a file or directory; a non-empty directory needs recursive.
+
+        Args:
+            path: Path to delete, relative to /workspace or absolute inside it.
+            recursive: Delete a non-empty directory and its contents. Only True enables it.
+        """
+
+        def delete() -> DeletePathToolResult:
+            self._sandbox.files.remove(path, recursive=recursive is True)
+            return {"ok": True}
+
+        return self._recover(delete)
 
     def expose_port(self, port: int) -> ExposePortToolResult | ToolErrorResult:
         """Exposes port and returns its preview URL once it is routable.
@@ -870,6 +1155,16 @@ class SandboxTools:
 
         return self._recover(stop)
 
+    def list_processes(self) -> ListProcessesToolResult | ToolErrorResult:
+        """Lists the background processes with their commands, states and exit codes."""
+        if not self._allow_processes:
+            return _disabled("list_processes")
+
+        def list_all() -> ListProcessesToolResult:
+            return {"processes": [_listed(p) for p in self._sandbox.processes.list()]}
+
+        return self._recover(list_all)
+
     def _recover(
         self, fn: Callable[[], _R], timeout_error: str = _TIMEOUT_ERROR
     ) -> _R | ToolErrorResult:
@@ -954,13 +1249,58 @@ class AsyncSandboxTools:
 
         return await self._recover(write)
 
-    async def read_file(self, path: str) -> ReadFileToolResult | ToolErrorResult:
+    async def read_file(
+        self, path: str, offset: int | None = None, length: int | None = None
+    ) -> ReadFileToolResult | ToolErrorResult:
         """Reads a UTF-8 text file. See :meth:`SandboxTools.read_file`."""
+        if offset is None and length is None:
 
-        async def read() -> ReadFileToolResult:
-            return {"content": _truncate(await self._sandbox.files.read_text(path))}
+            async def read() -> ReadFileToolResult:
+                return {"content": _truncate(await self._sandbox.files.read_text(path))}
 
-        return await self._recover(read)
+            return await self._recover(read)
+        start, size = _read_window(offset, length)
+
+        async def page() -> ReadFileToolResult:
+            data = await self._sandbox.files.read(path, offset=start, length=size + 7)
+            return _page_text(data, start, size)
+
+        return await self._recover(page)
+
+    async def stat_path(self, path: str) -> StatPathToolResult | ToolErrorResult:
+        """Reports whether path exists. See :meth:`SandboxTools.stat_path`."""
+
+        async def stat() -> StatPathToolResult:
+            try:
+                return _stat_result(await self._sandbox.files.stat(path))
+            except NotFoundError as e:
+                if not _is_missing_path(e):
+                    raise
+                return {"exists": False}
+
+        return await self._recover(stat)
+
+    async def move_path(
+        self, source: str, destination: str
+    ) -> MovePathToolResult | ToolErrorResult:
+        """Moves or renames a path. See :meth:`SandboxTools.move_path`."""
+
+        async def move() -> MovePathToolResult:
+            await self._sandbox.files.move(source, destination)
+            return {"ok": True}
+
+        return await self._recover(move)
+
+    async def delete_path(
+        self, path: str, recursive: bool | None = None
+    ) -> DeletePathToolResult | ToolErrorResult:
+        """Deletes a file or directory. See :meth:`SandboxTools.delete_path`."""
+
+        async def delete() -> DeletePathToolResult:
+            await self._sandbox.files.remove(path, recursive=recursive is True)
+            return {"ok": True}
+
+        return await self._recover(delete)
 
     async def expose_port(self, port: int) -> ExposePortToolResult | ToolErrorResult:
         """Exposes port. See :meth:`SandboxTools.expose_port`."""
@@ -1071,6 +1411,16 @@ class AsyncSandboxTools:
             return {"ok": await self._sandbox.processes.kill(process_id)}
 
         return await self._recover(stop)
+
+    async def list_processes(self) -> ListProcessesToolResult | ToolErrorResult:
+        """Lists the background processes. See :meth:`SandboxTools.list_processes`."""
+        if not self._allow_processes:
+            return _disabled("list_processes")
+
+        async def list_all() -> ListProcessesToolResult:
+            return {"processes": [_listed(p) for p in await self._sandbox.processes.list()]}
+
+        return await self._recover(list_all)
 
     async def _recover(
         self, fn: Callable[[], Awaitable[_R]], timeout_error: str = _TIMEOUT_ERROR
