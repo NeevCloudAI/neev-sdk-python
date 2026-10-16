@@ -166,13 +166,15 @@ Agents have the same `expose_port` / `list_ports` / `revoke_port` / `get_url`.
 ## Audit trail
 
 `sandbox.audit()` (and `agent.audit()`) reads what ran inside, newest first — terminal
-commands, SSH, process and file operations — with the credential each ran under and how it
-ended. Program names are recorded without their arguments. Page with `next_cursor`:
+commands, SSH, process and file operations — as events in `data`, each with who made the call
+(`actor`) and how it ended (`status`). Program names are recorded without their arguments.
+`time` is milliseconds since the Unix epoch. Filter with `operation`, `status`, `actor_type`,
+`actor_uid` or `credential_uid`, and page with `next_cursor`:
 
 ```python
-trail = sandbox.audit(limit=50)
-for r in trail.records:
-    print(r.at, r.tool, r.command or "", r.outcome.value)
+trail = sandbox.audit(limit=50, operation=["exec", "pty_command"])
+for e in trail.data:
+    print(e.time, e.api.operation, e.actor.user.name or e.actor.user.uid, e.status)
 older = sandbox.audit(limit=50, cursor=trail.next_cursor) if trail.next_cursor else None
 ```
 

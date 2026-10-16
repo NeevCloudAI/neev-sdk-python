@@ -1,6 +1,6 @@
 """String enums from the API spec compare equal to their wire values."""
 
-from neevai.generated.aiagent import AuditRecord, SnapshotStatus
+from neevai.generated.aiagent import AuditActorUser, SnapshotStatus
 
 
 def test_snapshot_status_equals_its_string() -> None:
@@ -9,9 +9,7 @@ def test_snapshot_status_equals_its_string() -> None:
     assert SnapshotStatus("Pending") != "Ready"
 
 
-def test_audit_outcome_equals_its_string() -> None:
-    """Callers filter audit records with `record.outcome == "error"`."""
-    record = AuditRecord.model_validate(
-        {"at": "2026-10-05T00:00:00Z", "id": "r1", "tool": "exec", "outcome": "error"}
-    )
-    assert record.outcome == "error"
+def test_audit_actor_type_equals_its_string() -> None:
+    """Callers filter audit events with `event.actor.user.type == "api_key"`."""
+    user = AuditActorUser.model_validate({"type": "api_key", "type_id": 99, "uid": "key-1"})
+    assert user.type == "api_key"

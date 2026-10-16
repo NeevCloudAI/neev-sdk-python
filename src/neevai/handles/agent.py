@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import math
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from typing import TYPE_CHECKING, Any, cast
 from uuid import UUID
 
+from neevai._audit import AuditActorType, AuditStatus
 from neevai.errors import NeevAIError
 from neevai.resources.sandboxes import (
     DEFAULT_PORT_POLL_INTERVAL_MS,
@@ -234,10 +235,16 @@ class Agent:
         to: str | None = None,
         cursor: str | None = None,
         limit: int | None = None,
+        operation: str | Sequence[str] | None = None,
+        status: AuditStatus | None = None,
+        actor_type: AuditActorType | Sequence[AuditActorType] | None = None,
+        actor_uid: str | None = None,
+        credential_uid: str | None = None,
     ) -> AuditTrail:
-        """Reads one page of this agent's command audit trail, newest first.
+        """Reads one page of this agent's audit trail, newest first.
 
-        Pass the previous page's ``next_cursor`` as ``cursor`` to read older records.
+        Takes the same filters as ``audit`` on the resource. Pass the previous page's
+        ``next_cursor`` as ``cursor`` to read older events.
         """
         if self.agents is None:
             raise NeevAIError(
@@ -249,6 +256,11 @@ class Agent:
             to=to,
             cursor=cursor,
             limit=limit,
+            operation=operation,
+            status=status,
+            actor_type=actor_type,
+            actor_uid=actor_uid,
+            credential_uid=credential_uid,
             org_id=self.scope.org_id if self.scope else None,
             project_id=self.scope.project_id if self.scope else None,
         )
@@ -514,10 +526,16 @@ class AsyncAgent:
         to: str | None = None,
         cursor: str | None = None,
         limit: int | None = None,
+        operation: str | Sequence[str] | None = None,
+        status: AuditStatus | None = None,
+        actor_type: AuditActorType | Sequence[AuditActorType] | None = None,
+        actor_uid: str | None = None,
+        credential_uid: str | None = None,
     ) -> AuditTrail:
-        """Reads one page of this agent's command audit trail, newest first.
+        """Reads one page of this agent's audit trail, newest first.
 
-        Pass the previous page's ``next_cursor`` as ``cursor`` to read older records.
+        Takes the same filters as ``audit`` on the resource. Pass the previous page's
+        ``next_cursor`` as ``cursor`` to read older events.
         """
         if self.agents is None:
             raise NeevAIError(
@@ -529,6 +547,11 @@ class AsyncAgent:
             to=to,
             cursor=cursor,
             limit=limit,
+            operation=operation,
+            status=status,
+            actor_type=actor_type,
+            actor_uid=actor_uid,
+            credential_uid=credential_uid,
             org_id=self.scope.org_id if self.scope else None,
             project_id=self.scope.project_id if self.scope else None,
         )

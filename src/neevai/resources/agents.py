@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import builtins
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
+from neevai._audit import AuditActorType, AuditStatus, audit_query
 from neevai._egress import build_egress, prepare_update_body
 from neevai._parse import coerce_model, coerce_params
 from neevai.generated.aiagent import SandboxPortList
@@ -290,25 +291,31 @@ class Agents:
         to: str | None = None,
         cursor: str | None = None,
         limit: int | None = None,
+        operation: str | Sequence[str] | None = None,
+        status: AuditStatus | None = None,
+        actor_type: AuditActorType | Sequence[AuditActorType] | None = None,
+        actor_uid: str | None = None,
+        credential_uid: str | None = None,
         org_id: str | None = None,
         project_id: str | None = None,
     ) -> AuditTrail:
-        """Reads one page of the command audit trail for an agent.
+        """Reads one page of the audit trail for an agent.
 
-        Same shape and recording rules as the sandbox trail, newest first. The
-        response's ``sandbox_id`` is the sandbox backing the agent, not the agent id.
-        Pass the previous page's ``next_cursor`` as ``cursor`` to read older records.
+        Same events, filters and recording rules as the sandbox trail, newest first.
+        Pass the previous page's ``next_cursor`` as ``cursor`` to read older events.
         """
         scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
-        query: dict[str, Any] = {}
-        if from_ is not None:
-            query["from"] = from_
-        if to is not None:
-            query["to"] = to
-        if cursor is not None:
-            query["cursor"] = cursor
-        if limit is not None:
-            query["limit"] = limit
+        query = audit_query(
+            from_=from_,
+            to=to,
+            cursor=cursor,
+            limit=limit,
+            operation=operation,
+            status=status,
+            actor_type=actor_type,
+            actor_uid=actor_uid,
+            credential_uid=credential_uid,
+        )
 
         raw = self._client._transport.request(
             "GET", f"{_agents_path(scope)}/{id}/audit", query=query
@@ -589,25 +596,31 @@ class AsyncAgents:
         to: str | None = None,
         cursor: str | None = None,
         limit: int | None = None,
+        operation: str | Sequence[str] | None = None,
+        status: AuditStatus | None = None,
+        actor_type: AuditActorType | Sequence[AuditActorType] | None = None,
+        actor_uid: str | None = None,
+        credential_uid: str | None = None,
         org_id: str | None = None,
         project_id: str | None = None,
     ) -> AuditTrail:
-        """Reads one page of the command audit trail for an agent asynchronously.
+        """Reads one page of the audit trail for an agent asynchronously.
 
-        Same shape and recording rules as the sandbox trail, newest first. The
-        response's ``sandbox_id`` is the sandbox backing the agent, not the agent id.
-        Pass the previous page's ``next_cursor`` as ``cursor`` to read older records.
+        Same events, filters and recording rules as the sandbox trail, newest first.
+        Pass the previous page's ``next_cursor`` as ``cursor`` to read older events.
         """
         scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
-        query: dict[str, Any] = {}
-        if from_ is not None:
-            query["from"] = from_
-        if to is not None:
-            query["to"] = to
-        if cursor is not None:
-            query["cursor"] = cursor
-        if limit is not None:
-            query["limit"] = limit
+        query = audit_query(
+            from_=from_,
+            to=to,
+            cursor=cursor,
+            limit=limit,
+            operation=operation,
+            status=status,
+            actor_type=actor_type,
+            actor_uid=actor_uid,
+            credential_uid=credential_uid,
+        )
 
         raw = await self._client._transport.request(
             "GET", f"{_agents_path(scope)}/{id}/audit", query=query

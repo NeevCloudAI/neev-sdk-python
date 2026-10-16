@@ -7,7 +7,7 @@ read what it ran.
   port again with a new slug rotates the URL.
 - ``agent.keepalive()`` resets the idle timer, for a busy agent with no open
   connection.
-- ``agent.audit()`` reads the agent's command audit trail, one page at a time.
+- ``agent.audit()`` reads the agent's audit trail, one page at a time.
 
 Run::
 
@@ -21,6 +21,7 @@ import os
 import secrets
 import string
 import sys
+from datetime import datetime, timezone
 
 from neevai import NeevAI
 from neevai.errors import NeevAIError
@@ -59,10 +60,10 @@ def main() -> None:
             agent.keepalive()
 
             trail = agent.audit(limit=20)
-            for r in trail.records:
-                print(
-                    f"{r.at:%H:%M:%S} {r.tool:<14} {r.command or r.target or ''} {r.outcome.value}"
-                )
+            for e in trail.data:
+                at = datetime.fromtimestamp(e.time / 1000, tz=timezone.utc)
+                who = e.actor.user.name or e.actor.user.uid
+                print(f"{at:%H:%M:%S} {e.api.operation:<14} {who} {e.status}")
 
             agent.revoke_port(PORT)
         except NeevAIError as e:
