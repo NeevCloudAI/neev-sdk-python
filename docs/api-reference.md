@@ -206,8 +206,8 @@ Details: [`api-inventory.md` → Processes API](./api-inventory.md#processes-api
 | `upload(path, data, *, chunk_size=None, cwd=None, on_progress=None)` | `dict` (`bytes_written`) | Chunked, resumable upload of bytes, str, or a seekable file object. |
 | `upload_file(local_path, remote_path, *, chunk_size=None, cwd=None, on_progress=None)` | `dict` (`bytes_written`) | Uploads a local file with `upload`. |
 | `download_file(remote_path, local_path, *, cwd=None)` | `{"bytes_written": int}` | Streams a sandbox file to disk; no partial file on failure. |
-| `read(path, cwd=None)` | `bytes` | Reads a sandbox file and returns raw binary content. |
-| `read_text(path, cwd=None)` | `str` | Reads a sandbox file and decodes it as UTF-8 text. |
+| `read(path, cwd=None, offset=None, length=None)` | `bytes` | Reads a sandbox file and returns raw binary content, or only `length` bytes from `offset`. |
+| `read_text(path, cwd=None, offset=None, length=None)` | `str` | Reads a sandbox file (or a byte range of it) and decodes it as UTF-8 text. |
 | `list(path, cwd=None, recursive=False, max_count=None)` | `list[FileEntry]` | Lists directory entries at a path, optionally recursive. |
 | `stat(path, cwd=None)` / `exists(path, cwd=None)` | `FileEntry` / `bool` | Metadata for one path / whether it exists. |
 | `mkdir(path, cwd=None)` / `move(source, destination, cwd=None)` / `remove(path, cwd=None, recursive=False)` | `FileEntry` / `FileEntry` / `None` | Create a directory, move or rename, delete. |
@@ -241,8 +241,8 @@ agent, with model-ready descriptions and JSON Schemas. No framework dependency.
 | Tools | `SandboxTools(sandbox, *, allow_preview=False, allow_rollback=False, allow_processes=False)` | `AsyncSandboxTools(sandbox, ...)` |
 | Enabled tool names | `tools.names()` | `tools.names()` |
 | Run a model tool call | `tools.call(name, args)` | `await tools.call(name, args)` |
-| Tool methods | `run_command`, `write_file`, `read_file`, `expose_port`, `checkpoint`, `rollback`, `start_process`, `read_process_output`, `stop_process` | same, with `await` |
-| Descriptions / schemas | `DESCRIPTIONS[name]`, `PARAMETERS[name]` | same |
+| Tool methods | `run_command`, `write_file`, `read_file`, `stat_path`, `move_path`, `delete_path`, `expose_port`, `checkpoint`, `rollback`, `start_process`, `read_process_output`, `stop_process`, `list_processes` | same, with `await` |
+| Descriptions / schemas / titles | `DESCRIPTIONS[name]`, `PARAMETERS[name]`, `TITLES[name]` | same |
 
 Every tool returns a JSON-serializable `TypedDict`; errors the model can fix come
 back as `{"error": ...}`.

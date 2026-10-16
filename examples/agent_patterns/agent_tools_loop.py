@@ -2,7 +2,8 @@
 Agent loop on the sandbox tool contract: ``neevai.agent_tools`` with no framework.
 
 ``SandboxTools`` gives the model the contract's tools (``run_command``,
-``write_file``, ``read_file``, plus background processes here) with ready-made
+``write_file``, ``read_file``, ``stat_path``, ``move_path``, ``delete_path``, plus
+the background-process tools here, ``list_processes`` among them) with ready-made
 descriptions and JSON Schemas. This script turns them into OpenAI-compatible
 function specs, sends them to ``gpt-oss-120b``, and runs each tool call with
 ``tools.call(name, args)``, which returns a JSON-serializable dict for the model,

@@ -331,12 +331,20 @@ See [`examples/code_interpreter.py`](examples/code_interpreter.py).
 ## Agent tools
 
 `neevai.agent_tools` ships the sandbox tool contract for your own agent: tools
-like `run_command`, `write_file` and `read_file`, with model-ready descriptions
+like `run_command`, `write_file`, `read_file`, `stat_path`, `move_path` and
+`delete_path`, with model-ready descriptions
 and JSON Schemas, capped output, and errors the model can act on returned as
 `{"error": ...}`. Preview URLs, checkpoints and background processes are
 opt-in. It has no framework dependency: build tool specs from `DESCRIPTIONS`
-and `PARAMETERS`, and pass each tool call to `call(name, args)`.
+and `PARAMETERS` (with display titles in `TITLES`), and pass each tool call to
+`call(name, args)`.
 `AsyncSandboxTools` wraps an `AsyncSandbox` the same way.
+
+`read_file` returns a whole file cut in the middle past 10 KB, or, given
+`offset` and `length`, one page of whole UTF-8 characters with `next_offset` and
+`eof` so the model can read a large file in full. `allow_processes=True` adds
+`start_process`, `read_process_output`, `stop_process` and `list_processes`,
+which lists each process with the command it was started with.
 
 A command that prints nothing for about 2 minutes is cut off at the network
 edge; `run_command` then returns an error result telling the model to use

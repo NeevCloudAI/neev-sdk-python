@@ -40,6 +40,8 @@ class FakeSandbox:
         self.patches = 0
         self.read_payload = b""
         self.read_fails_midway = False
+        # A chunked read body, so a test can see how far a read got.
+        self.read_chunk: _ChunkedStream | None = None
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         headers = {k.lower(): v for k, v in request.headers.items()}
@@ -52,6 +54,8 @@ class FakeSandbox:
         if path == "/v1/files/read":
             if self.read_fails_midway:
                 return httpx.Response(200, stream=_BrokenStream(self.read_payload[:10]))
+            if self.read_chunk is not None:
+                return httpx.Response(200, stream=self.read_chunk)
             return httpx.Response(200, content=self.read_payload)
         if path == "/v1/files/uploads" and request.method == "POST":
             if not self.uploads_supported:
@@ -112,6 +116,31 @@ class _BrokenStream(httpx.SyncByteStream, httpx.AsyncByteStream):
     async def __aiter__(self):
         yield self.first
         raise httpx.ReadError("connection reset")
+
+
+class _ChunkedStream(httpx.SyncByteStream, httpx.AsyncByteStream):
+    """A response body served in fixed-size chunks that records how much was pulled."""
+
+    def __init__(self, data: bytes, size: int):
+        self.chunks = [data[i : i + size] for i in range(0, len(data), size)]
+        self.served = 0
+        self.closed = False
+
+    def __iter__(self):
+        for chunk in self.chunks:
+            self.served += 1
+            yield chunk
+
+    async def __aiter__(self):
+        for chunk in self.chunks:
+            self.served += 1
+            yield chunk
+
+    def close(self) -> None:
+        self.closed = True
+
+    async def aclose(self) -> None:
+        self.closed = True
 
 
 def _conn(fake: FakeSandbox) -> SandboxConnection:
@@ -468,3 +497,86 @@ def test_missing_route_keys_on_the_sandbox_reason_code(raw: str, missing: bool):
 def test_last_chunk_500_is_final_only_with_the_sandbox_envelope(raw: str, retryable: bool):
     assert _is_retryable(_runtime_error(500, raw), is_last=True) is retryable
     assert _is_retryable(_runtime_error(500, raw), is_last=False) is True
+
+
+def test_read_range_stops_streaming_once_the_range_is_read():
+    fake = FakeSandbox()
+    data = _payload(1_000)
+    fake.read_chunk = _ChunkedStream(data, 100)
+    assert _conn(fake).files.read("big.bin", offset=150, length=100) == data[150:250]
+    assert fake.read_chunk.served == 3
+    assert fake.read_chunk.closed
+    assert json.loads(fake.bodies["/v1/files/read"]) == {"path": "big.bin", "cwd": None}
+
+
+@pytest.mark.parametrize(
+    "offset,length,expected",
+    [
+        (None, 5, slice(0, 5)),
+        (950, None, slice(950, None)),
+        (990, 100, slice(990, None)),
+        (1_000, 10, slice(0, 0)),
+        (5_000, None, slice(0, 0)),
+        (0, 1_000, slice(None)),
+    ],
+)
+def test_read_range_bounds(offset, length, expected):
+    fake = FakeSandbox()
+    data = _payload(1_000)
+    fake.read_chunk = _ChunkedStream(data, 64)
+    assert _conn(fake).files.read("f", offset=offset, length=length) == data[expected]
+    assert fake.read_chunk.closed
+
+
+def test_read_without_a_range_reads_the_whole_file():
+    fake = FakeSandbox()
+    fake.read_payload = _payload(300)
+    assert _conn(fake).files.read("f") == fake.read_payload
+
+
+def test_read_text_passes_the_range_through():
+    fake = FakeSandbox()
+    fake.read_payload = "héllo wörld".encode()
+    files = _conn(fake).files
+    assert files.read_text("t.txt", offset=1, length=2) == "é"
+    with pytest.raises(UnicodeDecodeError):
+        files.read_text("t.txt", offset=2, length=2)
+
+
+@pytest.mark.parametrize(
+    "offset,length,message",
+    [
+        (-1, None, "offset must be 0 or more"),
+        (None, 0, "length must be 1"),
+        (0, -5, "length"),
+        (1.5, None, "offset must be an integer"),
+        (True, None, "offset must be an integer"),
+        (None, 2.0, "length must be an integer"),
+        (None, "5", "length must be an integer"),
+        (0, False, "length must be an integer"),
+    ],
+)
+def test_read_range_rejects_bad_bounds_before_any_request(offset, length, message):
+    fake = FakeSandbox()
+    with pytest.raises(ValueError, match=message):
+        _conn(fake).files.read("f", offset=offset, length=length)
+    assert fake.requests == []
+
+
+@pytest.mark.asyncio
+async def test_async_read_range_stops_streaming_once_the_range_is_read():
+    fake = FakeSandbox()
+    data = _payload(1_000)
+    fake.read_chunk = _ChunkedStream(data, 100)
+    files = _aconn(fake).files
+    assert await files.read("big.bin", offset=150, length=100) == data[150:250]
+    assert fake.read_chunk.served == 3
+    assert fake.read_chunk.closed
+    fake.read_chunk = None
+    fake.read_payload = "héllo".encode()
+    assert await files.read_text("t.txt", offset=1, length=2) == "é"
+    assert await files.read_text("t.txt") == "héllo"
+    with pytest.raises(ValueError, match="offset"):
+        await files.read("f", offset=-1)
+    with pytest.raises(ValueError, match="length must be an integer"):
+        await files.read("f", length=1.5)  # type: ignore[arg-type]

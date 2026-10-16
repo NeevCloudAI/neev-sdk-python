@@ -18,6 +18,7 @@ from neevai.agent_tools import (
     _MAX_ERROR_CHARS,
     DESCRIPTIONS,
     PARAMETERS,
+    TITLES,
     AsyncSandboxTools,
     SandboxTools,
     _truncate,
@@ -94,6 +95,54 @@ class FakeFiles:
             raise api_error(NotFoundError, f"{path}: no such file")
         return self.sandbox.workspace[path]
 
+    def read(self, path: str, offset: int | None = None, length: int | None = None) -> bytes:
+        self.sandbox.calls.append(("files.read", path, offset, length))
+        if self.sandbox.fail:
+            raise self.sandbox.fail
+        if path in self.sandbox.raw:
+            data = self.sandbox.raw[path]
+        elif path in self.sandbox.workspace:
+            data = self.sandbox.workspace[path].encode()
+        else:
+            raise api_error(NotFoundError, f"{path}: no such file")
+        start = offset or 0
+        return data[start : None if length is None else start + length]
+
+    def stat(self, path: str) -> Any:
+        self.sandbox.calls.append(("files.stat", path))
+        if self.sandbox.fail:
+            raise self.sandbox.fail
+        if path in self.sandbox.dirs:
+            return SimpleNamespace(
+                type="directory", size=4096, modified_time="2026-10-14T09:00:00Z"
+            )
+        if path not in self.sandbox.workspace:
+            raise NotFoundError(404, {"reason_code": "not_found", "message": "no such file"}, None)
+        size = len(self.sandbox.workspace[path].encode())
+        return SimpleNamespace(type="file", size=size, modified_time="2026-10-14T10:00:00Z")
+
+    def move(self, source: str, destination: str) -> Any:
+        self.sandbox.calls.append(("files.move", source, destination))
+        if self.sandbox.fail:
+            raise self.sandbox.fail
+        if source not in self.sandbox.workspace:
+            raise api_error(NotFoundError, f"{source}: no such file")
+        self.sandbox.workspace[destination] = self.sandbox.workspace.pop(source)
+        return SimpleNamespace(type="file")
+
+    def remove(self, path: str, recursive: bool = False) -> None:
+        self.sandbox.calls.append(("files.remove", path, recursive))
+        if self.sandbox.fail:
+            raise self.sandbox.fail
+        if path in self.sandbox.dirs:
+            if not recursive:
+                raise api_error(BadRequestError, f"{path}: directory not empty")
+            self.sandbox.dirs.remove(path)
+            return
+        if path not in self.sandbox.workspace:
+            raise api_error(NotFoundError, f"{path}: no such file")
+        del self.sandbox.workspace[path]
+
 
 class FakeProcesses:
     def __init__(self, sandbox: FakeSandbox) -> None:
@@ -102,6 +151,7 @@ class FakeProcesses:
         # States get() reports in turn; the last one repeats.
         self.states = ["exited"]
         self.gone = False
+        self.listed: list[Any] = []
 
     def start(self, program: str, args: list[str] | None = None, cwd: str | None = None) -> Any:
         self.sandbox.calls.append(("processes.start", program, args, cwd))
@@ -123,6 +173,12 @@ class FakeProcesses:
         return SimpleNamespace(
             process_id=process_id, state=state, exit_code=3 if state == "exited" else None
         )
+
+    def list(self) -> list[Any]:
+        self.sandbox.calls.append(("processes.list",))
+        if self.sandbox.fail:
+            raise self.sandbox.fail
+        return self.listed
 
     def kill(self, process_id: str) -> bool:
         self.sandbox.calls.append(("processes.kill", process_id))
@@ -150,6 +206,9 @@ class FakeSandbox:
         snapshot_statuses: tuple[str, ...] | list[str] = ("Ready",),
     ) -> None:
         self.workspace: dict[str, str] = {}
+        # Files read back as these bytes, for content that is not UTF-8.
+        self.raw: dict[str, bytes] = {}
+        self.dirs: set[str] = set()
         self.calls: list[tuple[Any, ...]] = []
         self.fail: BaseException | None = None
         self.exec_result = exec_result or SimpleNamespace(exit_code=0, stdout="ok", stderr="")
@@ -218,7 +277,15 @@ ALL_TOOLS = [
     "start_process",
     "read_process_output",
     "stop_process",
+    "stat_path",
+    "move_path",
+    "delete_path",
+    "list_processes",
 ]
+
+SAFE_TOOLS = ["run_command", "write_file", "read_file", "stat_path", "move_path", "delete_path"]
+PROCESS_TOOLS = ["start_process", "read_process_output", "stop_process", "list_processes"]
+ENABLED_ORDER = [*SAFE_TOOLS, "expose_port", "checkpoint", "rollback", *PROCESS_TOOLS]
 
 
 def test_truncate_leaves_short_text_alone():
@@ -241,6 +308,7 @@ def test_public_names():
         [
             "DESCRIPTIONS",
             "PARAMETERS",
+            "TITLES",
             "AsyncSandboxTools",
             "SandboxTools",
             "ToolName",
@@ -255,6 +323,11 @@ def test_public_names():
             "StartProcessToolResult",
             "ReadProcessOutputToolResult",
             "StopProcessToolResult",
+            "StatPathToolResult",
+            "MovePathToolResult",
+            "DeletePathToolResult",
+            "ListProcessesToolResult",
+            "ListedProcess",
         ]
     )
     assert not hasattr(agent_tools, "truncate")
@@ -266,6 +339,23 @@ def test_descriptions_match_the_shared_fixture():
     fixture = json.loads((FIXTURES / "agent_tool_descriptions.json").read_text(encoding="utf-8"))
     assert dict(DESCRIPTIONS) == fixture
     assert list(DESCRIPTIONS) == ALL_TOOLS
+
+
+def test_titles_match_the_shared_fixture():
+    fixture = json.loads((FIXTURES / "agent_tool_titles.json").read_text(encoding="utf-8"))
+    assert dict(TITLES) == fixture
+    assert list(TITLES) == ALL_TOOLS
+
+
+def test_fixtures_are_the_serialized_metadata():
+    # Byte-for-byte, since the JS SDK compares the same files.
+    for name, value in (
+        ("descriptions", DESCRIPTIONS),
+        ("parameters", PARAMETERS),
+        ("titles", TITLES),
+    ):
+        text = (FIXTURES / f"agent_tool_{name}.json").read_text(encoding="utf-8")
+        assert text == json.dumps(value, indent=2, ensure_ascii=False) + "\n", name
 
 
 def test_parameters_match_the_shared_fixture():
@@ -323,10 +413,10 @@ MUTATIONS = [
 @pytest.mark.parametrize("mutate", MUTATIONS)
 def test_descriptions_and_parameters_are_read_only(mutate: Any):
     run_command = PARAMETERS["run_command"]
-    for mapping in (DESCRIPTIONS, PARAMETERS, run_command, run_command["properties"]):
+    for mapping in (DESCRIPTIONS, PARAMETERS, TITLES, run_command, run_command["properties"]):
         with pytest.raises(TypeError, match="read-only"):
             mutate(mapping)
-    assert len(DESCRIPTIONS) == 9 and len(PARAMETERS) == 9
+    assert len(DESCRIPTIONS) == 13 and len(PARAMETERS) == 13 and len(TITLES) == 13
     assert type(run_command["required"]) is not list and isinstance(run_command["required"], list)
     for mutate_list in LIST_MUTATIONS:
         with pytest.raises(TypeError, match="read-only"):
@@ -367,14 +457,17 @@ def test_process_descriptions_state_retention_cursor_and_wait():
     assert "processes or in-flight requests" in DESCRIPTIONS["start_process"]
 
 
-def test_names_default_to_the_three_safe_tools():
+def test_names_default_to_the_safe_tools():
     tools, _ = tools_for()
-    assert tools.names() == ["run_command", "write_file", "read_file"]
+    assert tools.names() == SAFE_TOOLS
 
 
 def test_names_include_opt_in_tools_only_when_enabled():
     tools, _ = tools_for(allow_preview=True, allow_rollback=True, allow_processes=True)
-    assert tools.names() == ALL_TOOLS
+    assert tools.names() == ENABLED_ORDER
+    assert tools_for(allow_preview=True)[0].names() == [*SAFE_TOOLS, "expose_port"]
+    assert tools_for(allow_rollback=True)[0].names() == [*SAFE_TOOLS, "checkpoint", "rollback"]
+    assert tools_for(allow_processes=True)[0].names() == [*SAFE_TOOLS, *PROCESS_TOOLS]
 
 
 @pytest.mark.parametrize("option", ["allow_preview", "allow_rollback"])
@@ -681,6 +774,8 @@ def test_disabled_tools_refuse():
         "error": "read_process_output is not enabled for this agent"
     }
     assert tools.stop_process("proc-1") == {"error": "stop_process is not enabled for this agent"}
+    assert tools.list_processes() == {"error": "list_processes is not enabled for this agent"}
+    assert tools.call("list_processes") == {"error": "list_processes is not enabled for this agent"}
     assert sandbox.calls == []
 
 
@@ -1035,7 +1130,7 @@ def async_tools_for(
 
 async def test_async_names_match_the_sync_tools():
     tools, _ = async_tools_for(allow_preview=True, allow_rollback=True, allow_processes=True)
-    assert tools.names() == ALL_TOOLS
+    assert tools.names() == ENABLED_ORDER
 
 
 async def test_async_core_tools():
@@ -1093,6 +1188,7 @@ async def test_async_disabled_tools_refuse():
     assert await tools.stop_process("proc-1") == {
         "error": "stop_process is not enabled for this agent"
     }
+    assert await tools.list_processes() == {"error": "list_processes is not enabled for this agent"}
     assert sandbox.calls == []
 
 
@@ -1177,6 +1273,15 @@ TYPE_CASES = [
     ("read_process_output", {"process_id": "p", "cursor": 1.5}, "cursor must be integer"),
     ("read_process_output", {"process_id": "p", "wait_s": float("nan")}, "wait_s must be number"),
     ("stop_process", {"process_id": None}, "process_id must be string"),
+    ("read_file", {"path": "a", "offset": "start"}, "offset must be integer"),
+    ("read_file", {"path": "a", "length": 2.5}, "length must be integer"),
+    ("stat_path", {"path": None}, "path must be string"),
+    ("move_path", {"source": "a", "destination": 1}, "destination must be string"),
+    ("delete_path", {"path": "a", "recursive": "true"}, "recursive must be boolean"),
+    ("delete_path", {"path": "a", "recursive": 1}, "recursive must be boolean"),
+    ("delete_path", {"path": "a", "recursive": 0}, "recursive must be boolean"),
+    ("delete_path", {"path": "a", "recursive": [True]}, "recursive must be boolean"),
+    ("list_processes", {"all": True}, 'got an unexpected keyword argument "all"'),
 ]
 
 
@@ -1309,3 +1414,342 @@ def test_truncation_keeps_a_leading_bom():
     tools, sandbox = tools_for()
     sandbox.workspace["bom.txt"] = text
     assert tools.read_file("bom.txt") == {"content": cut}
+
+
+def test_titles_are_read_only_and_cover_every_tool():
+    assert set(TITLES) == set(DESCRIPTIONS) == set(PARAMETERS)
+    assert all(TITLES[name] for name in ALL_TOOLS)
+    with pytest.raises(TypeError, match="read-only"):
+        TITLES["run_command"] = "x"  # type: ignore[index]
+    assert copy.deepcopy(TITLES) == dict(TITLES)
+
+
+def paged(text: bytes | str, **args: Any) -> Any:
+    tools, sandbox = tools_for()
+    sandbox.raw["f.txt"] = text.encode() if isinstance(text, str) else text
+    return tools.call("read_file", {"path": "f.txt", **args})
+
+
+def test_read_file_pages_with_offset_and_length():
+    tools, sandbox = tools_for()
+    sandbox.workspace["f.txt"] = "abcdefghij"
+    assert tools.read_file("f.txt", offset=2, length=3) == {
+        "content": "cde",
+        "next_offset": 5,
+        "eof": False,
+    }
+    # Seven bytes past the window let a page finish a character and still see eof.
+    assert sandbox.calls == [("files.read", "f.txt", 2, 10)]
+    assert tools.read_file("f.txt", offset=5, length=5) == {
+        "content": "fghij",
+        "next_offset": 10,
+        "eof": True,
+    }
+
+
+def test_read_file_offset_alone_reads_10000_bytes():
+    tools, sandbox = tools_for()
+    sandbox.workspace["big.log"] = "x" * 25_000
+    result = tools.call("read_file", {"path": "big.log", "offset": 0})
+    assert result == {"content": "x" * 10_000, "next_offset": 10_000, "eof": False}
+    assert sandbox.calls[-1] == ("files.read", "big.log", 0, 10_007)
+    assert tools.call("read_file", {"path": "big.log", "offset": "20000"}) == {
+        "content": "x" * 5_000,
+        "next_offset": 25_000,
+        "eof": True,
+    }
+
+
+def test_read_file_length_alone_starts_at_zero():
+    assert paged("hello", length=2) == {"content": "he", "next_offset": 2, "eof": False}
+
+
+@pytest.mark.parametrize(
+    "length,read_size",
+    [(50_000, 10_007), (0, 8), (-7, 8), ("5", 12)],
+)
+def test_read_file_clamps_length(length: Any, read_size: int):
+    tools, sandbox = tools_for()
+    sandbox.workspace["f.txt"] = "abc"
+    tools.call("read_file", {"path": "f.txt", "length": length})
+    assert sandbox.calls[-1] == ("files.read", "f.txt", 0, read_size)
+
+
+def test_read_file_negative_offset_reads_from_the_start():
+    tools, sandbox = tools_for()
+    sandbox.workspace["f.txt"] = "abc"
+    assert tools.call("read_file", {"path": "f.txt", "offset": -4, "length": 2}) == {
+        "content": "ab",
+        "next_offset": 2,
+        "eof": False,
+    }
+    assert sandbox.calls[-1] == ("files.read", "f.txt", 0, 9)
+
+
+def test_read_file_skips_a_split_character_at_the_start():
+    # "é" is 2 bytes and "€" 3; offset 1 lands inside "é".
+    assert paged("é€x", offset=1, length=5) == {"content": "€x", "next_offset": 6, "eof": True}
+    assert paged("é€x", offset=3, length=1) == {"content": "x", "next_offset": 6, "eof": True}
+
+
+def test_read_file_backs_off_a_split_character_at_the_end():
+    assert paged("aé€", offset=0, length=4) == {"content": "aé", "next_offset": 3, "eof": False}
+    assert paged("aé€", offset=3, length=3) == {"content": "€", "next_offset": 6, "eof": True}
+    assert paged("a\U0001f600b", length=3) == {"content": "a", "next_offset": 1, "eof": False}
+
+
+def test_read_file_pages_cover_the_file_exactly_once():
+    text = "héllo wörld, €100 \U0001f600 done" * 50
+    pieces, offset, eof = [], 0, False
+    for _ in range(len(text.encode())):
+        if eof:
+            break
+        result = paged(text, offset=offset, length=7)
+        pieces.append(result["content"])
+        offset, eof = result["next_offset"], result["eof"]
+    assert eof
+    assert "".join(pieces) == text
+
+
+def test_read_file_offset_past_the_end_is_eof():
+    assert paged("abc", offset=3) == {"content": "", "next_offset": 3, "eof": True}
+    assert paged("abc", offset=99, length=5) == {"content": "", "next_offset": 99, "eof": True}
+
+
+def test_read_file_paged_bad_utf8_is_an_error_result():
+    assert paged(b"ab\xffcd", offset=0, length=10) == {"error": "not UTF-8 text"}
+    # A character cut by the real end of the file is not backed off.
+    assert paged(b"ab\xe2\x82", offset=0, length=10) == {"error": "not UTF-8 text"}
+
+
+def test_read_file_paged_missing_file_is_an_error_result():
+    tools, _ = tools_for()
+    assert tools.read_file("nope.txt", offset=0) == {"error": "HTTP 400: nope.txt: no such file"}
+
+
+def test_read_file_null_paging_args_keep_the_whole_file_read():
+    tools, sandbox = tools_for()
+    sandbox.workspace["big.log"] = "x" * 50_000
+    result = tools.call("read_file", {"path": "big.log", "offset": None, "length": None})
+    assert set(result) == {"content"}
+    assert "…[40000 bytes truncated]…" in result["content"]  # type: ignore[typeddict-item]
+    assert not any(c[0] == "files.read" for c in sandbox.calls)
+
+
+def test_stat_path_reports_files_directories_and_missing_paths():
+    tools, sandbox = tools_for()
+    sandbox.workspace["a.txt"] = "héllo"
+    sandbox.dirs.add("src")
+    assert tools.call("stat_path", {"path": "a.txt"}) == {
+        "exists": True,
+        "type": "file",
+        "size": 6,
+        "modified_time": "2026-10-14T10:00:00Z",
+    }
+    assert tools.stat_path("src")["type"] == "directory"  # type: ignore[typeddict-item]
+    assert tools.stat_path("missing") == {"exists": False}
+
+
+def test_stat_path_other_errors_follow_the_usual_rules():
+    tools, sandbox = tools_for()
+    sandbox.fail = api_error(BadRequestError, "path escapes /workspace")
+    assert tools.stat_path("../etc") == {"error": "HTTP 400: path escapes /workspace"}
+    sandbox.fail = api_error(AuthenticationError, "bad key")
+    with pytest.raises(AuthenticationError):
+        tools.stat_path("a")
+
+
+def test_move_path_moves_and_reports_errors():
+    tools, sandbox = tools_for()
+    sandbox.workspace["a.txt"] = "x"
+    assert tools.call("move_path", {"source": "a.txt", "destination": "b/c.txt"}) == {"ok": True}
+    assert sandbox.workspace == {"b/c.txt": "x"}
+    assert sandbox.calls == [("files.move", "a.txt", "b/c.txt")]
+    assert tools.move_path("a.txt", "d.txt") == {"error": "HTTP 400: a.txt: no such file"}
+    assert tools.call("move_path", {"source": "a.txt"}) == {
+        "error": 'invalid arguments for move_path: missing a required argument: "destination"'
+    }
+
+
+def test_delete_path_needs_recursive_for_a_directory():
+    tools, sandbox = tools_for()
+    sandbox.workspace["a.txt"] = "x"
+    sandbox.dirs.add("build")
+    assert tools.call("delete_path", {"path": "a.txt"}) == {"ok": True}
+    assert tools.call("delete_path", {"path": "build", "recursive": None}) == {
+        "error": "HTTP 400: build: directory not empty"
+    }
+    assert tools.call("delete_path", {"path": "build", "recursive": True}) == {"ok": True}
+    assert tools.delete_path("a.txt") == {"error": "HTTP 400: a.txt: no such file"}
+    assert [c for c in sandbox.calls if c[0] == "files.remove"] == [
+        ("files.remove", "a.txt", False),
+        ("files.remove", "build", False),
+        ("files.remove", "build", True),
+        ("files.remove", "a.txt", False),
+    ]
+
+
+@pytest.mark.parametrize("recursive", ["true", "false", 1, [True]])
+def test_delete_path_direct_call_treats_only_true_as_recursive(recursive: Any):
+    tools, sandbox = tools_for()
+    sandbox.dirs.add("build")
+    assert "error" in tools.delete_path("build", recursive=recursive)  # type: ignore[operator]
+    assert sandbox.calls[-1] == ("files.remove", "build", False)
+
+
+def process(name: str, args: list[str], state: str, exit_code: int | None = None) -> Any:
+    return SimpleNamespace(
+        process_id=f"proc-{len(args)}", name=name, args=args, state=state, exit_code=exit_code
+    )
+
+
+def test_list_processes_shows_the_command_the_model_started():
+    tools, sandbox = tools_for(allow_processes=True)
+    sandbox.processes.listed = [
+        process("sh", ["-lc", "npm run dev -- --port 3000"], "running"),
+        process("python3", ["-m", "http.server"], "exited", 0),
+        process("sh", ["-c", "true"], "exited", None),
+    ]
+    assert tools.call("list_processes", {}) == {
+        "processes": [
+            {"process_id": "proc-2", "command": "npm run dev -- --port 3000", "state": "running"},
+            {
+                "process_id": "proc-2",
+                "command": "python3 -m http.server",
+                "state": "exited",
+                "exit_code": 0,
+            },
+            {"process_id": "proc-2", "command": "sh -c true", "state": "exited", "exit_code": None},
+        ]
+    }
+    sandbox.processes.listed = []
+    assert tools.list_processes() == {"processes": []}
+
+
+def test_list_processes_errors_follow_the_usual_rules():
+    tools, sandbox = tools_for(allow_processes=True)
+    sandbox.fail = error_from_status(503, None, None)
+    with pytest.raises(type(sandbox.fail)):
+        tools.list_processes()
+
+
+async def test_async_file_tools():
+    tools, sandbox = async_tools_for()
+    sandbox.workspace["a.txt"] = "aé€"
+    sandbox.dirs.add("build")
+    assert await tools.read_file("a.txt", offset=0, length=4) == {
+        "content": "aé",
+        "next_offset": 3,
+        "eof": False,
+    }
+    # A window too short for one whole character grows to hold it.
+    assert await tools.call("read_file", {"path": "a.txt", "offset": 1, "length": 1}) == {
+        "content": "é",
+        "next_offset": 3,
+        "eof": False,
+    }
+    assert await tools.stat_path("a.txt") == {
+        "exists": True,
+        "type": "file",
+        "size": 6,
+        "modified_time": "2026-10-14T10:00:00Z",
+    }
+    assert await tools.stat_path("nope") == {"exists": False}
+    assert await tools.move_path("a.txt", "b.txt") == {"ok": True}
+    assert await tools.move_path("a.txt", "b.txt") == {"error": "HTTP 400: a.txt: no such file"}
+    assert await tools.call("delete_path", {"path": "build"}) == {
+        "error": "HTTP 400: build: directory not empty"
+    }
+    assert await tools.call("delete_path", {"path": "build", "recursive": True}) == {"ok": True}
+    assert await tools.call("delete_path", {"path": "b", "recursive": "yes"}) == {
+        "error": "invalid arguments for delete_path: recursive must be boolean"
+    }
+
+
+async def test_async_list_processes():
+    tools, sandbox = async_tools_for(allow_processes=True)
+    sandbox.processes.listed = [process("sh", ["-lc", "make"], "exited", 2)]
+    assert await tools.call("list_processes") == {
+        "processes": [
+            {"process_id": "proc-2", "command": "make", "state": "exited", "exit_code": 2}
+        ]
+    }
+
+
+@pytest.mark.parametrize("text", ["€uro", "\U0001f600a", "a€\U0001f600é"])
+@pytest.mark.parametrize("length", [1, 2, 3])
+def test_read_file_short_pages_always_advance(text: str, length: int):
+    pieces, offset, eof = [], 0, False
+    for _ in range(len(text.encode())):
+        if eof:
+            break
+        result = paged(text, offset=offset, length=length)
+        assert result["next_offset"] > offset
+        pieces.append(result["content"])
+        offset, eof = result["next_offset"], result["eof"]
+    assert eof
+    assert "".join(pieces) == text
+
+
+def test_read_file_grows_a_page_to_one_whole_character():
+    assert paged("€uro", length=1) == {"content": "€", "next_offset": 3, "eof": False}
+    assert paged("\U0001f600a", offset=1, length=1) == {
+        "content": "a",
+        "next_offset": 5,
+        "eof": True,
+    }
+
+
+def test_read_file_skips_at_most_three_continuation_bytes():
+    assert paged(b"\x80\x80\x80a", offset=0) == {"content": "a", "next_offset": 4, "eof": True}
+    assert paged(b"\x80\x80\x80\x80a", offset=0) == {"error": "not UTF-8 text"}
+
+
+def test_read_file_invalid_lead_byte_is_not_utf8():
+    assert paged(b"a\xf8\x80\x80\x80b", length=2) == {"error": "not UTF-8 text"}
+    assert paged(b"\xf8\x80\x80\x80b", length=1) == {"error": "not UTF-8 text"}
+
+
+@pytest.mark.parametrize(
+    "body",
+    [{"message": "route not found"}, {"code": "not_found"}, {"reason_code": "no_route"}],
+)
+def test_stat_path_404_without_the_runtime_envelope_is_an_error(body: dict[str, Any]):
+    tools, sandbox = tools_for()
+    sandbox.fail = NotFoundError(404, body, None)
+    assert tools.stat_path("a.txt")["error"].startswith("HTTP 404")  # type: ignore[typeddict-item]
+
+
+async def test_async_stat_path_404_without_the_runtime_envelope_is_an_error():
+    tools, sandbox = async_tools_for()
+    assert await tools.stat_path("nope") == {"exists": False}
+    sandbox.fail = NotFoundError(404, {"message": "route not found"}, None)
+    assert await tools.stat_path("nope") == {"error": "HTTP 404: route not found"}
+
+
+async def test_async_read_file_short_pages_always_advance():
+    tools, sandbox = async_tools_for()
+    sandbox.raw["f.txt"] = "€uro".encode()
+    assert await tools.read_file("f.txt", length=1) == {
+        "content": "€",
+        "next_offset": 3,
+        "eof": False,
+    }
+    sandbox.raw["f.txt"] = b"\x80\x80\x80\x80a"
+    assert await tools.read_file("f.txt", offset=0) == {"error": "not UTF-8 text"}
+    sandbox.dirs.add("build")
+    assert "error" in await tools.delete_path("build", recursive="true")  # type: ignore[arg-type,operator]
+    assert sandbox.calls[-1] == ("files.remove", "build", False)
+
+
+def test_stat_path_404_with_only_a_code_is_an_error():
+    # Only the runtime's reason_code counts; the JS SDK applies the same rule.
+    tools, sandbox = tools_for()
+    sandbox.fail = NotFoundError(404, {"code": "not_found"}, None)
+    assert tools.stat_path("a.txt") == {"error": "HTTP 404 not_found"}
+
+
+async def test_async_stat_path_404_with_only_a_code_is_an_error():
+    tools, sandbox = async_tools_for()
+    sandbox.fail = NotFoundError(404, {"code": "not_found"}, None)
+    assert await tools.stat_path("a.txt") == {"error": "HTTP 404 not_found"}
