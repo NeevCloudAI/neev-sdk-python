@@ -16,7 +16,7 @@ Required environment variables:
 Optional overrides:
 
 - ``NEEV_SANDBOX_TEMPLATE_ID`` — template to provision after listing
-  (default: first active template in the list, or ``sb-ubuntu-26-04-minimal``)
+  (default: first active template in the list, or ``sb-ubuntu-26-04-dev``)
 
 Flow
 ----
@@ -33,10 +33,10 @@ Example Output
 ::
 
     templates: 3 of 10 (page 1)
-      sb-ubuntu-26-04-minimal — Ubuntu Minimal [ACTIVE]
+      sb-ubuntu-26-04-dev — Ubuntu 26.04 Dev [ACTIVE]
       sb-python-3-12 — Python 3.12 [ACTIVE]
-    selected: sb-ubuntu-26-04-minimal — Minimal Ubuntu 26.04 image
-    [templates] creating sandbox (sb-ubuntu-26-04-minimal)…
+    selected: sb-ubuntu-26-04-dev — Ubuntu 26.04 with common development tools
+    [templates] creating sandbox (sb-ubuntu-26-04-dev)…
     created sb-abc123 (phase: Provisioning)
     [templates] waiting until ready…
     ready at https://connect.example/sb-abc123
@@ -51,7 +51,7 @@ Stdout / stderr
 Run::
 
     NEEV_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=... \\
-    NEEV_SANDBOX_TEMPLATE_ID=sb-ubuntu-26-04-minimal \\
+    NEEV_SANDBOX_TEMPLATE_ID=sb-ubuntu-26-04-dev \\
     uv run python examples/templates_list.py
 """
 
@@ -65,7 +65,7 @@ from neevai import NeevAI
 from neevai.errors import NeevAIError
 
 # Tunable defaults — override via environment variables listed in the docstring.
-DEFAULT_TEMPLATE = os.environ.get("NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-minimal")
+DEFAULT_TEMPLATE = os.environ.get("NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-dev")
 
 
 def log(message: str) -> None:

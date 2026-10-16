@@ -83,7 +83,7 @@ def test_wait_until_ready_ready_phase_does_not_probe_runtime(mock_transport, mon
         project_id="proj1",
         client=mock_transport,
     )
-    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-26-04-dev"})
     _mark_ready(sb)
 
     probe_calls = {"count": 0}
@@ -115,7 +115,7 @@ def test_sandbox_refresh(control_transport):
         project_id="proj1",
         client=control_transport,
     )
-    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-26-04-dev"})
     assert sb.phase == "Pending"
 
     sb.refresh()
@@ -142,7 +142,7 @@ def test_sandbox_rollback_invalidates_cached_connection(mock_transport):
         project_id="proj1",
         client=mock_transport,
     )
-    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-26-04-dev"})
     _mark_ready(sb, connect_url="https://old.example.com")
 
     old_conn = sb._connection()
@@ -169,7 +169,7 @@ def test_sandbox_pause_and_resume_invalidate_cached_connection(mock_transport):
         project_id="proj1",
         client=mock_transport,
     )
-    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-26-04-dev"})
     _mark_ready(sb)
 
     sb._connection()
@@ -192,7 +192,7 @@ def test_sandbox_rollback_does_not_wait_for_runtime(mock_transport, monkeypatch)
         project_id="proj1",
         client=mock_transport,
     )
-    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-26-04-dev"})
     _mark_ready(sb, connect_url="https://same.example.com")
 
     sb._connection()
@@ -223,7 +223,7 @@ def test_wait_for_runtime_ready_clears_cached_connection(mock_transport, monkeyp
         project_id="proj1",
         client=mock_transport,
     )
-    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-26-04-dev"})
     _mark_ready(sb, connect_url="https://same.example.com")
 
     sb._connection()
@@ -244,7 +244,7 @@ def test_sandbox_connection_passes_sandbox_id_to_transport(mock_transport):
         project_id="proj1",
         client=mock_transport,
     )
-    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-26-04-dev"})
     _mark_ready(sb)
 
     conn = sb._connection()
@@ -260,7 +260,7 @@ def test_sandbox_refresh_invalidates_connection_when_connect_url_changes(mock_tr
         project_id="proj1",
         client=mock_transport,
     )
-    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-26-04-dev"})
     _mark_ready(sb, connect_url="https://first.example.com")
 
     first_conn = sb._connection()

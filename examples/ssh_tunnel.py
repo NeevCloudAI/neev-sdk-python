@@ -10,8 +10,7 @@ public port. Over a single tunnel this example:
   3. port-forwards a server running in the sandbox back to your machine.
 
 It creates the sandbox from a bring-your-own image that ships openssh, rsync, and
-python3 (the default minimal template has none of those). Any image with an
-SSH-capable userland works.
+python3. Any image with an SSH-capable userland works.
 
 Prerequisites
 -------------

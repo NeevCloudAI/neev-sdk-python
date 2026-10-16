@@ -23,7 +23,7 @@ Required environment variables:
 Optional overrides:
 
 - ``NEEV_SANDBOX_TEMPLATE_ID`` — template to provision (default:
-  ``sb-ubuntu-26-04-minimal``)
+  ``sb-ubuntu-26-04-dev``)
 - ``NEEVAI_WAIT_TIMEOUT_MS`` — max time to wait for ready state (default: ``300000``)
 - ``NEEVAI_CRASH_POLL_ITERS`` — how many times to poll for the crash (default: ``30``)
 - ``NEEVAI_CRASH_POLL_INTERVAL_SEC`` — seconds between polls (default: ``5``)
@@ -61,7 +61,7 @@ from neevai import NeevAI
 from neevai.errors import NeevAIError
 
 WAIT_TIMEOUT_MS = int(os.environ.get("NEEVAI_WAIT_TIMEOUT_MS", "300000"))
-SANDBOX_TEMPLATE_ID = os.environ.get("NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-minimal")
+SANDBOX_TEMPLATE_ID = os.environ.get("NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-dev")
 POLL_ITERS = int(os.environ.get("NEEVAI_CRASH_POLL_ITERS", "30"))
 POLL_INTERVAL_SEC = float(os.environ.get("NEEVAI_CRASH_POLL_INTERVAL_SEC", "5"))
 

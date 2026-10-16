@@ -49,7 +49,7 @@ def main() -> None:
             sandbox = agent.sandbox()
             sandbox.wait_until_ready()
             sandbox.files.write("index.html", "<h1>hello from the agent</h1>\n")
-            sandbox.processes.start(["busybox", "httpd", "-f", "-p", str(PORT)])
+            sandbox.processes.start(["python3", "-m", "http.server", str(PORT)])
 
             port = agent.expose_port(PORT, slug=random_slug())
             print(f"preview URL: {port.preview_url}")

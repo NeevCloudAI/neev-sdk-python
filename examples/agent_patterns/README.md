@@ -51,12 +51,11 @@ Defaults applied for you:
 | Model | `gpt-oss-120b` | `NEEV_MODEL` |
 | Inference endpoint | `https://inference.ai.neevcloud.com/v1` | `NEEV_INFERENCE_BASE_URL` |
 | Inference key | `NEEV_API_KEY` | `NEEV_INFERENCE_API_KEY` |
-| Template | `sb-ubuntu-26-04-minimal` | `NEEV_SANDBOX_TEMPLATE_ID` |
+| Template | `sb-ubuntu-26-04-dev` | `NEEV_SANDBOX_TEMPLATE_ID` |
 
-**Templates and binaries.** Discover templates with `client.templates.list()`
-(e.g. `sb-debian-12-minimal`, `sb-ubuntu-26-04-minimal`). The minimal images are
-deliberately small: they ship `sh` but **not** `bash`, and **not** `python3`. So
-`run_shell` works everywhere, while `run_python` needs a python-capable template.
+**Templates.** Discover templates with `client.templates.list()`. The default
+`sb-ubuntu-26-04-dev` ships `bash`, `python3` and `node`, so both `run_shell` and
+`run_python` work on it.
 Sandbox file paths are **workspace-relative**.
 
 ## Run

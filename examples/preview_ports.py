@@ -31,13 +31,13 @@ Required environment variables:
 Optional overrides:
 
 - ``NEEV_SANDBOX_TEMPLATE_ID`` — template to provision (default:
-  ``sb-ubuntu-26-04-minimal``)
+  ``sb-ubuntu-26-04-dev``)
 
 Flow
 ----
 
 1. **Create & wait** — provision a sandbox and block on ``wait_until_ready``
-2. **Serve** — write ``index.html`` and start ``busybox httpd`` on port 3000
+2. **Serve** — write ``index.html`` and start ``python3 -m http.server`` on port 3000
 3. **Expose** — ``get_url(3000)`` returns the preview URL once it is routable
 4. **Rotate** — re-expose the port with a fresh slug; the old URL stops working
 5. **List / revoke** — show exposed ports, then stop serving the port
@@ -59,7 +59,7 @@ import sys
 from neevai import NeevAI
 from neevai.errors import NeevAIError
 
-TEMPLATE = os.environ.get("NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-minimal")
+TEMPLATE = os.environ.get("NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-dev")
 PORT = 3000
 
 
@@ -77,9 +77,9 @@ def main() -> None:
             sandbox.wait_until_ready()
             log(f"ready: {sandbox.id}")
 
-            # Write a page and serve the workspace on PORT (busybox ships with httpd).
+            # Write a page and serve the workspace on PORT.
             sandbox.files.write("index.html", "<h1>hello from the sandbox</h1>\n")
-            sandbox.processes.start(["busybox", "httpd", "-f", "-p", str(PORT)])
+            sandbox.processes.start(["python3", "-m", "http.server", str(PORT)])
             log(f"server listening on :{PORT}")
 
             # Expose the port and wait until its URL is routable.

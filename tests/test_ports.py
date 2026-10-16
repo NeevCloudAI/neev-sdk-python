@@ -16,7 +16,7 @@ def _client(mock_transport) -> NeevAI:
 
 
 def _new_sandbox(client: NeevAI):
-    return client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
+    return client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-26-04-dev"})
 
 
 def test_expose_port_returns_port_and_url(mock_transport):
@@ -105,9 +105,7 @@ async def test_async_expose_list_revoke(async_mock_transport):
         project_id="proj1",
         client=async_mock_transport,
     )
-    sb = await client.sandboxes.create(
-        {"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"}
-    )
+    sb = await client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-26-04-dev"})
     exposed = await sb.expose_port(8080)
     assert exposed.port == 8080
     ports = {p.port for p in await sb.list_ports()}
@@ -125,9 +123,7 @@ async def test_async_get_url_no_wait(async_mock_transport):
         project_id="proj1",
         client=async_mock_transport,
     )
-    sb = await client.sandboxes.create(
-        {"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"}
-    )
+    sb = await client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-26-04-dev"})
     url = await sb.get_url(8080, wait_until_ready=False)
     assert url.startswith("https://8080-")
     await client.aclose()
@@ -181,9 +177,7 @@ async def test_async_expose_port_and_get_url_forward_slug(async_mock_transport):
     client = AsyncNeevAI(
         api_key="test", org_id="org1", project_id="proj1", client=async_mock_transport
     )
-    sb = await client.sandboxes.create(
-        {"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"}
-    )
+    sb = await client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-26-04-dev"})
     assert (await sb.expose_port(8080, slug="abcd1234")).slug == "abcd1234"
     url = await sb.get_url(8080, wait_until_ready=False, slug="efgh5678")
     assert "efgh5678" in url

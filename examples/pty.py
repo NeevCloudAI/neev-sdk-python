@@ -22,7 +22,7 @@ Required environment variables:
 Optional overrides:
 
 - ``NEEV_SANDBOX_TEMPLATE_ID`` — template to provision (default:
-  ``sb-ubuntu-26-04-minimal``)
+  ``sb-ubuntu-26-04-dev``)
 
 Run::
 
@@ -38,7 +38,7 @@ import sys
 from neevai import NeevAI
 from neevai.errors import NeevAIError
 
-TEMPLATE = os.environ.get("NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-minimal")
+TEMPLATE = os.environ.get("NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-dev")
 
 
 def log(message: str) -> None:

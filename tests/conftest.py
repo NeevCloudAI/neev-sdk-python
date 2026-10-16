@@ -20,10 +20,10 @@ _FAKE_DB: dict[str, Any] = {
     "snapshots": {},
     "agents": {},
     "templates": {
-        "sb-ubuntu-26-04-minimal": {
-            "id": "sb-ubuntu-26-04-minimal",
-            "name": "Ubuntu 26.04 Minimal",
-            "description": "Minimal Ubuntu template",
+        "sb-ubuntu-26-04-dev": {
+            "id": "sb-ubuntu-26-04-dev",
+            "name": "Ubuntu 26.04 Dev",
+            "description": "Ubuntu development template",
             "category": "standard",
             "status": "active",
             "created_at": "2026-01-01T00:00:00Z",
@@ -566,9 +566,9 @@ def _control_response(
             {
                 "items": [
                     {
-                        "id": "sb-ubuntu-26-04-minimal",
-                        "name": "Ubuntu 26.04 Minimal",
-                        "description": "Minimal Ubuntu template",
+                        "id": "sb-ubuntu-26-04-dev",
+                        "name": "Ubuntu 26.04 Dev",
+                        "description": "Ubuntu development template",
                         "category": "standard",
                         "status": "active",
                         "created_at": "2026-01-01T00:00:00Z",
@@ -588,8 +588,8 @@ def _control_response(
                 200,
                 {
                     "id": template_id,
-                    "name": "Ubuntu 26.04 Minimal",
-                    "description": "Minimal Ubuntu template",
+                    "name": "Ubuntu 26.04 Dev",
+                    "description": "Ubuntu development template",
                     "category": "standard",
                     "status": "active",
                     "created_at": "2026-01-01T00:00:00Z",

@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 from neevai import AuditEvent, NeevAI
 from neevai.errors import NeevAIError
 
-TEMPLATE = os.environ.get("NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-minimal")
+TEMPLATE = os.environ.get("NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-dev")
 
 
 def show(e: AuditEvent) -> None:

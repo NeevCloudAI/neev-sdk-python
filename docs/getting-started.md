@@ -113,7 +113,7 @@ or pass equivalent constructor kwargs to `NeevAI(...)` / `AsyncNeevAI(...)`.
 | `NEEV_ORG_ID` | Default organization ID |
 | `NEEV_PROJECT_ID` | Default project ID |
 | `NEEV_BASE_URL` | Base URL (default: `https://api.ai.neevcloud.com/agent`) |
-| `NEEV_SANDBOX_TEMPLATE_ID` | Optional sandbox template id (defaults to `sb-ubuntu-26-04-minimal` in examples) |
+| `NEEV_SANDBOX_TEMPLATE_ID` | Optional sandbox template id (defaults to `sb-ubuntu-26-04-dev` in examples) |
 | `NEEV_AGENT_TEMPLATE` | Optional agent template **name** for [`create_agent.py`](../examples/create_agent.py) (default: `claude-code`) |
 | `NEEVAI_WAIT_TIMEOUT_MS` | Shared deadline for connect URL, Ready phase, and runtime probe (default: `300000`) |
 | `NEEVAI_POLL_INTERVAL_MS` | Poll interval while waiting for connect URL / sandbox runtime (default: `2000`) |

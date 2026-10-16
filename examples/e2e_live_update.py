@@ -13,7 +13,7 @@ Run it with your project credentials::
     NEEV_ORG_ID=org-...
     NEEV_PROJECT_ID=prj-...     # a real project id, distinct from the org id
     NEEV_BASE_URL=...           # optional; defaults to the public Neev API
-    NEEV_SANDBOX_TEMPLATE_ID=sb-ubuntu-26-04-minimal   # optional
+    NEEV_SANDBOX_TEMPLATE_ID=sb-ubuntu-26-04-dev   # optional
     uv run python examples/e2e_live_update.py
 
 Exit code is 0 only if every check passes. Each check prints PASS/FAIL.
@@ -42,7 +42,7 @@ import time
 from neevai import NeevAI
 from neevai.errors import NeevAIError
 
-TEMPLATE = os.environ.get("NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-minimal")
+TEMPLATE = os.environ.get("NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-dev")
 REGION = os.environ.get("NEEV_REGION")  # optional region for create
 WAIT_TIMEOUT_MS = int(os.environ.get("NEEVAI_WAIT_TIMEOUT_MS", "300000"))
 ALLOWED_HOST = "api.github.com"

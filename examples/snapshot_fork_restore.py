@@ -26,7 +26,7 @@ Required environment variables:
 Optional overrides:
 
 - ``NEEV_SANDBOX_TEMPLATE_ID`` — template to provision (default:
-  ``sb-ubuntu-26-04-minimal``)
+  ``sb-ubuntu-26-04-dev``)
 - ``NEEVAI_WAIT_TIMEOUT_MS`` — max time to wait for sandbox ready (default:
   ``300000``)
 - ``NEEVAI_SNAPSHOT_POLL_MS`` — interval between snapshot status polls (default:
@@ -76,7 +76,7 @@ Stdout / stderr
 Run::
 
     NEEV_API_KEY=... NEEV_ORG_ID=... NEEV_PROJECT_ID=... \\
-    NEEV_SANDBOX_TEMPLATE_ID=sb-ubuntu-26-04-minimal \\
+    NEEV_SANDBOX_TEMPLATE_ID=sb-ubuntu-26-04-dev \\
     uv run python examples/snapshot_fork_restore.py
 """
 
@@ -89,7 +89,7 @@ import time
 from neevai import NeevAI, NeevAIError, Snapshot, SnapshotStatus
 
 # Tunable defaults — override via environment variables listed in the docstring.
-TEMPLATE = os.environ.get("NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-minimal")
+TEMPLATE = os.environ.get("NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-dev")
 WAIT_TIMEOUT_MS = int(os.environ.get("NEEVAI_WAIT_TIMEOUT_MS", "300000"))
 SNAPSHOT_POLL_MS = int(os.environ.get("NEEVAI_SNAPSHOT_POLL_MS", "3000"))
 

@@ -50,11 +50,11 @@ def snapshot_data(**overrides) -> dict:
 
 def test_sandboxes_create(mock_transport):
     client = _make_client(mock_transport)
-    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-26-04-dev"})
     assert sb.id == _first_sandbox_id()
     assert sb.name == "s1"
     assert sb.phase == "Pending"
-    assert sb.data.get("sandbox_template_id") == "sb-ubuntu-24-04-minimal"
+    assert sb.data.get("sandbox_template_id") == "sb-ubuntu-26-04-dev"
     client.close()
 
 
@@ -62,7 +62,7 @@ def test_sandboxes_create_with_model_instance(mock_transport):
     client = _make_client(mock_transport)
     params = CreateSandboxParams(
         name="s1",
-        sandbox_template_id="sb-ubuntu-24-04-minimal",
+        sandbox_template_id="sb-ubuntu-26-04-dev",
         region="as-south-1",
     )
     sb = client.sandboxes.create(params)
@@ -117,7 +117,7 @@ def test_sandboxes_create_uses_explicit_region(mock_transport):
     sb = client.sandboxes.create(
         {
             "name": "s1",
-            "sandbox_template_id": "sb-ubuntu-24-04-minimal",
+            "sandbox_template_id": "sb-ubuntu-26-04-dev",
             "region": "as-south-1",
         }
     )
@@ -136,7 +136,7 @@ def test_sandboxes_create_omits_region_when_not_configured(mock_transport):
     sandbox = client.sandboxes.create(
         {
             "name": "s1",
-            "sandbox_template_id": "sb-ubuntu-24-04-minimal",
+            "sandbox_template_id": "sb-ubuntu-26-04-dev",
         }
     )
     assert sandbox.id
@@ -145,9 +145,7 @@ def test_sandboxes_create_omits_region_when_not_configured(mock_transport):
 
 def test_sandboxes_get(mock_transport):
     client = _make_client(mock_transport)
-    created = client.sandboxes.create(
-        {"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"}
-    )
+    created = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-26-04-dev"})
     fetched = client.sandboxes.get(created.id)
     assert fetched.id == created.id
     assert fetched.name == "s1"
@@ -156,8 +154,8 @@ def test_sandboxes_get(mock_transport):
 
 def test_sandboxes_list(mock_transport):
     client = _make_client(mock_transport)
-    client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
-    client.sandboxes.create({"name": "s2", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
+    client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-26-04-dev"})
+    client.sandboxes.create({"name": "s2", "sandbox_template_id": "sb-ubuntu-26-04-dev"})
 
     page = client.sandboxes.list()
     assert len(page.items) == 2
@@ -169,11 +167,9 @@ def test_sandboxes_list(mock_transport):
 def test_sandboxes_list_filters(mock_transport):
     client = _make_client(mock_transport)
     web = client.sandboxes.create(
-        {"name": "web-server", "sandbox_template_id": "sb-ubuntu-24-04-minimal"}
+        {"name": "web-server", "sandbox_template_id": "sb-ubuntu-26-04-dev"}
     )
-    client.sandboxes.create(
-        {"name": "db-primary", "sandbox_template_id": "sb-ubuntu-24-04-minimal"}
-    )
+    client.sandboxes.create({"name": "db-primary", "sandbox_template_id": "sb-ubuntu-26-04-dev"})
 
     # name is a case-insensitive substring match.
     by_name = client.sandboxes.list(name="WEB")
@@ -196,7 +192,7 @@ def test_sandboxes_list_filters(mock_transport):
 
 def test_sandboxes_delete(mock_transport):
     client = _make_client(mock_transport)
-    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-26-04-dev"})
     client.sandboxes.delete(sb.id)
     with pytest.raises(NotFoundError):
         client.sandboxes.get(sb.id)
@@ -205,7 +201,7 @@ def test_sandboxes_delete(mock_transport):
 
 def test_sandboxes_pause_resume(mock_transport):
     client = _make_client(mock_transport)
-    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-26-04-dev"})
     paused = client.sandboxes.pause(sb.id)
     assert paused.phase == "Paused"
     resumed = client.sandboxes.resume(sb.id)
@@ -216,7 +212,7 @@ def test_sandboxes_pause_resume(mock_transport):
 def test_sandboxes_pause_accepts_pausing_transitional_phase(mock_transport, monkeypatch):
     """Pause API may return phase=Pausing while reconciliation is in progress."""
     client = _make_client(mock_transport)
-    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-26-04-dev"})
 
     original_request = client._transport.request
 
@@ -238,7 +234,7 @@ def test_sandboxes_pause_accepts_pausing_transitional_phase(mock_transport, monk
 
 def test_sandboxes_pause_sends_an_empty_json_body(mock_transport):
     client = _make_client(mock_transport)
-    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-26-04-dev"})
 
     captured_bodies: list[dict | None] = []
     original_request = client._transport.request
@@ -257,7 +253,7 @@ def test_sandboxes_pause_sends_an_empty_json_body(mock_transport):
 def test_sandboxes_pause_rejects_the_removed_preserve_memory_kwarg(mock_transport):
     """A caller still passing the dropped flag gets a TypeError, not a silently ignored pause."""
     client = _make_client(mock_transport)
-    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-26-04-dev"})
 
     with pytest.raises(TypeError):
         client.sandboxes.pause(sb.id, preserve_memory=True)  # type: ignore[call-arg]
@@ -266,7 +262,7 @@ def test_sandboxes_pause_rejects_the_removed_preserve_memory_kwarg(mock_transpor
 
 def test_sandboxes_metrics(mock_transport):
     client = _make_client(mock_transport)
-    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-26-04-dev"})
     metrics = client.sandboxes.metrics(sb.id)
     assert str(metrics.sandbox_id) == sb.id
     assert metrics.series == []
@@ -282,7 +278,7 @@ def test_sandboxes_get_not_found(mock_transport):
 
 def test_sandboxes_get_invalid_response_raises(mock_transport, monkeypatch):
     client = _make_client(mock_transport)
-    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-26-04-dev"})
 
     original_request = client._transport.request
 
@@ -300,7 +296,7 @@ def test_sandboxes_get_invalid_response_raises(mock_transport, monkeypatch):
 
 def test_sandboxes_create_snapshot(mock_transport):
     client = _make_client(mock_transport)
-    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-26-04-dev"})
 
     captured_bodies: list[dict | None] = []
     original_request = client._transport.request
@@ -320,7 +316,7 @@ def test_sandboxes_create_snapshot(mock_transport):
 
 def test_sandboxes_list_snapshots(mock_transport):
     client = _make_client(mock_transport)
-    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-26-04-dev"})
     client.sandboxes.create_snapshot(sb.id, {"name": "snap-a"})
     client.sandboxes.create_snapshot(sb.id, {"name": "snap-b"})
 
@@ -333,7 +329,7 @@ def test_sandboxes_list_snapshots(mock_transport):
 
 def test_sandboxes_get_and_delete_snapshot(mock_transport):
     client = _make_client(mock_transport)
-    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-26-04-dev"})
     created = client.sandboxes.create_snapshot(sb.id, {"name": "snap-x"})
 
     fetched = client.sandboxes.get_snapshot(str(created.id))
@@ -362,7 +358,7 @@ def test_sandboxes_get_snapshot_not_found(mock_transport):
 
 def test_sandboxes_rollback(mock_transport):
     client = _make_client(mock_transport)
-    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-26-04-dev"})
     snap = client.sandboxes.create_snapshot(sb.id, {"name": "restore-me"})
 
     captured_bodies: list[dict | None] = []
@@ -383,7 +379,7 @@ def test_sandboxes_rollback(mock_transport):
 
 def test_sandboxes_fork(mock_transport):
     client = _make_client(mock_transport)
-    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-26-04-dev"})
 
     captured_bodies: list[dict | None] = []
     original_request = client._transport.request
@@ -403,7 +399,7 @@ def test_sandboxes_fork(mock_transport):
 
 def test_sandbox_handle_snapshot_methods(mock_transport):
     client = _make_client(mock_transport)
-    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-26-04-dev"})
 
     captured: list[tuple[str, str]] = []
     original_request = client._transport.request
@@ -433,13 +429,13 @@ def test_sandbox_handle_snapshot_methods(mock_transport):
 
 def test_sandboxes_create_with_restore(mock_transport):
     client = _make_client(mock_transport)
-    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-24-04-minimal"})
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-26-04-dev"})
     snap = client.sandboxes.create_snapshot(sb.id, {"name": "seed"})
 
     restored = client.sandboxes.create(
         {
             "name": "from-snap",
-            "sandbox_template_id": "sb-ubuntu-24-04-minimal",
+            "sandbox_template_id": "sb-ubuntu-26-04-dev",
             "restore": str(snap.id),
         }
     )
