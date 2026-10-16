@@ -1,13 +1,19 @@
 # Real-world workflow examples
 
-Two hand-rolled agent demos that show what you can do with a **Neev sandbox**
-as a secure code-execution environment. Every example uses a shared
+Two complete agent workflows that use a NeevCloud sandbox as a safe place to run code. Every example uses a shared
 [`StreamingAgentLoop`](../agent_patterns/utils/agent_loop.py) with a single
 `run_shell` tool.
 
-Do the one-time credential setup in [`../README.md`](../README.md), then set an
-inference key (`NEEV_INFERENCE_API_KEY`; falls
-back to `NEEV_API_KEY`).
+Do the setup in [`../README.md`](../README.md). The model key defaults to
+`NEEV_API_KEY`; set `NEEV_INFERENCE_API_KEY` to use a different one.
+
+## Contents
+
+- [Examples](#examples)
+- [Repository analyzer](#repository-analyzer)
+- [Browser automation](#browser-automation)
+- [Environment variables](#environment-variables)
+- [Common patterns](#common-patterns)
 
 These workflows use sandboxes directly — not platform agents (`client.agents`).
 For catalogue-managed agents, see [`create_agent.py`](../create_agent.py).
@@ -19,9 +25,8 @@ For catalogue-managed agents, see [`create_agent.py`](../create_agent.py).
 | [`repo_analyzer.py`](./repo_analyzer.py) | Cloning and auditing untrusted repos in isolation | `sandboxes.create`, `exec`, `delete` | `output/repo-analysis.md` |
 | [`browser_agent.py`](./browser_agent.py) | Playwright browser automation in a sandbox | `sandboxes.create`, `exec`, `files.read`, `delete` | `output/results.md` |
 
----
 
-### Hero: Repository Analyzer (`repo_analyzer.py`)
+## Repository analyzer
 
 Analyzes a git repository for architecture, dependencies, security patterns,
 and interesting observations — all inside a disposable sandbox. The agent's
@@ -44,9 +49,8 @@ tries GitHub archive fallback (HTTPS GitHub URLs only) or a static binary from
 
 **Output:** `output/repo-analysis.md` — saved on success.
 
----
 
-### Browser Automation (`browser_agent.py`)
+## Browser automation
 
 Uses `NEEV_SANDBOX_TEMPLATE_ID` (default `sb-ubuntu-26-04-dev`). Bootstrap
 runs `pip install playwright` and `playwright install chromium` before the agent
@@ -65,7 +69,6 @@ uv run python examples/workflow_examples/browser_agent.py --query "AI"
 **Output:** `output/results.md` — saved when the sandbox produced the file (including
 partial results after max steps). Exits with code 1 if the artifact is missing.
 
----
 
 ## Environment variables
 
@@ -74,14 +77,13 @@ partial results after max steps). Exits with code 1 if the artifact is missing.
 | `NEEV_API_KEY` | yes | — | All |
 | `NEEV_ORG_ID` | yes | — | All |
 | `NEEV_PROJECT_ID` | yes | — | All |
-| `NEEV_INFERENCE_API_KEY` | yes | — | All |
+| `NEEV_INFERENCE_API_KEY` | no | `NEEV_API_KEY` | All |
 | `NEEV_INFERENCE_BASE_URL` | no | `https://inference.ai.neevcloud.com/v1` | All |
 | `NEEV_MODEL` | no | `gpt-oss-120b` | All |
 | `NEEV_SANDBOX_TEMPLATE_ID` | no | `sb-ubuntu-26-04-dev` | All |
 | `NEEVAI_WORKFLOW_MAX_STEPS` | no | `35` (`repo_analyzer`), `70` (`browser_agent`) | All |
 | `NEEV_GIT_STATIC_URL` | no | — | `repo_analyzer.py` (optional static git binary) |
 
----
 
 ## Common patterns
 

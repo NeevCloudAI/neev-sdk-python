@@ -2,9 +2,7 @@
 Provision an agent from a catalogue template, wait for it to become Ready,
 drive its backing sandbox, then clean up.
 
-Set NEEV_AGENT_TEMPLATE to pick a template (default "claude-code"),
-NEEV_BASE_URL to target
-another environment.
+Set NEEV_AGENT_TEMPLATE to pick a template (default "claude-code").
 
 Run::
 

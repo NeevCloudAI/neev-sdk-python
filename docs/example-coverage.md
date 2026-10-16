@@ -1,12 +1,12 @@
-# Example coverage — API usage by runnable script
+# Example coverage
 
-Catalog of runnable `.py` examples and a lookup from SDK APIs to the scripts that
-demonstrate them, with minimal inline snippets for each symbol. Use this when you
-need to know whether an API is shown in runnable code, which examples cover a
-given symbol, or what the typical call looks like. For fuller sync/async snippet
-pairs, see [`api-reference.md`](./api-reference.md). For method signatures and
-types, see [`api-inventory.md`](./api-inventory.md). For the tiered learning
-path and run commands, see [`examples/README.md`](../examples/README.md).
+Which runnable example shows which API, with a one-line snippet for each. For the
+examples themselves, see [`examples/README.md`](../examples/README.md).
+
+## Contents
+
+- [API → examples](#api--examples-inverse-index)
+- [Example catalog](#example-catalog)
 
 ## API → examples (inverse index)
 
@@ -95,7 +95,6 @@ path and run commands, see [`examples/README.md`](../examples/README.md).
 | `sandbox.id` / `.phase` / `.connect_url` | tier-1, `processes.py`, `process_pool.py`, `sandbox_lifecycle_controller.py`, `agent_patterns/utils/sandbox_tool.py`, `workflow_examples/*` | `print(sandbox.phase, sandbox.connect_url)` — polled until `connect_url` in process examples |
 | `client.close()` | `agent_patterns/utils/sandbox_tool.py` | `client.close()` |
 
----
 
 ## Example catalog
 
@@ -129,16 +128,3 @@ path and run commands, see [`examples/README.md`](../examples/README.md).
 | Agent loop helper | `examples/agent_patterns/utils/agent_loop.py` | `StreamingAgentLoop`, `exec_stream`, `files.read` |
 | Repo analyzer | `examples/workflow_examples/repo_analyzer.py` | Clone repo, agent audit, artifacts |
 | Browser agent | `examples/workflow_examples/browser_agent.py` | Playwright scrape via agent loop |
-
----
-
-## Maintaining this file
-
-When you add or change an example, or introduce a new public API:
-
-1. Update the [example catalog](#example-catalog) row.
-2. Update the [inverse index](#api--examples-inverse-index) so each new or
-   changed API points at the right example(s) and includes a representative
-   snippet (prefer the pattern used in the linked example; fall back to
-   [`api-reference.md`](./api-reference.md) one-liners when they match).
-3. Cross-check [`api-reference.md`](./api-reference.md) runnable-example links.

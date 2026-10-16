@@ -1,30 +1,23 @@
-# NeevAI Python SDK — API Reference
+# API reference
 
-Task-oriented API lists and copy-paste snippets for the public `neevai` package.
-For method parameters, type field tables, errors, and the symbol index, see
-[`api-inventory.md`](./api-inventory.md). For which runnable examples call which
-APIs are demonstrated, see [`example-coverage.md`](./example-coverage.md).
-For install and first scripts, see [`getting-started.md`](./getting-started.md).
+Every product and method in `neevai`, grouped by product, with short snippets. For full signatures and type fields, see the [API inventory](api-inventory.md). New to the SDK? Start with [Getting started](getting-started.md).
 
-## Table of contents
+## Contents
 
-- [Lifecycle](#lifecycle)
-- [Snapshots](#snapshots)
-- [Runtime](#runtime)
-- [Agent tools](#agent-tools)
+- [Client and configuration](#client-and-configuration)
+- [Sandboxes](#sandboxes): [`client.sandboxes`](#clientsandboxes), [Templates](#templates), [Snapshots, fork and rollback](#snapshots-fork-and-rollback), [Sandbox handle](#sandbox-handle), [Commands and processes](#commands-and-processes), [Files](#files), [Terminals and SSH](#terminals-and-ssh), [Code interpreter](#code-interpreter)
+- [Agents](#agents): [`client.agents`](#clientagents), [Agent templates](#agent-templates), [`Agent` handle](#agent-handle)
+- [Agent tools](#agent-tools): [The tool contract](#the-tool-contract), [Framework adapters](#framework-adapters)
+- [Errors](#errors)
 - [Inline example snippets](#inline-example-snippets)
-- [Maintaining this reference](#maintaining-this-reference)
 
 ---
 
-## Lifecycle
+## Client and configuration
 
-Lifecycle APIs manage sandboxes, agents, agent templates, and sandbox
-templates through the Neev API. All sync symbols have async counterparts
+All sync symbols have async counterparts
 (`AsyncNeevAI`, `AsyncSandboxes`, `AsyncAgents`, etc.) — add `await` and use
 `async with` / `aclose()` where noted.
-
-### Client
 
 | API | Sync | Async |
 | --- | ---- | ----- |
@@ -32,6 +25,18 @@ templates through the Neev API. All sync symbols have async counterparts
 | Close transport | `client.close()` (via `with`) | `await client.aclose()` |
 
 Details: [`api-inventory.md` → Client](./api-inventory.md#client)
+
+### `client.raw`
+
+| Method | Returns | Summary |
+| ------ | ------- | ------- |
+| `request(method, path, query=None, body=None)` | JSON dict/list or `None` | Untyped API call; returns parsed JSON or `None` for HTTP 204. |
+
+---
+
+## Sandboxes
+
+A sandbox is an isolated machine for your code. `client.sandboxes` and `client.templates` manage sandboxes; the `Sandbox` handle and its runtime properties work inside one.
 
 ### `client.sandboxes`
 
@@ -47,21 +52,40 @@ Details: [`api-inventory.md` → Client](./api-inventory.md#client)
 | `update_timeout(id, params, org_id=None, project_id=None)` | `Sandbox` | Changes idle/lifetime windows (PUT `.../timeout`); only the windows passed change, `0` turns one off. |
 | `delete(id, org_id=None, project_id=None)` | `None` | Permanently deletes a sandbox. |
 | `metrics(id, from_=None, to=None, step=None, ...)` | `SandboxMetricsResponse` | Queries live health metrics over an optional time range. |
-| `audit(id, *, from_=None, to=None, cursor=None, limit=None, ...)` | `AuditTrail` | One page of the command audit trail, newest first; page with `next_cursor`. |
+| `audit(id, *, from_=None, to=None, cursor=None, limit=None, ...)` | `AuditTrail` | One page of the audit trail, newest first. Filter with `operation`, `status`, `actor_type`, `actor_uid` or `credential_uid`; page with `next_cursor`. |
 | `expose_port(id, port, ..., *, slug=None)` / `list_ports(id)` / `revoke_port(id, port)` | `SandboxPort` / `list[SandboxPort]` / `None` | Preview ports. A new `slug` on an exposed port rotates its URL. |
 | `get_port_url(id, port, wait_until_ready=True, ..., *, slug=None)` | `str` | Exposes a port and returns its preview URL once routable. |
 | `create_snapshot(id, params=None, ...)` | `Snapshot` | Creates a filesystem snapshot (returns immediately with status Pending). |
 | `list_snapshots(id, page=None, limit=None, ...)` | `list[Snapshot]` | Lists snapshots for a sandbox (unwraps pagination items). |
 | `get_snapshot(snapshot_id, ...)` | `Snapshot` | Fetches snapshot metadata by project-scoped ID. |
 | `delete_snapshot(snapshot_id, ...)` | `None` | Deletes a snapshot permanently. |
-| `rollback(id, snapshot_id, ...)` | `Sandbox` | Rolls a sandbox back in place to a previous snapshot. Prefer `create({..., "restore": ...})` to recover into a new sandbox — see [Snapshots](#snapshots). |
+| `rollback(id, snapshot_id, ...)` | `Sandbox` | Rolls a sandbox back in place to a previous snapshot. Prefer `create({..., "restore": ...})` to recover into a new sandbox — see [Snapshots](#snapshots-fork-and-rollback). |
 | `fork(id, name, ...)` | `Sandbox` | Forks a sandbox into a new sandbox from its current state. |
 
-### Snapshots
+### Templates
 
-Snapshot workflows capture filesystem state, restore into a new sandbox, or fork
-inherited state. Snapshots are asynchronous: `create_snapshot` returns
-`status=Pending`; poll `get_snapshot` until `Ready`.
+| Method | Returns | Summary |
+| ------ | ------- | ------- |
+| `list(page=None, limit=None)` | `TemplatePage` | Lists available sandbox templates with pagination. |
+| `get(template_id)` | `SandboxTemplate` | Fetches a single sandbox template by ID. Templates carry an optional display `icon`. |
+
+Templates you can start from:
+
+| Template | Use it for |
+| --- | --- |
+| `sb-ubuntu-26-04-dev` | General development: git, gh, Python 3, Node 24 LTS |
+| `sb-ubuntu-26-04-docker` | Docker, Compose and Buildx; run `start-docker` first, and run containers with `--network=host` |
+| `sb-ubuntu-26-04-interpreter` | The [code interpreter](#code-interpreter): Python kernels that keep their state |
+| `sb-ubuntu-26-04-playwright` | Browser testing: a desktop with Node 24, Playwright and Chromium, headless or headed (`DISPLAY=:1`) |
+
+The catalogue grows over time, so `templates.list()` is the source of truth.
+
+### Snapshots, fork and rollback
+
+A snapshot captures a sandbox's full state: its files and the memory of its running
+processes. Restore it into a new sandbox, roll back in place, or fork. Snapshots are
+asynchronous: `create_snapshot` returns `status=Pending`; `wait_for_snapshot` (or
+`sandbox.snapshot(..., wait_until_ready=True)`) waits until it is `Ready`.
 
 **Recommended restore pattern** — create a new sandbox from a snapshot (does not
 mutate the original sandbox):
@@ -69,11 +93,7 @@ mutate the original sandbox):
 ```python
 pending = sandbox.snapshot({"name": "checkpoint"})
 # poll until Ready …
-restored = client.sandboxes.create({
-    "name": "restored",
-    "sandbox_template_id": template_id,
-    "restore": str(pending.id),
-})
+restored = client.sandboxes.create({"name": "restored", "restore": str(pending.id)})
 restored.wait_until_ready()
 ```
 
@@ -81,42 +101,7 @@ In-place `sandbox.rollback(snapshot_id)` is also available but can come back wit
 empty workspace. See
 [`snapshot_fork_restore.py`](../examples/snapshot_fork_restore.py).
 
-### `client.templates`
-
-| Method | Returns | Summary |
-| ------ | ------- | ------- |
-| `list(page=None, limit=None)` | `TemplatePage` | Lists available sandbox templates with pagination. |
-| `get(template_id)` | `SandboxTemplate` | Fetches a single sandbox template by ID. Templates carry an optional display `icon`. |
-
-### `client.agents`
-
-| Method | Returns | Summary |
-| ------ | ------- | ------- |
-| `create(params, org_id=None, project_id=None, *, allow_internet=None, allow_egress=None)` | `Agent` | Creates an agent from a catalogue template name (`agent_template`). `allow_internet=True` / `allow_egress=[...]` open egress (deny-all by default; explicit `egress` wins). |
-| `list(page=None, limit=None, org_id=None, project_id=None)` | `AgentPage` | Lists agents with pagination in the resolved org/project scope. |
-| `get(id, org_id=None, project_id=None)` | `Agent` | Fetches the current record for an agent by ID or name. |
-| `update(id, params, org_id=None, project_id=None, *, allow_internet=None, allow_egress=None)` | `Agent` | In-place update of egress, cpu/memory (`resources`; defaults & bounds in [Agent resources](./api-inventory.md#agent-resources)) and `idle_timeout_seconds`. `allow_internet` / `allow_egress` are the same egress convenience as `create`; `egress_add` / `egress_remove` edit the allow-list in place. Rejects `{}` locally, naming every field. |
-| `keepalive(id, ...)` / `rollback(id, snapshot_id, ...)` | `Agent` | Resets the idle timer / rolls the backing sandbox back to a snapshot. |
-| `expose_port` / `list_ports` / `revoke_port` / `get_port_url` | as on `client.sandboxes` | Agent preview ports, same signatures. |
-| `audit(id, *, from_=None, to=None, cursor=None, limit=None, ...)` | `AuditTrail` | The agent's command audit trail. |
-| `pause(id, org_id=None, project_id=None)` | `Agent` | Pauses the agent and its backing sandbox. |
-| `resume(id, org_id=None, project_id=None)` | `Agent` | Resumes a paused agent. |
-| `delete(id, org_id=None, project_id=None)` | `None` | Permanently deletes an agent (HTTP 204, no body). |
-
-### `client.agent_templates`
-
-| Method | Returns | Summary |
-| ------ | ------- | ------- |
-| `list(page=None, limit=None)` | `AgentTemplatePage` | Lists available agent templates (global catalogue, no org scope). |
-| `get(template_id)` | `AgentTemplate` | Fetches a single agent template by ID. |
-
-### `client.raw`
-
-| Method | Returns | Summary |
-| ------ | ------- | ------- |
-| `request(method, path, query=None, body=None)` | JSON dict/list or `None` | Untyped API call; returns parsed JSON or `None` for HTTP 204. |
-
-### Sandbox handle (lifecycle)
+### Sandbox handle
 
 Returned by `create()`, `get()`, `list().items`, etc.
 
@@ -132,35 +117,18 @@ Returned by `create()`, `get()`, `list().items`, etc.
 | `rollback(snapshot_id)` / `fork(name)` | methods |
 | `delete()` | method |
 | `metrics(from_=None, to=None, step=None)` | method |
-| `audit(*, from_=None, to=None, cursor=None, limit=None)` | method |
+| `audit(*, from_=None, to=None, cursor=None, limit=None, operation=None, status=None, actor_type=None, actor_uid=None, credential_uid=None)` | method |
 | `expose_port(port, *, slug=None)` / `list_ports()` / `revoke_port(port)` / `get_url(port, ..., *, slug=None)` | methods — preview ports |
 | `to_json()` | method |
 
-### Agent handle (lifecycle)
-
-Returned by `client.agents.create()`, `get()`, `list().items`, etc.
-
-| API | Kind |
-| --- | ---- |
-| `id`, `name`, `status`, `sandbox_id`, `agent_template_id`, `config`, `last_crash`, `idle_timeout_seconds`, `data` | properties |
-| `refresh()` / `update(params, *, allow_internet=None, allow_egress=None)` | methods |
-| `wait_until_ready(timeout_ms=120000, poll_interval_ms=2000, on_poll=None)` | method — polls until `Ready`; fails fast on `Failed` / `Paused` |
-| `pause()` / `resume()` / `delete()` | methods |
-| `keepalive()` / `rollback(snapshot_id)` / `audit(...)` | methods |
-| `expose_port(port, *, slug=None)` / `list_ports()` / `revoke_port(port)` / `get_url(port, ..., *, slug=None)` | methods — preview ports |
-| `sandbox()` | method — backing `Sandbox` handle for runtime `exec`, `files`, and `processes` |
-| `to_json()` | method |
-
----
-
-## Runtime
+### Commands and processes
 
 Sandbox runtime APIs run commands, access files, and manage supervised processes
 inside a **ready** sandbox (after `wait_until_ready()`). Most callers use
 `sandbox.exec` / `sandbox.files` / `sandbox.processes` on the handle rather than
 constructing `SandboxConnection` directly.
 
-### Exec
+#### Exec
 
 | API | Sync | Async |
 | --- | ---- | ----- |
@@ -169,7 +137,7 @@ constructing `SandboxConnection` directly.
 
 Details: [`api-inventory.md` → Exec and streaming](./api-inventory.md#exec-and-streaming)
 
-### `sandbox.processes`
+#### `sandbox.processes`
 
 Supervised detached processes (lifetime outlives the start request). Complements
 request-scoped `sandbox.exec`.
@@ -198,7 +166,7 @@ runtime probe before calling these methods. See
 
 Details: [`api-inventory.md` → Processes API](./api-inventory.md#processes-api)
 
-### `sandbox.files`
+### Files
 
 | Method | Returns | Summary |
 | ------ | ------- | ------- |
@@ -216,6 +184,60 @@ Details: [`api-inventory.md` → Processes API](./api-inventory.md#processes-api
 Paths are relative to the workspace or absolute within it; a path outside the
 workspace is refused.
 
+### Terminals and SSH
+
+#### `sandbox.pty`
+
+| Method | Returns | Summary |
+| ------ | ------- | ------- |
+| `create(program=None, args=None, cols=0, rows=0, id=None, on_data=None)` | `PtyHandle` | Opens an interactive terminal; `on_data` receives output bytes. Pass `id` to reattach to an existing terminal. |
+
+`PtyHandle`: `id`, plus `send_input(data)`, `resize(cols, rows)`, `wait()`, `kill()` and `disconnect()`.
+
+```python
+term = sandbox.pty.create(program="bash", cols=80, rows=24,
+                          on_data=lambda data: print(data.decode(), end=""))
+term.send_input("ls -la\n")
+```
+
+Details: [`api-inventory.md` → Interactive PTY](./api-inventory.md#interactive-pty--sandboxpty)
+
+#### `sandbox.ssh`
+
+| Method | Returns | Summary |
+| ------ | ------- | ------- |
+| `ssh(port=None, host="127.0.0.1")` | `SshTunnel` | Opens a local port that forwards to the sandbox, for `ssh`, `scp`, `rsync` and IDE remote development. Use it as a context manager, or call `close()`. |
+
+```python
+with sandbox.ssh() as tunnel:
+    print(f"ssh -p {tunnel.port} neev@localhost")
+```
+
+Details: [`api-inventory.md` → SSH tunnel](./api-inventory.md#ssh-tunnel--sandboxssh)
+
+### Code interpreter
+
+Sandboxes created from `sb-ubuntu-26-04-interpreter` run Python in kernels that keep their state between runs. `sandbox.code` runs code in them.
+
+| Method | Returns | Summary |
+| ------ | ------- | ------- |
+| `run(code, *, context=None, language=None, envs=None, timeout_ms=None, request_timeout_ms=None, on_stdout=None, ...)` | `Execution` | Runs code in a context (the `default` one unless `context` is set) and returns its output, results and how it ended. An exception in the code is returned in `error`, not raised. |
+| `create_context(*, language=None, cwd=None)` | `CreatedCodeContext` | Starts a separate kernel with its own state. |
+| `list_contexts()` | `list[CodeContext]` | Lists contexts with their `state`, `generation` and memory use (`rss_mib`). |
+| `restart_context(context)` | `str` | Restarts a context's kernel, dropping its state; returns the new `generation`. |
+| `delete_context(context)` | `None` | Stops a context and frees its kernel. |
+
+An `Execution` has `stdout`, `stderr`, `logs`, `results`, `text` (the last expression's value), `error`, `end_reason`, `execution_count`, `generation` and `truncated`; a changed `generation` means the context's state was lost. `AsyncSandbox` has the same methods with `await`.
+
+```python
+sandbox.code.run("import pandas as pd\ndf = pd.DataFrame({'x': [1, 2, 3]})")
+run = sandbox.code.run("int(df.x.sum())")
+print(run.text, run.end_reason)  # 6 ok
+
+ctx = sandbox.code.create_context(cwd="project")
+sandbox.code.run("import os; print(os.getcwd())", context=ctx)
+```
+
 ### Low-level connection types
 
 Listed for completeness; prefer handle methods above.
@@ -231,7 +253,52 @@ Details: [`api-inventory.md` → Runtime connection](./api-inventory.md#runtime-
 
 ---
 
+## Agents
+
+An agent is a catalogue template (such as `"claude-code"`) running on its own sandbox. Manage it through `client.agents`; reach its files, `exec` and processes through `agent.sandbox()`. Every method that takes an `id` accepts the agent's name too.
+
+### `client.agents`
+
+| Method | Returns | Summary |
+| ------ | ------- | ------- |
+| `create(params, org_id=None, project_id=None, *, allow_internet=None, allow_egress=None)` | `Agent` | Creates an agent from a catalogue template name (`agent_template`). `allow_internet=True` / `allow_egress=[...]` open egress (deny-all by default; explicit `egress` wins). |
+| `list(page=None, limit=None, org_id=None, project_id=None)` | `AgentPage` | Lists agents with pagination in the resolved org/project scope. |
+| `get(id, org_id=None, project_id=None)` | `Agent` | Fetches the current record for an agent by ID or name. |
+| `update(id, params, org_id=None, project_id=None, *, allow_internet=None, allow_egress=None)` | `Agent` | In-place update of egress, cpu/memory (`resources`; defaults & bounds in [Agent resources](./api-inventory.md#agent-resources)) and `idle_timeout_seconds`. `allow_internet` / `allow_egress` are the same egress convenience as `create`; `egress_add` / `egress_remove` edit the allow-list in place. Rejects `{}` locally, naming every field. |
+| `keepalive(id, ...)` / `rollback(id, snapshot_id, ...)` | `Agent` | Resets the idle timer / rolls the backing sandbox back to a snapshot. |
+| `expose_port` / `list_ports` / `revoke_port` / `get_port_url` | as on `client.sandboxes` | Agent preview ports, same signatures. |
+| `audit(id, *, from_=None, to=None, cursor=None, limit=None, ...)` | `AuditTrail` | The agent's audit trail, with the same filters. |
+| `pause(id, org_id=None, project_id=None)` | `Agent` | Pauses the agent and its backing sandbox. |
+| `resume(id, org_id=None, project_id=None)` | `Agent` | Resumes a paused agent. |
+| `delete(id, org_id=None, project_id=None)` | `None` | Permanently deletes an agent (HTTP 204, no body). |
+
+### Agent templates
+
+| Method | Returns | Summary |
+| ------ | ------- | ------- |
+| `list(page=None, limit=None)` | `AgentTemplatePage` | Lists available agent templates (global catalogue, no org scope). |
+| `get(template_id)` | `AgentTemplate` | Fetches a single agent template by ID. |
+
+### `Agent` handle
+
+Returned by `client.agents.create()`, `get()`, `list().items`, etc.
+
+| API | Kind |
+| --- | ---- |
+| `id`, `name`, `status`, `sandbox_id`, `agent_template_id`, `config`, `last_crash`, `idle_timeout_seconds`, `data` | properties |
+| `refresh()` / `update(params, *, allow_internet=None, allow_egress=None)` | methods |
+| `wait_until_ready(timeout_ms=120000, poll_interval_ms=2000, on_poll=None)` | method — polls until `Ready`; fails fast on `Failed` / `Paused` |
+| `pause()` / `resume()` / `delete()` | methods |
+| `keepalive()` / `rollback(snapshot_id)` / `audit(...)` | methods |
+| `expose_port(port, *, slug=None)` / `list_ports()` / `revoke_port(port)` / `get_url(port, ..., *, slug=None)` | methods — preview ports |
+| `sandbox()` | method — backing `Sandbox` handle for runtime `exec`, `files`, and `processes` |
+| `to_json()` | method |
+
+---
+
 ## Agent tools
+
+### The tool contract
 
 `neevai.agent_tools` binds the sandbox tool contract to one sandbox for your own
 agent, with model-ready descriptions and JSON Schemas. No framework dependency.
@@ -254,13 +321,87 @@ back as `{"error": ...}`.
 
 Details: [`api-inventory.md` → Agent tools](./api-inventory.md#agent-tools)
 
+### Framework adapters
+
+Each adapter turns `SandboxTools` into one framework's tools. Install the framework
+through its extra. A sandbox error such as an expired key stops the run instead of
+being handed back to the model.
+
+**Claude Agent SDK** (`pip install "neevai[claude]"`): an in-process MCP server with
+Claude Code's own tools switched off. `watch` ends the run on a sandbox error and
+raises it.
+
+```python
+from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
+
+from neevai.agent_tools import SandboxTools
+from neevai.agent_tools.claude import to_claude
+
+claude = to_claude(SandboxTools(sandbox))
+async with ClaudeSDKClient(ClaudeAgentOptions(**claude.options())) as client:
+    await client.query(task)
+    async for message in claude.watch(client.receive_response()):
+        print(message)
+```
+
+**OpenAI Agents SDK** (`pip install "neevai[openai-agents]"`):
+
+```python
+from agents import Agent, Runner
+
+from neevai.agent_tools import SandboxTools
+from neevai.agent_tools.openai_agents import to_openai_agents
+
+agent = Agent(name="engineer", tools=to_openai_agents(SandboxTools(sandbox)))
+result = await Runner.run(agent, task)
+```
+
+**LangChain and LangGraph** (`pip install "neevai[langchain]"`):
+
+```python
+from langchain.agents import create_agent
+
+from neevai.agent_tools import SandboxTools
+from neevai.agent_tools.langchain import to_langchain
+
+agent = create_agent(model, to_langchain(SandboxTools(sandbox)))
+result = agent.invoke({"messages": [{"role": "user", "content": task}]})
+```
+
+For another framework, wrap each `spec.call` in a `FatalGuard` if the framework turns
+a tool's exception into a message for the model, then call `guard.raise_if_failed()`
+when the run ends.
+
+---
+
+## Errors
+
+Every failure is a `NeevAIError`. API failures are `APIError` subclasses with `status_code`, a machine-readable `code` and a `request_id` for support. Branch on `code` rather than the message text.
+
+| Error | When |
+| --- | --- |
+| `BadRequestError` | 400: invalid request |
+| `AuthenticationError` | 401: missing or invalid API key |
+| `PermissionDeniedError` | 403: not allowed |
+| `NotFoundError` | 404: no such resource |
+| `ConflictError` | 409: conflicting state |
+| `PreconditionFailedError` | 412: the sandbox is not in a state that allows the call |
+| `RateLimitError` | 429: too many requests |
+| `DeadlineExceededError` | 504: the call ran past its deadline |
+| `InternalServerError` | 5xx (`ServiceUnavailableError` for 503) |
+| `APIConnectionError`, `APITimeoutError` | The request did not complete |
+
+Network errors, 429 and 5xx are retried automatically on API calls. Calls inside a sandbox, such as `exec` and `files.write`, are not retried, because running them twice could repeat their effect.
+
+Details: [`api-inventory.md` → Errors](./api-inventory.md#errors)
+
 ---
 
 ## Inline example snippets
 
 Minimal one-liners for each public API. Runnable examples link to repo paths.
 
-### Lifecycle
+### Sandbox lifecycle
 
 | API | Sync snippet | Async snippet | Runnable example |
 | --- | ------------ | ------------- | ---------------- |
@@ -284,7 +425,7 @@ Minimal one-liners for each public API. Runnable examples link to repo paths.
 | `client.sandboxes.list_snapshots(id)` | `snaps = client.sandboxes.list_snapshots(sb.id)` | `snaps = await client.sandboxes.list_snapshots(sb.id)` | — |
 | `client.sandboxes.get_snapshot(id)` | `snap = client.sandboxes.get_snapshot(snap_id)` | `snap = await client.sandboxes.get_snapshot(snap_id)` | [snapshot_fork_restore.py](../examples/snapshot_fork_restore.py) |
 | `client.sandboxes.delete_snapshot(id)` | `client.sandboxes.delete_snapshot(snap_id)` | `await client.sandboxes.delete_snapshot(snap_id)` | [snapshot_fork_restore.py](../examples/snapshot_fork_restore.py) |
-| `client.sandboxes.rollback(id, snapshot_id)` | `sb = client.sandboxes.rollback(sb.id, snap_id)` | `sb = await client.sandboxes.rollback(sb.id, snap_id)` | — (prefer `restore` create; see [Snapshots](#snapshots)) |
+| `client.sandboxes.rollback(id, snapshot_id)` | `sb = client.sandboxes.rollback(sb.id, snap_id)` | `sb = await client.sandboxes.rollback(sb.id, snap_id)` | — (prefer `restore` create; see [Snapshots](#snapshots-fork-and-rollback)) |
 | `client.sandboxes.fork(id, name)` | `fork = client.sandboxes.fork(sb.id, "fork-name")` | `fork = await client.sandboxes.fork(sb.id, "fork-name")` | [snapshot_fork_restore.py](../examples/snapshot_fork_restore.py) (via `sandbox.fork`) |
 | `client.templates.list(...)` | `page = client.templates.list(limit=10)` | `page = await client.templates.list(limit=10)` | [templates_list.py](../examples/templates_list.py) |
 | `client.templates.get(id)` | `tpl = client.templates.get(template_id)` | `tpl = await client.templates.get(template_id)` | [templates_list.py](../examples/templates_list.py) |
@@ -313,11 +454,11 @@ Minimal one-liners for each public API. Runnable examples link to repo paths.
 | `sandbox.update_timeout(params)` | `sandbox.update_timeout({"idle_timeout_seconds": 300, "max_lifetime_seconds": 0})` | `await sandbox.update_timeout({"idle_timeout_seconds": 300})` | [sandbox_lifecycle_windows.py](../examples/sandbox_lifecycle_windows.py) |
 | `sandbox.snapshot(params=None)` | `pending = sandbox.snapshot({"name": "demo-snap"})` | `pending = await sandbox.snapshot({"name": "demo-snap"})` | [snapshot_fork_restore.py](../examples/snapshot_fork_restore.py) |
 | `sandbox.snapshots()` | `snaps = sandbox.snapshots()` | `snaps = await sandbox.snapshots()` | — |
-| `sandbox.rollback(snapshot_id)` | `sandbox.rollback(snapshot_id)` | `await sandbox.rollback(snapshot_id)` | — (prefer `restore` create; see [Snapshots](#snapshots)) |
+| `sandbox.rollback(snapshot_id)` | `sandbox.rollback(snapshot_id)` | `await sandbox.rollback(snapshot_id)` | — (prefer `restore` create; see [Snapshots](#snapshots-fork-and-rollback)) |
 | `sandbox.fork(name)` | `fork = sandbox.fork("fork-name")` | `fork = await sandbox.fork("fork-name")` | [snapshot_fork_restore.py](../examples/snapshot_fork_restore.py) |
 | `sandbox.delete()` | `sandbox.delete()` | `await sandbox.delete()` | [sandbox_lifecycle.py](../examples/sandbox_lifecycle.py) |
 | `sandbox.metrics(...)` | `metrics = sandbox.metrics()` | `metrics = await sandbox.metrics()` | [sandbox_metrics.py](../examples/sandbox_metrics.py) |
-| `sandbox.audit(...)` | `trail = sandbox.audit(limit=50)` | `trail = await sandbox.audit(limit=50)` | [audit_trail.py](../examples/audit_trail.py) |
+| `sandbox.audit(...)` | `trail = sandbox.audit(limit=50, operation="exec")` | `trail = await sandbox.audit(limit=50)` | [audit_trail.py](../examples/audit_trail.py) |
 | `sandbox.addressable` | `print(sandbox.addressable)` | `print(sandbox.addressable)` | — |
 | `sandbox.labels` | `print(sandbox.labels)` | `print(sandbox.labels)` | — |
 | `sandbox.expose_port(port)` | `p = sandbox.expose_port(8080)` | `p = await sandbox.expose_port(8080)` | [preview_ports.py](../examples/preview_ports.py) |
@@ -340,7 +481,7 @@ Minimal one-liners for each public API. Runnable examples link to repo paths.
 | `agent.idle_timeout_seconds` | `print(agent.idle_timeout_seconds)` | same | — |
 | `agent.to_json()` | `agent.to_json()` | `agent.to_json()` | — |
 
-### Runtime
+### Inside a sandbox
 
 | API | Sync snippet | Async snippet | Runnable example |
 | --- | ------------ | ------------- | ---------------- |
@@ -381,19 +522,3 @@ Minimal one-liners for each public API. Runnable examples link to repo paths.
 | `tools.names()` / `DESCRIPTIONS` / `PARAMETERS` | `specs = [(n, DESCRIPTIONS[n], PARAMETERS[n]) for n in tools.names()]` | same | [agent_tools_loop.py](../examples/agent_patterns/agent_tools_loop.py) |
 | `tools.call(name, args)` | `result = tools.call("run_command", {"command": "ls"})` | `result = await tools.call("run_command", {"command": "ls"})` | [agent_tools_loop.py](../examples/agent_patterns/agent_tools_loop.py) |
 | `tools.read_process_output(...)` | `tools.read_process_output(pid, wait_s=30)` | `await tools.read_process_output(pid, wait_s=30)` | — |
-
----
-
-## Maintaining this reference
-
-Any PR that modifies public SDK exports must update:
-
-- [`docs/api-reference.md`](./api-reference.md) — API lists and inline snippet table (this file)
-- [`docs/api-inventory.md`](./api-inventory.md) — method signatures, type field tables, symbol index
-- [`docs/example-coverage.md`](./example-coverage.md) — example catalog and API → examples lookup
-- [`docs/getting-started.md`](./getting-started.md) — if install, env vars, or quick-start flows change
-- [`examples/`](../examples/) — if a new capability lacks a runnable example
-
-Type field tables live in [`api-inventory.md`](./api-inventory.md) only — not here.
-After `scripts/gen_types.py`, verify type tables in the inventory against
-`src/neevai/generated/`.

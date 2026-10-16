@@ -1,11 +1,21 @@
 # Agent integration examples
 
-These examples wire a **Neev sandbox** into agent workflows as a secure
-code-execution tool. Each agent reasons over a task, runs shell (or Python) inside
-a isolated Neev sandbox, and uses the captured output to answer.
+These examples give a model a NeevCloud sandbox as a code-execution tool. The
+agent reasons over a task, runs shell or Python in an isolated sandbox, and uses
+the output to answer.
 
-All examples drive the **same NeevCloud model — `gpt-oss-120b`** — over the
-OpenAI-compatible Neev inference endpoint.
+## Contents
+
+- [Examples](#examples)
+- [Setup](#setup)
+- [Run](#run)
+- [Verify](#verify)
+- [Shared helpers](#shared-helpers)
+
+## Examples
+
+All examples use the NeevCloud model `gpt-oss-120b` through the
+OpenAI-compatible NeevCloud inference endpoint.
 
 | Example | Framework | SDK features |
 | ------- | --------- | ------------ |
@@ -22,15 +32,11 @@ safely" demo. No framework, no extra deps (just `neevai` + `httpx`):
 uv run python examples/agent_patterns/minimal_agent.py
 ```
 
-There is no 1:1 Python port of the TS Vercel AI SDK or Genkit examples; use
-`minimal_agent.py` or `langchain_agent.py` instead.
-
 For end-to-end workflows with local artifacts, continue to
 [`../workflow_examples/README.md`](../workflow_examples/README.md).
 
-Platform **agents** (`client.agents`) are documented separately — see Tier 1
-[`create_agent.py`](../create_agent.py) and
-[`docs/getting-started.md`](../../docs/getting-started.md#create-an-agent).
+Packaged agents (`client.agents`) are a different feature; see
+[`create_agent.py`](../create_agent.py).
 
 ## Setup
 
@@ -47,7 +53,6 @@ Defaults applied for you:
 
 | Setting | Default | Override |
 | ------- | ------- | -------- |
-| Platform API base | production | `NEEV_BASE_URL` |
 | Model | `gpt-oss-120b` | `NEEV_MODEL` |
 | Inference endpoint | `https://inference.ai.neevcloud.com/v1` | `NEEV_INFERENCE_BASE_URL` |
 | Inference key | `NEEV_API_KEY` | `NEEV_INFERENCE_API_KEY` |
@@ -84,9 +89,8 @@ warmup notice on stderr):
 5
 ```
 
-Right after the sandbox reaches Ready, its runtime hostname can take a few
-seconds to resolve, so the first tool call may need a moment — the agent loop
-waits and retries on its own (`recursion_limit: 100` for LangGraph).
+The first tool call can take a few seconds after the sandbox is ready; the agent
+retries on its own (`recursion_limit: 100` for LangGraph).
 
 ## Shared helpers
 
