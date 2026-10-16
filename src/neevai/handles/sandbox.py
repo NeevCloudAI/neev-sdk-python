@@ -10,6 +10,9 @@ from neevai.errors import APIConnectionError, APIError, APITimeoutError, NeevAIE
 from neevai.resources.sandboxes import (
     DEFAULT_PORT_POLL_INTERVAL_MS,
     DEFAULT_PORT_WAIT_TIMEOUT_MS,
+    DEFAULT_SNAPSHOT_POLL_INTERVAL_MS,
+    DEFAULT_SNAPSHOT_WAIT_TIMEOUT_MS,
+    check_snapshot_wait,
 )
 from neevai.types import (
     AuditTrail,
@@ -368,15 +371,34 @@ class Sandbox:
     def snapshot(
         self,
         params: CreateSnapshotParams | Mapping[str, Any] | None = None,
+        *,
+        wait_until_ready: bool = False,
+        timeout_ms: int = DEFAULT_SNAPSHOT_WAIT_TIMEOUT_MS,
+        poll_interval_ms: int = DEFAULT_SNAPSHOT_POLL_INTERVAL_MS,
     ) -> Snapshot:
-        """Captures a snapshot of this sandbox (returns immediately with status Pending)."""
+        """Captures a snapshot of this sandbox.
+
+        Returns at once with status Pending; with ``wait_until_ready=True`` it waits
+        and returns the Ready snapshot, as ``wait_for_snapshot`` does.
+        """
         if self.sandboxes is None:
             raise NeevAIError("Cannot snapshot a sandbox handle with no client context.")
-        return self.sandboxes.create_snapshot(
-            self.id,
-            params,
-            org_id=self.scope.org_id if self.scope else None,
-            project_id=self.scope.project_id if self.scope else None,
+        if wait_until_ready:
+            # Reject a bad timing before the snapshot exists, so none is left behind.
+            check_snapshot_wait(timeout_ms, poll_interval_ms)
+        org_id = self.scope.org_id if self.scope else None
+        project_id = self.scope.project_id if self.scope else None
+        snapshot = self.sandboxes.create_snapshot(
+            self.id, params, org_id=org_id, project_id=project_id
+        )
+        if not wait_until_ready:
+            return snapshot
+        return self.sandboxes.wait_for_snapshot(
+            snapshot.id,
+            timeout_ms=timeout_ms,
+            poll_interval_ms=poll_interval_ms,
+            org_id=org_id,
+            project_id=project_id,
         )
 
     def snapshots(self) -> list[Snapshot]:
@@ -868,14 +890,30 @@ class AsyncSandbox:
     async def snapshot(
         self,
         params: CreateSnapshotParams | Mapping[str, Any] | None = None,
+        *,
+        wait_until_ready: bool = False,
+        timeout_ms: int = DEFAULT_SNAPSHOT_WAIT_TIMEOUT_MS,
+        poll_interval_ms: int = DEFAULT_SNAPSHOT_POLL_INTERVAL_MS,
     ) -> Snapshot:
+        """Captures a snapshot asynchronously; ``wait_until_ready=True`` waits for Ready."""
         if self.sandboxes is None:
             raise NeevAIError("Cannot snapshot a sandbox handle with no client context.")
-        return await self.sandboxes.create_snapshot(
-            self.id,
-            params,
-            org_id=self.scope.org_id if self.scope else None,
-            project_id=self.scope.project_id if self.scope else None,
+        if wait_until_ready:
+            # Reject a bad timing before the snapshot exists, so none is left behind.
+            check_snapshot_wait(timeout_ms, poll_interval_ms)
+        org_id = self.scope.org_id if self.scope else None
+        project_id = self.scope.project_id if self.scope else None
+        snapshot = await self.sandboxes.create_snapshot(
+            self.id, params, org_id=org_id, project_id=project_id
+        )
+        if not wait_until_ready:
+            return snapshot
+        return await self.sandboxes.wait_for_snapshot(
+            snapshot.id,
+            timeout_ms=timeout_ms,
+            poll_interval_ms=poll_interval_ms,
+            org_id=org_id,
+            project_id=project_id,
         )
 
     async def snapshots(self) -> list[Snapshot]:

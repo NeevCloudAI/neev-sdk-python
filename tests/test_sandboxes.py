@@ -1,5 +1,6 @@
 """Basic sanity tests for the Sandboxes resource (the API, sync)."""
 
+import re
 import uuid
 from unittest.mock import MagicMock
 
@@ -896,3 +897,140 @@ async def test_async_sandboxes_list_bad_label_surfaces_bad_request():
     with pytest.raises(BadRequestError):
         await client.sandboxes.list(labels={"Bad Key": "v"})
     await client.aclose()
+
+
+def _scripted_snapshots(client, statuses: list[dict]) -> list[str]:
+    """Makes get_snapshot return each scripted status in turn, then the last one forever."""
+    calls: list[str] = []
+    models = [Snapshot.model_validate(snapshot_data(**s)) for s in statuses]
+
+    def get_snapshot(snapshot_id, org_id=None, project_id=None):
+        calls.append(str(snapshot_id))
+        return models[min(len(calls) - 1, len(models) - 1)]
+
+    client.sandboxes.get_snapshot = get_snapshot  # type: ignore[method-assign]
+    return calls
+
+
+@pytest.mark.parametrize(
+    ("name", "statuses", "timeout_ms", "expected_error", "expected_polls"),
+    [
+        (
+            "success: ready after polling",
+            [{"status": "Pending"}, {"status": "Running"}, {"status": "Ready"}],
+            5_000,
+            None,
+            3,
+        ),
+        ("success: ready at once", [{"status": "Ready"}], 5_000, None, 1),
+        (
+            "failure: snapshot failed, with its reason",
+            [{"status": "Pending"}, {"status": "Failed", "error_message": "disk full"}],
+            5_000,
+            "failed to capture: disk full",
+            2,
+        ),
+        (
+            "failure: not ready before the timeout",
+            [{"status": "Pending"}],
+            30,
+            "was not Ready within 30ms (status: Pending)",
+            None,
+        ),
+    ],
+)
+def test_sandboxes_wait_for_snapshot(
+    mock_transport, name, statuses, timeout_ms, expected_error, expected_polls
+):
+    client = _make_client(mock_transport)
+    calls = _scripted_snapshots(client, statuses)
+
+    if expected_error is None:
+        snap = client.sandboxes.wait_for_snapshot(
+            "snap-1", timeout_ms=timeout_ms, poll_interval_ms=1
+        )
+        assert snap.status == SnapshotStatus.Ready
+    else:
+        with pytest.raises(NeevAIError, match=re.escape(expected_error)):
+            client.sandboxes.wait_for_snapshot("snap-1", timeout_ms=timeout_ms, poll_interval_ms=1)
+    if expected_polls is not None:
+        assert len(calls) == expected_polls
+    assert set(calls) == {"snap-1"}
+    client.close()
+
+
+@pytest.mark.parametrize(
+    ("timeout_ms", "poll_interval_ms", "bad"),
+    [
+        (0, 1, "timeout_ms"),
+        (-5, 1, "timeout_ms"),
+        (float("nan"), 1, "timeout_ms"),
+        (100, 0, "poll_interval_ms"),
+        (100, float("inf"), "poll_interval_ms"),
+    ],
+)
+def test_sandboxes_wait_for_snapshot_rejects_bad_timings(
+    mock_transport, timeout_ms, poll_interval_ms, bad
+):
+    client = _make_client(mock_transport)
+    calls = _scripted_snapshots(client, [{"status": "Ready"}])
+    with pytest.raises(NeevAIError, match=f"{bad} must be a positive number"):
+        client.sandboxes.wait_for_snapshot(
+            "snap-1", timeout_ms=timeout_ms, poll_interval_ms=poll_interval_ms
+        )
+    assert calls == []
+    client.close()
+
+
+def test_sandbox_handle_snapshot_waits_until_ready(mock_transport):
+    client = _make_client(mock_transport)
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-26-04-dev"})
+    calls = _scripted_snapshots(client, [{"status": "Running"}, {"status": "Ready"}])
+
+    pending = sb.snapshot({"name": "no-wait"})
+    assert pending.status == SnapshotStatus.Pending
+    assert calls == []
+
+    ready = sb.snapshot({"name": "wait"}, wait_until_ready=True, poll_interval_ms=1)
+    assert ready.status == SnapshotStatus.Ready
+    assert len(calls) == 2
+    client.close()
+
+
+@pytest.mark.asyncio
+async def test_async_sandbox_handle_snapshot_waits_until_ready(async_mock_transport):
+    client = AsyncNeevAI(
+        api_key="test", org_id="org1", project_id="proj1", client=async_mock_transport
+    )
+    sb = await client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-x"})
+    statuses = [{"status": "Pending"}, {"status": "Failed", "error_message": "no space"}]
+    models = [Snapshot.model_validate(snapshot_data(**s)) for s in statuses]
+    calls: list[str] = []
+
+    async def get_snapshot(snapshot_id, org_id=None, project_id=None):
+        calls.append(str(snapshot_id))
+        return models[min(len(calls) - 1, len(models) - 1)]
+
+    client.sandboxes.get_snapshot = get_snapshot  # type: ignore[method-assign]
+
+    with pytest.raises(NeevAIError, match="failed to capture: no space"):
+        await sb.snapshot({"name": "wait"}, wait_until_ready=True, poll_interval_ms=1)
+    assert len(calls) == 2
+    await client.aclose()
+
+
+def test_sandbox_handle_snapshot_rejects_bad_timing_before_creating(mock_transport):
+    client = _make_client(mock_transport)
+    sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-ubuntu-26-04-dev"})
+    created: list[str] = []
+
+    def create_snapshot(*args, **kwargs):
+        created.append("called")
+        raise AssertionError("create_snapshot must not run")
+
+    client.sandboxes.create_snapshot = create_snapshot  # type: ignore[method-assign]
+
+    with pytest.raises(NeevAIError, match="timeout_ms must be a positive number"):
+        sb.snapshot({"name": "x"}, wait_until_ready=True, timeout_ms=0)
+    assert created == []
+    client.close()
