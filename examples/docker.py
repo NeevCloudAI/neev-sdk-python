@@ -1,9 +1,9 @@
 """
-Run Docker inside a sandbox: start the daemon, then run a container.
+Run Docker inside a sandbox and run a container.
 
-The ``sb-ubuntu-26-04-docker`` template ships Docker and Docker Compose. Start the
-daemon with ``start-docker`` (safe to rerun), then use ``docker`` as usual, with
-two differences:
+The ``sb-ubuntu-26-04-docker`` template ships Docker and Docker Compose and starts
+the daemon at boot, so use ``docker`` as usual (run ``start-docker`` if the daemon
+ever stops), with two differences:
 
 - run and build with ``--network=host`` (Compose: ``network_mode: host`` and
   ``build.network: host``);
@@ -34,12 +34,6 @@ def main() -> None:
             sandbox = client.sandboxes.create({"sandbox_template_id": "sb-ubuntu-26-04-docker"})
             sandbox.wait_until_ready()
             print(f"ready: {sandbox.id}", file=sys.stderr)
-
-            started = sandbox.exec("start-docker")
-            print(started.stdout.strip())
-            if started.exit_code != 0:
-                print(started.stderr, file=sys.stderr)
-                sys.exit(1)
 
             run = sandbox.exec(["docker", "run", "--rm", "--network=host", "hello-world"])
             print(run.stdout.strip())
