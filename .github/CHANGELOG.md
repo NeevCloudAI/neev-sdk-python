@@ -6,6 +6,35 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-17
+
+### Breaking changes
+
+- The audit trail returns OCSF API Activity events. `AuditTrail.records` is now `data: list[AuditEvent]`, and `AuditRecord` and `AuditTrail.sandbox_id` are removed. Each event has `time` (ms), `api.operation`, `actor`, `status` and `resources`.
+- `Sandbox.replicas` and `AsyncSandbox.replicas` are removed. Read `phase` instead, which is `"Paused"` while a sandbox is paused.
+- `APIError.body` on runtime errors is now the full parsed response body, not just `code` and `message`.
+
+### Added
+
+- Agent tools: `SandboxTools` and `AsyncSandboxTools` in `neevai.agent_tools` give a model sandbox tools to run commands, read, write, stat, move and delete files, expose ports, checkpoint and roll back, and run background processes. Descriptions, schemas and error text match the JS SDK.
+- `specs()` and `FatalGuard` plug the tools into any framework, with ready adapters for the Claude Agent SDK, OpenAI Agents and LangChain (`neevai.agent_tools.claude`, `.openai_agents`, `.langchain`; install the `claude`, `openai-agents` or `langchain` extra).
+- Code interpreter: `sandbox.code.run(code)` runs Python in a persistent kernel on the interpreter template, and `sandbox.code.create_context()`, `list_contexts`, `restart_context` and `delete_context` manage separate kernels. Sync and async.
+- Sandbox labels: `labels=` on create and list, and `sandbox.labels`.
+- `client.sandboxes.wait_for_snapshot(id)` and `sandbox.snapshot(params, wait_until_ready=True)` wait for a snapshot to be Ready.
+- Audit filters: `operation`, `status`, `actor_type`, `actor_uid` and `credential_uid`.
+- `files.read` and `files.read_text` take `offset` and `length` to read a byte range.
+- Snapshots have an optional `trigger` (`manual` or `memory_pressure`), and `snapshot_type` adds `"filesystem"`.
+
+### Changed
+
+- API errors are parsed the same way for every call. `code` falls back to the sandbox's `reason_code`, and a body that isn't a JSON object is kept as raw `details` instead of raising `AttributeError`.
+- Examples and docs use the `sb-ubuntu-26-04-dev` template, and `examples/docker.py` is new.
+
+### Fixed
+
+- `exec`, `exec_stream`, `files.watch` and `processes.get(id, wait=True)` no longer time out at the client's 60 s read timeout when given a longer `timeout_ms`.
+- `get_url` / `get_port_url` no longer wait out their timeout when the app itself answers 403 or 404.
+
 ## [0.8.2] - 2026-10-05
 
 ### Fixed
