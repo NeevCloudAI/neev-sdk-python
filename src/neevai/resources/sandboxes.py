@@ -34,15 +34,25 @@ from neevai.types import (
 DEFAULT_PORT_WAIT_TIMEOUT_MS = 60_000
 DEFAULT_PORT_POLL_INTERVAL_MS = 2_000
 
+# Set by the edge proxy on a response that came from the sandbox, never on one it answered itself.
+_UPSTREAM_HEADER = "x-envoy-upstream-service-time"
+
+
+def _routed(resp: httpx.Response) -> bool:
+    """True for any status but the edge's own 403/404; an app's own 403/404 carries the mark."""
+    if _UPSTREAM_HEADER in resp.headers:
+        return True
+    return resp.status_code not in (403, 404)
+
 
 def _preview_url_reachable(url: str, timeout_ms: float) -> bool:
-    """Probes a preview URL; True once it is reachable (stops returning a 403/404)."""
+    """Probes a preview URL; True once it is reachable (see :func:`_routed`)."""
     try:
         resp = httpx.get(url, follow_redirects=False, timeout=timeout_ms / 1000.0)
     except (httpx.HTTPError, httpx.InvalidURL):
         # Connection error, DNS failure, timeout, or a malformed URL — not routable yet.
         return False
-    return resp.status_code not in (403, 404)
+    return _routed(resp)
 
 
 async def _apreview_url_reachable(url: str, timeout_ms: float) -> bool:
@@ -52,7 +62,7 @@ async def _apreview_url_reachable(url: str, timeout_ms: float) -> bool:
             resp = await client.get(url, follow_redirects=False, timeout=timeout_ms / 1000.0)
     except (httpx.HTTPError, httpx.InvalidURL):
         return False
-    return resp.status_code not in (403, 404)
+    return _routed(resp)
 
 
 def _validate_wait_args(timeout_ms: int, poll_interval_ms: int) -> None:

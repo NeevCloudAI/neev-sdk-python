@@ -1,9 +1,13 @@
 """Tests for sandbox preview ports: expose / list / revoke / get_url."""
 
+import httpx
 import pytest
 
 from neevai.client import AsyncNeevAI, NeevAI
 from neevai.errors import NeevAIError
+from neevai.resources.sandboxes import _apreview_url_reachable, _preview_url_reachable
+
+APP = {"x-envoy-upstream-service-time": "3"}  # the edge's mark on a response the app produced
 
 
 def _client(mock_transport) -> NeevAI:
@@ -85,6 +89,31 @@ def test_get_url_raises_when_not_routable_before_timeout(mock_transport, monkeyp
     with pytest.raises(NeevAIError, match="was not routable"):
         sb.get_url(8080, timeout_ms=1, poll_interval_ms=1)
     client.close()
+
+
+@pytest.mark.parametrize(
+    ("status", "headers", "routed"),
+    [
+        (404, {}, False),  # the edge, before the URL is routed
+        (403, {}, False),
+        (404, APP, True),  # an API-only app with nothing at its root
+        (403, APP, True),  # a sign-in-gated root
+        (200, {}, True),
+        (503, {}, True),  # the edge, routed but nothing listening yet
+    ],
+)
+def test_preview_url_reachable_tells_the_app_from_the_edge(monkeypatch, status, headers, routed):
+    monkeypatch.setattr(httpx, "get", lambda *a, **k: httpx.Response(status, headers=headers))
+    assert _preview_url_reachable("https://p.example", 1000) is routed
+
+
+@pytest.mark.asyncio
+async def test_async_preview_url_reachable_counts_the_apps_own_404(monkeypatch):
+    async def get(self, *a, **k):
+        return httpx.Response(404, headers=APP)
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", get)
+    assert await _apreview_url_reachable("https://p.example", 1000) is True
 
 
 def test_get_url_rejects_non_positive_timeout(mock_transport):
