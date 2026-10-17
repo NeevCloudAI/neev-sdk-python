@@ -6,6 +6,38 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-10
+
+### Breaking changes
+
+- The audit trail returns OCSF events. `AuditTrail.records` is now `data: list[AuditEvent]`, and `AuditRecord` and `AuditTrail.sandbox_id` are removed. Each event has `time` (ms), `actor`, `status`, `device` and `cloud.org`; `api` and `resources` are set on API Activity events only, so check `e.api` before reading `e.api.operation`.
+- `Sandbox.replicas` and `AsyncSandbox.replicas` are removed. Read `phase` instead, which is `"Paused"` while a sandbox is paused.
+- `APIError.body` on runtime errors is now the full parsed response body, not just `code` and `message`.
+
+### Added
+
+- Agent tools: `SandboxTools` and `AsyncSandboxTools` in `neevai.agent_tools` give a model sandbox tools to run commands, read, write, stat, move and delete files, expose ports, checkpoint and roll back, and run background processes. Descriptions, schemas and error text match the JS SDK.
+- `specs()` and `FatalGuard` plug the tools into any framework, with ready adapters for the Claude Agent SDK, OpenAI Agents and LangChain (`neevai.agent_tools.claude`, `.openai_agents`, `.langchain`; install the `claude`, `openai-agents` or `langchain` extra).
+- Code interpreter: `sandbox.code.run(code)` runs Python in a persistent kernel on the interpreter template, and `sandbox.code.create_context()`, `list_contexts`, `restart_context` and `delete_context` manage separate kernels. Sync and async.
+- Sandbox labels: `labels=` on create and list, and `sandbox.labels`.
+- `client.sandboxes.wait_for_snapshot(id)` and `sandbox.snapshot(params, wait_until_ready=True)` wait for a snapshot to be Ready.
+- The audit trail records the programs a sandbox runs (Process Activity, `class_uid` 1007) and the connections they open (Network Activity, 4001) alongside API calls (API Activity, 6003), with new `AuditProcess`, `AuditFile`, `AuditDstEndpoint` and `AuditDevice` models. `sandboxes.update(id, {"execution_trace": False})` turns this off without a restart, and `sandbox.execution_trace` reports the setting.
+- Audit filters: `operation`, `status`, `actor_type`, `actor_uid` and `credential_uid`.
+- Agent snapshots and forks: `client.agents.create_snapshot`, `list_snapshots` and `fork`, and `snapshot()`, `snapshots()` and `fork(name)` on the `Agent` and `AsyncAgent` handles.
+- `files.read` and `files.read_text` take `offset` and `length` to read a byte range.
+- Snapshots have an optional `trigger` (`manual` or `memory_pressure`), and `snapshot_type` adds `"filesystem"` for a /workspace-only snapshot that restores onto any sandbox image.
+
+### Changed
+
+- HTTP 425, such as calling an agent that is still provisioning, raises the new `TooEarlyError` (an `APIError`).
+- API errors are parsed the same way for every call. `code` falls back to the sandbox's `reason_code`, and a body that isn't a JSON object is kept as raw `details` instead of raising `AttributeError`.
+- Examples and docs use the `sb-ubuntu-26-04-dev` template, and `examples/docker.py` is new.
+
+### Fixed
+
+- `exec`, `exec_stream`, `files.watch` and `processes.get(id, wait=True)` no longer time out at the client's 60 s read timeout when given a longer `timeout_ms`.
+- `get_url` / `get_port_url` no longer wait out their timeout when the app itself answers 403 or 404.
+
 ## [0.8.2] - 2026-10-05
 
 ### Fixed
