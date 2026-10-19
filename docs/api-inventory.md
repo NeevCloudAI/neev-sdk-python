@@ -435,10 +435,11 @@ for series in metrics.series:
 
 ### `client.sandboxes.audit(id, *, from_=None, to=None, cursor=None, limit=None, operation=None, status=None, actor_type=None, actor_uid=None, credential_uid=None, org_id=None, project_id=None)`
 
-Reads one page of the sandbox's audit trail, newest first: terminal commands, SSH,
-process and file operations, each with who made the call and how it ended. Only the
-program name is recorded, never its arguments, and input typed at a hidden password
-prompt is not captured.
+Reads one page of the sandbox's audit trail, newest first, as OCSF events: terminal
+commands, SSH, process and file operations, each with who made the call and how it
+ended, plus every program the sandbox ran and every connection it opened, unless its
+`execution_trace` is off. Only the program name is recorded, never its arguments, and
+input typed at a hidden password prompt is not captured.
 
 `from_` / `to` (RFC3339) default to the last 24 hours. `limit` is clamped server-side.
 The response's `window_truncated` is `True` when `from_` reaches past the
@@ -459,7 +460,8 @@ Filters, all optional:
 trail = sandbox.audit(limit=50)
 while True:
     for e in trail.data:
-        print(e.time, e.api.operation, e.actor.user.name or e.actor.user.uid, e.status)
+        what = e.api.operation if e.api is not None else e.class_name
+        print(e.time, what, e.actor.user.name or e.actor.user.uid, e.status)
     if not trail.next_cursor:
         break
     trail = sandbox.audit(limit=50, cursor=trail.next_cursor)
@@ -1911,15 +1913,28 @@ for `egress_add` / `egress_remove`.
 | `next_cursor` | `str \| None` | no (pass as `cursor` for the next, older page) |
 | `data` | `list[AuditEvent]` | yes (newest first) |
 
-`AuditEvent` is one call, in the OCSF API Activity format. The fields most callers read:
+`AuditEvent` is one OCSF 1.9.0 event. `class_uid` says which kind, and which fields
+are present:
+
+| `class_uid` | Kind | Carries |
+| ----------- | ---- | ------- |
+| 6003 | API Activity: a call to the sandbox | `api`, `src_endpoint`, `actor.user` |
+| 1007 | Process Activity: a program started (`activity_id` 1, Launch), ended (2, Terminate) or the sandbox started (99) | `process`, `exit_code` on Terminate (or `status_detail` `signal N` if killed) |
+| 4001 | Network Activity: a program opened a connection (`activity_id` 1, Open) | `dst_endpoint`, `actor.process` |
+
+The fields most callers read:
 
 | Field | Type | Required |
 | ----- | ---- | -------- |
 | `time` | `int` | yes (milliseconds since the Unix epoch) |
-| `api.operation` | `str` | yes (e.g. `pty_command`, `ssh`, `exec`, `process.start`, `fs.read`) |
+| `api.operation` | `str` | API Activity only (e.g. `pty_command`, `ssh`, `exec`, `process.start`, `fs.read`) |
+| `process` | `AuditProcess \| None` | Process Activity only (`pid`, `name` without arguments, `cwd`, `file.path`, `parent_process.pid`) |
+| `exit_code` | `int \| None` | no (what a program returned; on Terminate unless a signal stopped it) |
+| `dst_endpoint` | `AuditDstEndpoint \| None` | Network Activity only (`ip` and `port`, or `name` as `unix:<path>`) |
+| `actor.process` | `AuditProcess \| None` | Network Activity only (the program that connected) |
 | `status` | `str` | yes (`Success` or `Failure`) |
 | `status_code` | `str \| None` | no (`ok`, `permission_denied`, `internal`) |
-| `actor.user.type` | `user` \| `api_key` \| `system` \| `unknown` | yes |
+| `actor.user.type` | `user` \| `api_key` \| `system` \| `unknown` | yes (`unknown` on program and connection events) |
 | `actor.user.uid` | `str` | yes (the user's or API key's id) |
 | `actor.user.name` | `str \| None` | no |
 | `actor.user.credential_uid` | `str \| None` | no (the API key used; absent for a user) |

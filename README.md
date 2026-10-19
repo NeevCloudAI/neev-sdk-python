@@ -297,15 +297,24 @@ See [`sandbox_metrics.py`](examples/sandbox_metrics.py) · [reference](docs/api-
 
 ### Audit trail
 
-Read what was run inside a sandbox, newest first: commands, terminal and SSH sessions,
-and file and process operations. Each event says who made the call and how it ended.
-Programs are recorded by name only, never with their arguments.
+Read what was run inside a sandbox, newest first, as OCSF events: API calls (commands,
+terminal and SSH sessions, file and process operations) with who made them, plus every
+program the sandbox ran and every connection it opened, whether or not anything asked for
+them. Programs are recorded by name only, never with their arguments.
 
 ```python
-trail = sandbox.audit(operation="exec", status="failure")
+trail = sandbox.audit(status="failure")
 for e in trail.data:
-    print(e.time, e.api.operation, e.actor.user.uid, e.status)
+    if e.api is not None:
+        what = e.api.operation
+    else:
+        proc = e.process or e.actor.process
+        what = f"{e.class_name}: {proc.name if proc else '?'}"
+    print(e.time, what, e.status)
 ```
+
+Program recording is on by default; turn it off with
+`sandbox.update({"execution_trace": False})`.
 
 Filter with `operation`, `status`, `actor_type`, `actor_uid` or `credential_uid`, and
 page back with `cursor=trail.next_cursor`. Events take a few seconds to appear after a
