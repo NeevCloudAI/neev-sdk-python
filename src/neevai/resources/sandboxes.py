@@ -356,8 +356,10 @@ class Sandboxes:
         explicit ``egress`` in ``params`` takes precedence. ``egress_add`` /
         ``egress_remove`` edit the existing allow-list in place instead, leaving other
         rules untouched (removals apply first, so one call can swap a host); they cannot
-        be combined with ``egress`` or the convenience flags. At least one of
-        ``resources``, ``egress``, ``egress_add`` or ``egress_remove`` must result.
+        be combined with ``egress`` or the convenience flags. ``execution_trace=False``
+        stops recording every program the sandbox runs (on by default); ``True`` turns
+        it back on. At least one of ``resources``, ``egress``, ``egress_add``,
+        ``egress_remove`` or ``execution_trace`` must result.
         """
         from neevai.handles.sandbox import Sandbox
 
@@ -840,8 +842,10 @@ class AsyncSandboxes:
         explicit ``egress`` in ``params`` takes precedence. ``egress_add`` /
         ``egress_remove`` edit the existing allow-list in place instead, leaving other
         rules untouched (removals apply first, so one call can swap a host); they cannot
-        be combined with ``egress`` or the convenience flags. At least one of
-        ``resources``, ``egress``, ``egress_add`` or ``egress_remove`` must result.
+        be combined with ``egress`` or the convenience flags. ``execution_trace=False``
+        stops recording every program the sandbox runs (on by default); ``True`` turns
+        it back on. At least one of ``resources``, ``egress``, ``egress_add``,
+        ``egress_remove`` or ``execution_trace`` must result.
         """
         from neevai.handles.sandbox import AsyncSandbox
 
