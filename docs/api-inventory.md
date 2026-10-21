@@ -91,7 +91,7 @@ Everything in `neevai.__all__`:
 | `CreateSnapshotParams` | model | `types.py` |
 | `SnapshotListResponse` | model | generated |
 | `AuditTrail` | model alias | generated → `AuditTrailResponse` |
-| `AuditEvent` / `AuditActor` / `AuditActorUser` / `AuditAPI` / `AuditResource` | model | generated |
+| `AuditEvent` / `AuditActor` / `AuditActorUser` / `AuditAPI` / `AuditResource` / `AuditProcess` / `AuditFile` / `AuditDstEndpoint` / `AuditDevice` | model | generated |
 | `SandboxEgressRule` | model | generated |
 | `SandboxEgressRules` | model | generated |
 | `NeevAIError`, `APIConnectionError`, `APITimeoutError`, `APIError`, `BadRequestError`, `AuthenticationError`, `PermissionDeniedError`, `NotFoundError`, `ConflictError`, `PreconditionFailedError`, `RateLimitError`, `DeadlineExceededError`, `InternalServerError`, `ServiceUnavailableError` | exceptions | `errors.py` |
@@ -143,7 +143,7 @@ Types exported from `neevai.types.__all__`:
 | `OnIdleAction` | enum | generated |
 | `SandboxPort` | model | generated (`port`, `slug`, `preview_url`) |
 | `AuditTrail` | model alias | generated → `AuditTrailResponse` |
-| `AuditEvent` / `AuditActor` / `AuditActorUser` / `AuditAPI` / `AuditResource` | model | generated |
+| `AuditEvent` / `AuditActor` / `AuditActorUser` / `AuditAPI` / `AuditResource` / `AuditProcess` / `AuditFile` / `AuditDstEndpoint` / `AuditDevice` | model | generated |
 | `Snapshot` / `SnapshotListResponse` / `SnapshotStatus` | model / model / enum | generated |
 | `CreateSnapshotParams` | model | `types.py` |
 | `CreateSnapshotRequest` / `ForkSandboxRequest` / `RestoreSandboxRequest` | model | generated |
@@ -320,6 +320,9 @@ single `PATCH`:
   existing allow-list in place, leaving other rules untouched. Removals apply first,
   so one call can swap a host. Adding a host already allowed replaces its ports and
   protocol. Rejected while the policy is `deny_all`.
+- `execution_trace` — `False` stops recording every program the sandbox runs (and its
+  connections) in the audit trail; `True` turns it back on. On by default, takes effect
+  with no restart, and the change is written to your organization's audit log.
 
 **Returns:** Updated `Sandbox` handle.
 
@@ -331,6 +334,7 @@ convenience) is combined with `egress_add` / `egress_remove`.
 # Resize, then re-scope egress (two calls, or combine both in one):
 client.sandboxes.update(sandbox.id, {"resources": {"cpu": 2, "memory_gb": 4}})
 client.sandboxes.update(sandbox.id, {}, allow_egress=["api.github.com"])
+client.sandboxes.update(sandbox.id, {"execution_trace": False})
 ```
 
 **Async:** `updated = await client.sandboxes.update(...)`
@@ -435,10 +439,11 @@ for series in metrics.series:
 
 ### `client.sandboxes.audit(id, *, from_=None, to=None, cursor=None, limit=None, operation=None, status=None, actor_type=None, actor_uid=None, credential_uid=None, org_id=None, project_id=None)`
 
-Reads one page of the sandbox's audit trail, newest first: terminal commands, SSH,
-process and file operations, each with who made the call and how it ended. Only the
-program name is recorded, never its arguments, and input typed at a hidden password
-prompt is not captured.
+Reads one page of the sandbox's audit trail, newest first, as OCSF 1.9.0 events: calls
+made to the sandbox (API Activity, 6003), programs that ran in it (Process Activity,
+1007) and connections they opened (Network Activity, 4001). Only the program name is
+recorded, never its arguments; the environment and input typed at a hidden password
+prompt are never recorded.
 
 `from_` / `to` (RFC3339) default to the last 24 hours. `limit` is clamped server-side.
 The response's `window_truncated` is `True` when `from_` reaches past the
@@ -447,10 +452,11 @@ The response's `window_truncated` is `True` when `from_` reaches past the
 Filters, all optional:
 
 - `operation` — one call name or a list, such as `"exec"` or `["exec", "pty_command"]`.
-- `status` — `"success"` or `"failure"`.
-- `actor_type` — `"user"`, `"api_key"`, `"system"`, or a list of them.
-- `actor_uid` — a user id or an API key id.
-- `credential_uid` — only calls made with this API key.
+  Leaves out programs and connections.
+- `status` — `"success"` or `"failure"`; applies to every class.
+- `actor_type` — `"user"`, `"api_key"`, `"system"`, or a list of them. Calls only.
+- `actor_uid` — a user id or an API key id. Calls only.
+- `credential_uid` — only calls made with this API key. Calls only.
 
 **Returns:** `AuditTrail` (`from_`, `to`, `retention_days`, `window_truncated`,
 `next_cursor`, `data: list[AuditEvent]`). See [`AuditTrail` / `AuditEvent`](#audittrail--auditevent).
@@ -459,7 +465,9 @@ Filters, all optional:
 trail = sandbox.audit(limit=50)
 while True:
     for e in trail.data:
-        print(e.time, e.api.operation, e.actor.user.name or e.actor.user.uid, e.status)
+        proc = e.process or e.actor.process
+        what = e.api.operation if e.api else (proc.name if proc else None)
+        print(e.time, e.type_name, what, e.status)
     if not trail.next_cursor:
         break
     trail = sandbox.audit(limit=50, cursor=trail.next_cursor)
@@ -800,6 +808,7 @@ mirroring the last API response. Call `refresh()` to sync from the server.
 | `phase` | `str` | OpenAPI steady states: `"Pending"`, `"Ready"`, `"NotReady"`, `"Unknown"`, `"Paused"`. API may also return transitional values (e.g. `"Pausing"`, `"Resuming"`) not in the spec enum; SDK accepts any phase string. |
 | `connect_url` | `str \| None` | Regional runtime URL (available when ready) |
 | `addressable` | `bool` | Whether the sandbox can be reached yet; briefly `False` after create (`True` when the API omits it) |
+| `execution_trace` | `bool` | Whether every program the sandbox runs is recorded in its audit trail; `True` unless turned off |
 | `labels` | `dict[str, str]` | Key-value labels the sandbox was created with; `{}` when it has none |
 | `last_crash` | `SandboxLastCrash \| None` | Most recent unexpected stop; `storage_reset=True` means it restarted with an empty filesystem. `None` if it never crashed. Restoring from a snapshot taken before that stop brings the files back and clears it. |
 | `data` | `dict[str, Any]` | Full record snapshot |
@@ -1911,20 +1920,27 @@ for `egress_add` / `egress_remove`.
 | `next_cursor` | `str \| None` | no (pass as `cursor` for the next, older page) |
 | `data` | `list[AuditEvent]` | yes (newest first) |
 
-`AuditEvent` is one call, in the OCSF API Activity format. The fields most callers read:
+`AuditEvent` is one OCSF 1.9.0 event: API Activity (`class_uid` 6003), Process Activity (1007) or Network Activity (4001). The fields most callers read:
 
 | Field | Type | Required |
 | ----- | ---- | -------- |
 | `time` | `int` | yes (milliseconds since the Unix epoch) |
-| `api.operation` | `str` | yes (e.g. `pty_command`, `ssh`, `exec`, `process.start`, `fs.read`) |
+| `class_uid` / `type_name` | `int` / `str` | yes (e.g. `1007` / `Process Activity: Launch`) |
+| `api.operation` | `str` | API Activity only (e.g. `pty_command`, `ssh`, `exec`, `process.start`, `fs.read`) |
 | `status` | `str` | yes (`Success` or `Failure`) |
 | `status_code` | `str \| None` | no (`ok`, `permission_denied`, `internal`) |
-| `actor.user.type` | `user` \| `api_key` \| `system` \| `unknown` | yes |
+| `actor.user.type` | `User` \| `API Key` \| `System` \| `Unknown` | yes (`Unknown` on program and connection events) |
 | `actor.user.uid` | `str` | yes (the user's or API key's id) |
 | `actor.user.name` | `str \| None` | no |
-| `actor.user.credential_uid` | `str \| None` | no (the API key used; absent for a user) |
+| `actor.user.programmatic_credentials` | `list \| None` | no (the API key used, as `[0].uid`; absent for a user) |
+| `actor.process` | `AuditProcess \| None` | no (on a Launch, the parent; on a connection, the program) |
+| `process` | `AuditProcess \| None` | Process Activity only (`pid`, `name`, `working_directory`, `file.path`, `parent_process.pid`) |
+| `exit_code` | `int \| None` | no (on a Terminate, unless a signal stopped the program) |
+| `status_detail` | `str \| None` | no (`signal <n>` for a program a signal stopped; how a code-interpreter run ended) |
+| `dst_endpoint` | `AuditDstEndpoint \| None` | Network Activity only (`ip` and `port`, or `name` as `unix:<path>`) |
+| `device.uid` | `str \| None` | no (the sandbox id) |
 | `actor.session.uid` | `str \| None` | no (the console session) |
-| `resources` | `list[AuditResource] \| None` | no (the sandbox, then any file, process, program or terminal the call touched) |
+| `resources` | `list[AuditResource] \| None` | API Activity only (the sandbox, then any file, process, program or terminal the call touched; `data.pid` on the process or terminal it started, which a program's pid or an ancestor's equals) |
 | `duration` | `int \| None` | no (milliseconds) |
 | `metadata.uid` | `str` | yes (stable id of the event) |
 | `metadata.sequence` | `int \| None` | no (a terminal command's ordinal within its terminal) |

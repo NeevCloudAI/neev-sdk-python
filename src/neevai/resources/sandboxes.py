@@ -346,7 +346,7 @@ class Sandboxes:
         allow_internet: bool | None = None,
         allow_egress: builtins.list[str] | None = None,
     ) -> Sandbox:
-        """Updates a running sandbox in place (``resources`` and/or egress).
+        """Updates a running sandbox in place (``resources``, egress or ``execution_trace``).
 
         ``resources`` (cpu/memory) are resized on the running sandbox without a
         restart; ``disk_gb`` is not resizable in place and is rejected by the server if
@@ -356,8 +356,10 @@ class Sandboxes:
         explicit ``egress`` in ``params`` takes precedence. ``egress_add`` /
         ``egress_remove`` edit the existing allow-list in place instead, leaving other
         rules untouched (removals apply first, so one call can swap a host); they cannot
-        be combined with ``egress`` or the convenience flags. At least one of
-        ``resources``, ``egress``, ``egress_add`` or ``egress_remove`` must result.
+        be combined with ``egress`` or the convenience flags. ``execution_trace``
+        turns recording of every program the sandbox runs off (False) or back on (True),
+        with no restart. At least one of ``resources``, ``egress``, ``egress_add``,
+        ``egress_remove`` or ``execution_trace`` must result.
         """
         from neevai.handles.sandbox import Sandbox
 
@@ -840,8 +842,10 @@ class AsyncSandboxes:
         explicit ``egress`` in ``params`` takes precedence. ``egress_add`` /
         ``egress_remove`` edit the existing allow-list in place instead, leaving other
         rules untouched (removals apply first, so one call can swap a host); they cannot
-        be combined with ``egress`` or the convenience flags. At least one of
-        ``resources``, ``egress``, ``egress_add`` or ``egress_remove`` must result.
+        be combined with ``egress`` or the convenience flags. ``execution_trace``
+        turns recording of every program the sandbox runs off (False) or back on (True),
+        with no restart. At least one of ``resources``, ``egress``, ``egress_add``,
+        ``egress_remove`` or ``execution_trace`` must result.
         """
         from neevai.handles.sandbox import AsyncSandbox
 

@@ -82,11 +82,11 @@ TRAIL = {
             1,
             {
                 "user": {
-                    "type": "api_key",
+                    "type": "API Key",
                     "type_id": 99,
                     "uid": "key-1",
                     "name": "ci",
-                    "credential_uid": "key-1",
+                    "programmatic_credentials": [{"uid": "key-1", "type": "API Key"}],
                 }
             },
             duration=120,
@@ -97,7 +97,7 @@ TRAIL = {
             "e2",
             "fs.read",
             2,
-            {"user": {"type": "user", "type_id": 1, "uid": "user-1"}, "session": {"uid": "s1"}},
+            {"user": {"type": "User", "type_id": 1, "uid": "user-1"}, "session": {"uid": "s1"}},
             status_code="permission_denied",
             resources=[{"type": "file", "name": "notes.txt"}],
         ),
@@ -121,12 +121,13 @@ def _assert_trail(trail: AuditTrail) -> None:
     assert trail.next_cursor == "c2"
     assert [e.metadata.uid for e in trail.data] == ["e1", "e2"]
     first, second = trail.data
-    assert first.api.operation == "exec"
+    assert first.api is not None and first.api.operation == "exec"
     assert first.status == "Success"
     assert first.time == 1767268800000
-    assert first.actor.user.type == "api_key"
+    assert first.actor.user.type == "API Key"
     assert first.actor.user.name == "ci"
-    assert first.actor.user.credential_uid == "key-1"
+    creds = first.actor.user.programmatic_credentials
+    assert creds is not None and creds[0].uid == "key-1"
     assert second.status_code == "permission_denied"
     assert second.actor.user.name is None
     assert second.actor.session is not None and second.actor.session.uid == "s1"
@@ -305,3 +306,113 @@ async def test_async_handles_pass_filters():
     assert dict(captured[0].url.params) == {"status": "success"}
     assert dict(captured[1].url.params) == {"credential_uid": "key-1"}
     await client.aclose()
+
+
+def _program(activity_id: int, name: str, **extra) -> dict:
+    return {
+        "class_uid": 1007,
+        "class_name": "Process Activity",
+        "category_uid": 1,
+        "category_name": "System Activity",
+        "activity_id": activity_id,
+        "activity_name": {1: "Launch", 2: "Terminate"}[activity_id],
+        "type_uid": 100700 + activity_id,
+        "type_name": "Process Activity: " + {1: "Launch", 2: "Terminate"}[activity_id],
+        "time": 1767268800000,
+        "severity_id": 1,
+        "severity": "Informational",
+        "status_id": 1,
+        "status": "Success",
+        "actor": {"user": {"type": "Unknown", "type_id": 0, "uid": "unknown"}},
+        "device": {"type_id": 6, "type": "Virtual", "uid": SANDBOX_ID},
+        "cloud": {"provider": "NeevCloud"},
+        "osint": [],
+        "metadata": {
+            "version": "1.9.0",
+            "product": {"name": "Sandbox Audit", "vendor_name": "NeevCloud"},
+            "uid": f"p-{name}-{activity_id}",
+        },
+        **extra,
+    }
+
+
+CLASSES_TRAIL = {
+    "from": "2026-01-01T00:00:00Z",
+    "to": "2026-01-02T00:00:00Z",
+    "retention_days": 30,
+    "window_truncated": False,
+    "data": [
+        {
+            **_program(1, "curl"),
+            "class_uid": 4001,
+            "class_name": "Network Activity",
+            "category_uid": 4,
+            "category_name": "Network Activity",
+            "activity_name": "Open",
+            "type_uid": 400101,
+            "type_name": "Network Activity: Open",
+            "actor": {
+                "user": {"type": "Unknown", "type_id": 0, "uid": "unknown"},
+                "process": {"pid": 40, "name": "curl", "parent_process": {"pid": 39}},
+            },
+            "dst_endpoint": {"ip": "10.0.0.5", "port": 443},
+        },
+        _program(
+            2,
+            "curl",
+            status_id=2,
+            status="Failure",
+            status_detail="signal 9",
+            process={"pid": 40, "name": "curl", "parent_process": {"pid": 39}},
+        ),
+        _program(
+            1,
+            "curl",
+            actor={
+                "user": {"type": "Unknown", "type_id": 0, "uid": "unknown"},
+                "process": {"pid": 39},
+            },
+            process={
+                "pid": 40,
+                "name": "curl",
+                "working_directory": "/workspace",
+                "file": {
+                    "name": "curl",
+                    "path": "/usr/bin/curl",
+                    "type_id": 8,
+                    "type": "Executable File",
+                },
+                "parent_process": {"pid": 39},
+            },
+        ),
+        TRAIL["data"][0],
+    ],
+}
+
+
+def test_audit_parses_every_event_class():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=CLASSES_TRAIL)
+
+    client = NeevAI(
+        api_key="k",
+        base_url="https://api.example.com",
+        org_id="org1",
+        project_id="proj1",
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    connect, killed, launch, call = client.sandboxes.audit(SANDBOX_ID).data
+    assert [e.class_uid for e in (connect, killed, launch, call)] == [4001, 1007, 1007, 6003]
+    assert connect.api is None and connect.dst_endpoint is not None
+    assert connect.dst_endpoint.ip == "10.0.0.5" and connect.dst_endpoint.port == 443
+    assert connect.actor.process is not None and connect.actor.process.name == "curl"
+    assert killed.exit_code is None and killed.status_detail == "signal 9"
+    assert killed.status == "Failure"
+    assert launch.process is not None and launch.process.file is not None
+    assert launch.process.file.path == "/usr/bin/curl"
+    assert launch.process.parent_process is not None
+    assert launch.process.parent_process.pid == 39
+    assert launch.device is not None and launch.device.uid == SANDBOX_ID
+    assert launch.actor.user.type == "Unknown"
+    assert call.api is not None and call.api.operation == "exec"
+    client.close()
