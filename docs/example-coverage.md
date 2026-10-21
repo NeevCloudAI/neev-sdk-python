@@ -29,7 +29,8 @@ examples themselves, see [`examples/README.md`](../examples/README.md).
 | `client.sandboxes.update_timeout` / `sandbox.update_timeout` | `sandbox_lifecycle_windows.py` | `sandbox.update_timeout({"idle_timeout_seconds": 300, "max_lifetime_seconds": 0})` |
 | `client.sandboxes.delete` | `sandbox_lifecycle_controller.py` | `client.sandboxes.delete(sandbox_id)` |
 | `client.sandboxes.metrics` | `sandbox_lifecycle_controller.py` | `metrics = client.sandboxes.metrics(sandbox_id)` |
-| `client.sandboxes.audit` / `sandbox.audit` | `audit_trail.py` | `trail = sandbox.audit(limit=20)` — then `cursor=trail.next_cursor` |
+| `client.sandboxes.audit` / `sandbox.audit` | `audit_trail.py` | `trail = sandbox.audit(limit=200)` — calls, programs and connections |
+| `sandbox.execution_trace` | — | `sandbox.update({"execution_trace": False})` |
 | `client.sandboxes.update` (`egress_add` / `egress_remove`) | `update_resize_egress.py` | `sandbox.update({"egress_add": {"allow": [{"host": "pypi.org"}]}})` |
 | `sandbox.expose_port` / `.list_ports` / `.revoke_port` / `.get_url` | `preview_ports.py` | `url = sandbox.get_url(3000)`; `sandbox.expose_port(3000, slug=new_slug)` rotates it |
 | `sandbox.labels` | `sandbox_labels.py` | `sandbox.labels` — `{}` when it has none |
@@ -112,7 +113,7 @@ examples themselves, see [`examples/README.md`](../examples/README.md).
 | Upload & download | `examples/upload_download.py` | Chunked `upload_file` with progress → `download_file` → compare sizes |
 | Preview ports | `examples/preview_ports.py` | Serve a port → `get_url` → `list_ports` → rotate the slug → `revoke_port` |
 | Resize & egress edits | `examples/update_resize_egress.py` | Resize + re-scope egress in one update → `egress_add` / `egress_remove` |
-| Audit trail | `examples/audit_trail.py` | Run commands → page through `sandbox.audit()` |
+| Audit trail | `examples/audit_trail.py` | Run a script → read calls, programs and connections, each program tied to its call |
 | Agent ports & audit | `examples/agent_ports_audit.py` | Agent preview port with slug → rotate → `keepalive` → `audit` → revoke |
 | Streaming exec | `examples/streaming_exec.py` | `exec_stream` with progress output |
 | Processes lifecycle | `examples/processes.py` | Create → connect_url wait → Ready → runtime probe → start → follow → logs → list → kill → wait |

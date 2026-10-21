@@ -5,7 +5,7 @@ Every product and method in `neevai`, grouped by product, with short snippets. F
 ## Contents
 
 - [Client and configuration](#client-and-configuration)
-- [Sandboxes](#sandboxes): [`client.sandboxes`](#clientsandboxes), [Templates](#templates), [Snapshots, fork and rollback](#snapshots-fork-and-rollback), [Sandbox handle](#sandbox-handle), [Commands and processes](#commands-and-processes), [Files](#files), [Terminals and SSH](#terminals-and-ssh), [Code interpreter](#code-interpreter)
+- [Sandboxes](#sandboxes): [`client.sandboxes`](#clientsandboxes), [Audit trail](#audit-trail), [Templates](#templates), [Snapshots, fork and rollback](#snapshots-fork-and-rollback), [Sandbox handle](#sandbox-handle), [Commands and processes](#commands-and-processes), [Files](#files), [Terminals and SSH](#terminals-and-ssh), [Code interpreter](#code-interpreter)
 - [Agents](#agents): [`client.agents`](#clientagents), [Agent templates](#agent-templates), [`Agent` handle](#agent-handle)
 - [Agent tools](#agent-tools): [The tool contract](#the-tool-contract), [Framework adapters](#framework-adapters)
 - [Errors](#errors)
@@ -45,14 +45,14 @@ A sandbox is an isolated machine for your code. `client.sandboxes` and `client.t
 | `create(params, org_id=None, project_id=None, *, allow_internet=None, allow_egress=None, labels=None)` | `Sandbox` | Creates a new sandbox. `allow_internet=True` / `allow_egress=[...]` open egress (deny-all by default; explicit `egress` wins). `labels={...}` tags it with key-value labels. Optional `restore` in params provisions from a snapshot. |
 | `list(page=None, limit=None, name=None, status=None, sandbox_id=None, org_id=None, project_id=None, *, labels=None)` | `SandboxPage` | Lists sandboxes with pagination in the resolved org/project scope. `labels={...}` keeps only sandboxes carrying every given label. |
 | `get(id, org_id=None, project_id=None)` | `Sandbox` | Fetches the current record for a sandbox by ID or name. |
-| `update(id, params, org_id=None, project_id=None, *, allow_internet=None, allow_egress=None)` | `Sandbox` | In-place update of `resources` (cpu/memory) and/or `egress`. Resize keeps the ID/name/preview URLs and does not restart; `disk_gb` is not resizable and the server rejects a change. `allow_internet` / `allow_egress` are the same egress convenience as `create`. `egress_add` / `egress_remove` edit the allow-list in place (not combinable with `egress`). Rejects `{}` locally, naming every field. |
+| `update(id, params, org_id=None, project_id=None, *, allow_internet=None, allow_egress=None)` | `Sandbox` | In-place update of `resources` (cpu/memory) and/or `egress`. Resize keeps the ID/name/preview URLs and does not restart; `disk_gb` is not resizable and the server rejects a change. `allow_internet` / `allow_egress` are the same egress convenience as `create`. `egress_add` / `egress_remove` edit the allow-list in place (not combinable with `egress`). `{"execution_trace": False}` stops recording programs, `True` turns it back on. Rejects `{}` locally, naming every field. |
 | `pause(id, org_id=None, project_id=None)` | `Sandbox` | Stops a sandbox and keeps its state (Paused). Sends an empty body; a pause always captures full state, so a resume picks up where it left off. |
 | `resume(id, org_id=None, project_id=None)` | `Sandbox` | Starts a paused sandbox again, toward Ready. |
 | `keepalive(id, org_id=None, project_id=None)` | `Sandbox` | Resets the sandbox's idle timer (POST `.../keepalive`). |
 | `update_timeout(id, params, org_id=None, project_id=None)` | `Sandbox` | Changes idle/lifetime windows (PUT `.../timeout`); only the windows passed change, `0` turns one off. |
 | `delete(id, org_id=None, project_id=None)` | `None` | Permanently deletes a sandbox. |
 | `metrics(id, from_=None, to=None, step=None, ...)` | `SandboxMetricsResponse` | Queries live health metrics over an optional time range. |
-| `audit(id, *, from_=None, to=None, cursor=None, limit=None, ...)` | `AuditTrail` | One page of the audit trail, newest first. Filter with `operation`, `status`, `actor_type`, `actor_uid` or `credential_uid`; page with `next_cursor`. |
+| `audit(id, *, from_=None, to=None, cursor=None, limit=None, ...)` | `AuditTrail` | One page of the audit trail, newest first: calls, programs and connections. See [Audit trail](#audit-trail). |
 | `expose_port(id, port, ..., *, slug=None)` / `list_ports(id)` / `revoke_port(id, port)` | `SandboxPort` / `list[SandboxPort]` / `None` | Preview ports. A new `slug` on an exposed port rotates its URL. |
 | `get_port_url(id, port, wait_until_ready=True, ..., *, slug=None)` | `str` | Exposes a port and returns its preview URL once routable. |
 | `create_snapshot(id, params=None, ...)` | `Snapshot` | Creates a filesystem snapshot (returns immediately with status Pending). |
@@ -61,6 +61,40 @@ A sandbox is an isolated machine for your code. `client.sandboxes` and `client.t
 | `delete_snapshot(snapshot_id, ...)` | `None` | Deletes a snapshot permanently. |
 | `rollback(id, snapshot_id, ...)` | `Sandbox` | Rolls a sandbox back in place to a previous snapshot. Prefer `create({..., "restore": ...})` to recover into a new sandbox — see [Snapshots](#snapshots-fork-and-rollback). |
 | `fork(id, name, ...)` | `Sandbox` | Forks a sandbox into a new sandbox from its current state. |
+
+### Audit trail
+
+`audit()` returns an `AuditTrail` (`from_`, `to`, `retention_days`, `window_truncated`, `next_cursor`, `data: list[AuditEvent]`), newest first. Each event is an [OCSF 1.9.0](https://schema.ocsf.io/1.9.0/) event, so it can go straight into a SIEM.
+
+| `class_uid` | `class_name` | What it records | `activity_name` |
+| --- | --- | --- | --- |
+| `6003` | API Activity | A call made to the sandbox: `exec`, a terminal command, a file operation, a process start, SSH, a code-interpreter cell | Create, Read, Update, Delete, Other |
+| `1007` | Process Activity | A program that ran inside the sandbox, whether or not a call asked for it: scripts, generated code, child processes | Launch, Terminate, Sandbox Start |
+| `4001` | Network Activity | A connection a program opened | Open |
+
+Every event has `time` (milliseconds since the Unix epoch), `type_name` (such as `Process Activity: Launch`), `status` (`Success` or `Failure`), `device.uid` (the sandbox id) and `metadata.uid` (a stable event id).
+
+| Class | Key fields |
+| --- | --- |
+| API Activity | `api.operation`, `api.request.uid`, `actor.user` (`type` is `User`, `API Key`, `System` or `Unknown`; an API key also has `programmatic_credentials[].uid`), `resources`, `duration`, `status_code` |
+| Process Activity | `process.pid`, `process.name` (no arguments), `process.file.path` (what actually executed), `process.working_directory`, `process.parent_process.pid`. On Launch, `actor.process` is the parent. On Terminate, `exit_code`, or `status_detail` such as `signal 9` when a signal stopped it |
+| Network Activity | `actor.process` (the program), `dst_endpoint.ip` and `dst_endpoint.port`, or `dst_endpoint.name` (`unix:<path>`) for a local socket |
+
+`api` and `resources` are `None` on program and connection events, which don't name who acted. To find the call that started a program, take the API Activity event whose `resources[].data.pid` equals the program's pid, or the pid of an ancestor reached through `parent_process.pid` (each ancestor's own Launch event names its parent). A terminal command's programs lead back to the terminal's shell pid.
+
+| Filter | Applies to |
+| --- | --- |
+| `from_`, `to` (RFC 3339), `limit` (1–200, default 50), `cursor` | Every event |
+| `status` (`"success"` or `"failure"`) | Every event |
+| `operation` (one name or a list) | API Activity only; programs and connections are left out |
+| `actor_type`, `actor_uid`, `credential_uid` | API Activity only |
+
+- Program names are recorded without their arguments, the environment is never recorded, and input typed at a hidden password prompt is never recorded.
+- Programs and connections can take about a minute to appear. The first programs a newly started sandbox runs may be missing.
+- `update(id, {"execution_trace": False})` stops recording programs and connections; calls are still recorded. `sandbox.execution_trace` reports the current setting.
+- The trail covers the last `retention_days` days; `window_truncated` is `True` when `from_` reaches further back.
+
+[examples/audit_trail.py](../examples/audit_trail.py) prints all three classes and ties each program to the call that started it.
 
 ### Templates
 
@@ -107,9 +141,9 @@ Returned by `create()`, `get()`, `list().items`, etc.
 
 | API | Kind |
 | --- | ---- |
-| `id`, `name`, `phase`, `connect_url`, `addressable`, `labels`, `last_crash`, `data` | properties |
+| `id`, `name`, `phase`, `connect_url`, `addressable`, `execution_trace`, `labels`, `last_crash`, `data` | properties |
 | `refresh()` | method |
-| `update(params, *, allow_internet=None, allow_egress=None)` | method — in-place resize / egress re-scope (`egress_add` / `egress_remove` edit the allow-list); updates state in place |
+| `update(params, *, allow_internet=None, allow_egress=None)` | method — in-place resize / egress re-scope (`egress_add` / `egress_remove` edit the allow-list) / `execution_trace`; updates state in place |
 | `wait_until_ready(timeout_ms=120000, ...)` | method — polls the API until `Ready` and addressable |
 | `pause()` / `resume()` | methods |
 | `keepalive()` / `update_timeout(params)` | methods — reset idle timer / change lifecycle windows |
@@ -267,7 +301,7 @@ An agent is a catalogue template (such as `"claude-code"`) running on its own sa
 | `update(id, params, org_id=None, project_id=None, *, allow_internet=None, allow_egress=None)` | `Agent` | In-place update of egress, cpu/memory (`resources`; defaults & bounds in [Agent resources](./api-inventory.md#agent-resources)) and `idle_timeout_seconds`. `allow_internet` / `allow_egress` are the same egress convenience as `create`; `egress_add` / `egress_remove` edit the allow-list in place. Rejects `{}` locally, naming every field. |
 | `keepalive(id, ...)` / `rollback(id, snapshot_id, ...)` | `Agent` | Resets the idle timer / rolls the backing sandbox back to a snapshot. |
 | `expose_port` / `list_ports` / `revoke_port` / `get_port_url` | as on `client.sandboxes` | Agent preview ports, same signatures. |
-| `audit(id, *, from_=None, to=None, cursor=None, limit=None, ...)` | `AuditTrail` | The agent's audit trail, with the same filters. |
+| `audit(id, *, from_=None, to=None, cursor=None, limit=None, ...)` | `AuditTrail` | The agent's audit trail: the same events and filters as the [sandbox one](#audit-trail). An agent has no `execution_trace` setting. |
 | `pause(id, org_id=None, project_id=None)` | `Agent` | Pauses the agent and its backing sandbox. |
 | `resume(id, org_id=None, project_id=None)` | `Agent` | Resumes a paused agent. |
 | `delete(id, org_id=None, project_id=None)` | `None` | Permanently deletes an agent (HTTP 204, no body). |

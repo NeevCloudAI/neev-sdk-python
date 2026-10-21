@@ -54,7 +54,7 @@ These need only your credentials. Start with `templates_list.py`.
 | [`files_api.py`](files_api.py) | Write, read and list files |
 | [`upload_download.py`](upload_download.py) | Upload and download a large file with progress |
 | [`preview_ports.py`](preview_ports.py) | Serve a port, get its preview URL, rotate it, revoke it |
-| [`audit_trail.py`](audit_trail.py) | Run commands, then page through the audit trail |
+| [`audit_trail.py`](audit_trail.py) | Calls, programs and connections, each program tied to the call that started it |
 | [`pty.py`](pty.py) | An interactive terminal |
 | [`ssh_tunnel.py`](ssh_tunnel.py) | SSH, `rsync` and port forwarding through one tunnel |
 | [`streaming_exec.py`](streaming_exec.py) | Stream command output line by line |

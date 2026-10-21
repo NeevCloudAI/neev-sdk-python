@@ -121,6 +121,11 @@ class Sandbox:
         return self._state.addressable is not False
 
     @property
+    def execution_trace(self) -> bool:
+        """Whether every program the sandbox runs is recorded; True unless turned off."""
+        return self._state.execution_trace is not False
+
+    @property
     def labels(self) -> dict[str, str]:
         """Key-value labels the sandbox was created with; empty when it has none."""
         if self._state.labels is None:
@@ -171,7 +176,7 @@ class Sandbox:
         allow_internet: bool | None = None,
         allow_egress: list[str] | None = None,
     ) -> Sandbox:
-        """Resizes this sandbox and/or re-scopes its egress in place.
+        """Resizes, re-scopes egress or sets ``execution_trace`` in place.
 
         Updates handle state from the response. The sandbox keeps its ID, name, and
         preview URLs and is not restarted, so the cached runtime connection stays valid.
@@ -652,6 +657,11 @@ class AsyncSandbox:
         return self._state.addressable is not False
 
     @property
+    def execution_trace(self) -> bool:
+        """Whether every program the sandbox runs is recorded; True unless turned off."""
+        return self._state.execution_trace is not False
+
+    @property
     def labels(self) -> dict[str, str]:
         """Key-value labels the sandbox was created with; empty when it has none."""
         if self._state.labels is None:
@@ -692,7 +702,7 @@ class AsyncSandbox:
         allow_internet: bool | None = None,
         allow_egress: list[str] | None = None,
     ) -> AsyncSandbox:
-        """Resizes this sandbox and/or re-scopes its egress in place (async).
+        """Resizes, re-scopes egress or sets ``execution_trace`` in place (async).
 
         Updates handle state from the response. The sandbox keeps its ID, name, and
         preview URLs and is not restarted, so the cached runtime connection stays valid.
