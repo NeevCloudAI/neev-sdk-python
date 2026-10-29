@@ -45,7 +45,7 @@ def wait_for(sandbox, done, expected: str) -> None:
 
 def read_marker(sandbox) -> str:
     """Reads the marker back; a different text means the files did not survive."""
-    result = sandbox.exec(["cat", MARKER_FILE])
+    result = sandbox.exec(["cat", MARKER_FILE], timeout_ms=PHASE_TIMEOUT_SEC * 1000)
     text = result.stdout.strip()
     if result.exit_code != 0 or text != MARKER_TEXT:
         raise NeevAIError(f"marker not intact: {text!r} {result.stderr}")
@@ -100,6 +100,7 @@ def main() -> None:
                     sandbox.delete()
                 except NeevAIError as e:
                     print(f"cleanup failed, delete {sandbox.id} by hand: {e}", file=sys.stderr)
+                    sys.exit(1)
 
 
 if __name__ == "__main__":
