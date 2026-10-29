@@ -57,11 +57,11 @@ examples themselves, see [`examples/README.md`](../examples/README.md).
 | `client.agent_templates.list` | `create_agent.py` | `page = client.agent_templates.list()` |
 | `client.agent_templates.get` | — | `tpl = client.agent_templates.get(template_id)` |
 | `agent.wait_until_ready` | `create_agent.py` | `agent.wait_until_ready(timeout_ms=120_000)` |
-| `agent.refresh` | — | `agent.refresh()` |
+| `agent.refresh` | `agent_auto_resume.py` | `agent.refresh()` |
 | `agent.sandbox` | `create_agent.py` | `sandbox = agent.sandbox()` |
 | `agent.update` | `create_agent.py` | `agent.update({"resources": {"cpu": 2, "memory_gb": 4}})` |
 | `agent.pause` / `agent.delete` | `create_agent.py` | `agent.pause(); agent.delete()` |
-| `agent.resume` | — | `agent.resume()` — not shown in `create_agent.py`; see [getting-started.md](./getting-started.md#create-an-agent) |
+| `agent.resume` | `agent_auto_resume.py` | `agent.resume()` — then `wait_until_ready()` |
 | `agent.to_json` | — | `agent.to_json()` |
 | `client.raw.request` | `raw_request.py` | `data = client.raw.request("GET", path, query={...})` |
 | `sandbox.wait_until_ready` | tier-1 (except `raw_request.py`), `processes.py`, `process_pool.py`, `agent_patterns/*`, `workflow_examples/*` | `sandbox.wait_until_ready(timeout_ms=120_000)` — after `connect_url` is set in process examples |
@@ -89,7 +89,8 @@ examples themselves, see [`examples/README.md`](../examples/README.md).
 | `sandbox.files.upload` | — | `sandbox.files.upload("big.bin", data, chunk_size=512 << 10)` — `write()` uses it above 1 MiB |
 | `sandbox.files.download_file` | `upload_download.py` | `sandbox.files.download_file("payload.bin", copy)` → `{"bytes_written": n}` |
 | `sandbox.metrics` | `sandbox_lifecycle.py`, `sandbox_metrics.py` | `metrics = sandbox.metrics()` |
-| `sandbox.pause` | `sandbox_lifecycle.py` | `sandbox.pause()` |
+| `sandbox.pause` | `sandbox_lifecycle.py`, `auto_resume.py` | `sandbox.pause()` |
+| `sandbox.resume` | `auto_resume.py` | `sandbox.resume()` — then `wait_until_ready()` |
 | `sandbox.delete` | all examples that create sandboxes | `sandbox.delete()` / `await sandbox.delete()` |
 | `sandbox.to_json` | `sandbox_lifecycle_controller.py` | `sandbox.to_json()` |
 | `sandbox.id` / `.phase` / `.connect_url` | tier-1, `processes.py`, `process_pool.py`, `sandbox_lifecycle_controller.py`, `agent_patterns/utils/sandbox_tool.py`, `workflow_examples/*` | `print(sandbox.phase, sandbox.connect_url)` — polled until `connect_url` in process examples |
@@ -103,6 +104,8 @@ examples themselves, see [`examples/README.md`](../examples/README.md).
 | Templates list & create | `examples/templates_list.py` | List templates, get by id, create sandbox, wait, delete |
 | Agent lifecycle | `examples/create_agent.py` | List agent templates, create agent, wait, sandbox exec, update, pause, delete |
 | Sandbox lifecycle | `examples/sandbox_lifecycle.py` | Create → wait → metrics → pause → delete |
+| Auto-resume | `examples/auto_resume.py` | Create → pause → `exec` with no `resume()` → explicit `resume()` only on 429 while Paused → delete |
+| Agent auto-resume | `examples/agent_auto_resume.py` | Create agent → pause → sandbox `exec` with no `resume()` → explicit `agent.resume()` only on 429 while Paused → delete |
 | Sandbox in-place update | `examples/sandbox_update.py` | Create → wait → resize → re-scope egress → verify → delete |
 | Sandbox labels | `examples/sandbox_labels.py` | Create two labelled sandboxes → list by one label → narrow by two → delete |
 | Crash reporting | `examples/last_crash.py` | Create → mark file → force OOM → poll `last_crash` → check `storage_reset` → delete |
