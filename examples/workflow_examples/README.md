@@ -34,7 +34,7 @@ final answer is written to `output/repo-analysis.md` on the host (from the
 loop's return value, not a sandbox file pull).
 
 ```sh
-# defaults to https://github.com/NeevCloudAI/neevai-sdk-python
+# defaults to https://github.com/NeevCloudAI/neev-sdk-python
 uv run python examples/workflow_examples/repo_analyzer.py
 
 # analyze a different repo

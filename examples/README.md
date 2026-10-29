@@ -1,7 +1,7 @@
 # Examples
 
-Runnable scripts for the NeevCloud SDK for Python (`neevai`). Each one creates real
-sandboxes and cleans them up when it finishes.
+Runnable scripts for the NeevCloud SDK for Python (`neevai`). Most create real
+sandboxes or agents and clean them up when they finish.
 
 ## Contents
 
@@ -33,7 +33,12 @@ Run any example from the repository root:
 uv run python examples/<script>.py
 ```
 
-Examples create from `sb-ubuntu-26-04-dev` unless you set `NEEV_SANDBOX_TEMPLATE_ID`.
+Most examples create from `sb-ubuntu-26-04-dev` unless you set `NEEV_SANDBOX_TEMPLATE_ID`.
+The exceptions: `code_interpreter.py` and `docker.py` use their own templates,
+`byoi_create.py` and `ssh_tunnel.py` use their own images, `update_resize_egress.py`
+and `agent_patterns/agent_tools_loop.py` use the platform default, `sandbox_labels.py`
+falls back to the first listed template, and
+`sandbox_lifecycle_controller.py create` needs `--template-id` or the variable.
 
 ## Sandboxes
 
@@ -45,7 +50,7 @@ These need only your credentials. Start with `templates_list.py`.
 | [`sandbox_lifecycle.py`](sandbox_lifecycle.py) | Create, wait, metrics, pause, delete |
 | [`auto_resume.py`](auto_resume.py) | Use a paused sandbox without calling `resume()`; reports whether it woke by itself |
 | [`sandbox_lifecycle_windows.py`](sandbox_lifecycle_windows.py) | Idle timeout and maximum lifetime, `keepalive`, `update_timeout` |
-| [`sandbox_update.py`](sandbox_update.py) | Resize a running sandbox, then change its egress |
+| [`sandbox_update.py`](sandbox_update.py) | Resize a running sandbox and change its egress in one call |
 | [`update_resize_egress.py`](update_resize_egress.py) | Resize and change egress in one call; `egress_add` and `egress_remove` |
 | [`e2e_live_update.py`](e2e_live_update.py) | A pass/fail check of a combined resize and egress update |
 | [`last_crash.py`](last_crash.py) | Force an out-of-memory crash and read `last_crash` |
@@ -57,7 +62,7 @@ These need only your credentials. Start with `templates_list.py`.
 | [`upload_download.py`](upload_download.py) | Upload and download a large file with progress |
 | [`preview_ports.py`](preview_ports.py) | Serve a port, get its preview URL, rotate it, revoke it |
 | [`audit_trail.py`](audit_trail.py) | Run commands, then page through the audit trail |
-| [`pty.py`](pty.py) | An interactive terminal |
+| [`pty.py`](pty.py) | A scripted terminal session (no typing needed) |
 | [`ssh_tunnel.py`](ssh_tunnel.py) | SSH, `rsync` and port forwarding through one tunnel |
 | [`streaming_exec.py`](streaming_exec.py) | Stream command output line by line |
 | [`processes.py`](processes.py) | Start, follow, read logs of and stop a process |
@@ -72,7 +77,7 @@ These need only your credentials. Start with `templates_list.py`.
 The lifecycle controller is handy for trying things by hand:
 
 ```bash
-uv run python examples/sandbox_lifecycle_controller.py create --name my-sandbox --wait
+uv run python examples/sandbox_lifecycle_controller.py create --name my-sandbox --template-id sb-ubuntu-26-04-dev --wait
 uv run python examples/sandbox_lifecycle_controller.py list --limit 20
 uv run python examples/sandbox_lifecycle_controller.py metrics <sandbox-id>
 ```
@@ -108,7 +113,7 @@ Complete agent workflows that save their results locally.
 | Example | Shows | Saves |
 | --- | --- | --- |
 | [`workflow_examples/repo_analyzer.py`](workflow_examples/repo_analyzer.py) | Clone and review a repository | `workflow_examples/output/repo-analysis.md` |
-| [`workflow_examples/browser_agent.py`](workflow_examples/browser_agent.py) | Browse a site and summarise it | `workflow_examples/output/results.md` |
+| [`workflow_examples/browser_agent.py`](workflow_examples/browser_agent.py) | Find Hacker News titles matching a query | `workflow_examples/output/results.md` |
 
 ```bash
 uv run python examples/workflow_examples/repo_analyzer.py
@@ -164,7 +169,7 @@ uv run python examples/update_resize_egress.py
 ```bash
 uv run python examples/e2e_live_update.py
 ```
-→ `ready … (name=…)` → `[PASS] …` (one line per check, 12 in all) → `cleaned up …` → `E2E PASSED — combined resize+egress verified against the live API` (the last two checks are replaced by one `[SKIP] in-sandbox allow/deny proof — …` line if the sandbox can't run `curl`; any `[FAIL]` ends with `E2E FAILED — …` and exit code 1).
+→ `ready … (name=…)` → `[PASS] …` (one line per check, 12 in all) → `cleaned up …` → `E2E PASSED — combined resize+egress verified against the live API` (the last two checks are replaced by one `[SKIP] in-sandbox allow/deny proof — …` line if the in-sandbox `exec` call itself errors; any `[FAIL]` ends with `E2E FAILED — …` and exit code 1).
 
 **8. Crash detection**
 ```bash
@@ -284,7 +289,7 @@ Creates no sandbox. → `raw templates: N item(s)` → `  … — …` (one line
 ```bash
 uv run python examples/sandbox_lifecycle_controller.py list --limit 20
 ```
-→ `total=…  page=1  limit=20` → `  …  name=…  phase=…` (one line per sandbox). The other subcommands (`create`, `get`, `pause`, `resume`, `delete`, `metrics`) print one result line each; add `--json` before the subcommand for JSON. `create` needs `--template-id` or `NEEV_SANDBOX_TEMPLATE_ID`, and it does not delete the sandbox, so run `delete <sandbox-id>` afterwards.
+→ `total=…  page=1  limit=20` → `  …  name=…  phase=…` (one line per sandbox). `get`, `pause`, `resume` and `delete` print one result line each; `metrics` prints a header plus one line per series, and `create --wait` also prints `  phase=…` while it waits; add `--json` before the subcommand for JSON. `create` needs `--name`, plus `--template-id` or `NEEV_SANDBOX_TEMPLATE_ID`, and it does not delete the sandbox, so run `delete <sandbox-id>` afterwards.
 
 ### Agents
 
@@ -314,7 +319,7 @@ These call a model. They use `NEEV_API_KEY` for inference unless you set `NEEV_I
 ```bash
 uv run python examples/agent_patterns/minimal_agent.py
 ```
-→ `AI code-interpreter (gpt-oss-120b -> Neev sandbox)` → `task: Print every prime number below 50, …` → `[sandbox] creating (template=…)…` → for each step: `━━━━━ step N ━━━━━` → `[model] calling … with N messages…` → `[model] tokens: prompt=… completion=… total=…` → `[model] requested N tool call(s)` → `[tool] run_shell` and `  $ <command>` → `  ┌─ live output ───…` → the command's output as it runs → `  └─ exit 0 ───…` → `[tool] returned N bytes to the model` … → `✅ final answer:` → the model's answer → `[sandbox] deleting …`.
+→ `AI code-interpreter (<model> -> Neev sandbox)` → `task: Print every prime number below 50, …` → `[sandbox] creating (template=…)…` → for each step: `━━━━━ step N ━━━━━` → `[model] calling … with N messages…` → `[model] tokens: prompt=… completion=… total=…` → `[model] requested N tool call(s)` → `[tool] run_shell` and `  $ <command>` → `  ┌─ live output ───…` → the command's output as it runs → `  └─ exit 0 ───…` → `[tool] returned N bytes to the model` … → `✅ final answer:` → the model's answer → `[sandbox] deleting …`.
 
 **32. Ready-made agent tools**
 ```bash
@@ -337,7 +342,7 @@ These also call a model, and save their result under `examples/workflow_examples
 ```bash
 uv run python examples/workflow_examples/repo_analyzer.py
 ```
-→ `[sandbox] creating (template=…)…` → `[sandbox] created …; waiting until ready…` → `[sandbox] ready: …` → `[bootstrap] git available` and `[bootstrap] ripgrep available` (or `installing … via …` lines if the template lacks them) → `[clone] fetching https://github.com/NeevCloudAI/neevai-sdk-python…` → `[clone] done (…)` → for each step: `[model] calling … (step N)…` → `  tokens: …` → `  $ <command>` with its live output between `┌─ live output` and `└─ exit N` … → the four-section report → `[artifact] saved N bytes → …/output/repo-analysis.md` → `[sandbox] deleting …`. Pass `--repo <url>` to analyze another repository.
+→ `[sandbox] creating (template=…)…` → `[sandbox] created …; waiting until ready…` → `[sandbox] ready: …` → `[bootstrap] git available` and `[bootstrap] ripgrep available` (or `installing … via …` lines if the template lacks them) → `[clone] fetching https://github.com/NeevCloudAI/neev-sdk-python…` → `[clone] done (…)` → for each step: `[model] calling … (step N)…` → `  tokens: …` → `  $ <command>` with its live output between `┌─ live output` and `└─ exit N` … → the four-section report → `[artifact] saved N bytes → …/output/repo-analysis.md` → `[sandbox] deleting …`. Pass `--repo <url>` to analyze another repository.
 
 **35. Browser agent**
 ```bash
@@ -367,6 +372,6 @@ uv run python examples/workflow_examples/browser_agent.py --query "AI"
 ## Notes
 
 - File paths are relative to the workspace, or absolute inside it.
-- Examples call `wait_until_ready()` before running commands.
+- Examples that run commands call `wait_until_ready()` first.
 - Progress goes to stderr; each example's result goes to stdout.
 - For which example covers which API, see [example coverage](../docs/example-coverage.md).
