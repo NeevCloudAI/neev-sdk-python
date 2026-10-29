@@ -42,6 +42,7 @@ These need only your credentials. Start with `templates_list.py`.
 | --- | --- |
 | [`templates_list.py`](templates_list.py) | List templates, get one, create a sandbox from it |
 | [`sandbox_lifecycle.py`](sandbox_lifecycle.py) | Create, wait, metrics, pause, delete |
+| [`auto_resume.py`](auto_resume.py) | Use a paused sandbox without calling `resume()`; reports whether it woke by itself |
 | [`sandbox_lifecycle_windows.py`](sandbox_lifecycle_windows.py) | Idle timeout and maximum lifetime, `keepalive`, `update_timeout` |
 | [`sandbox_update.py`](sandbox_update.py) | Resize a running sandbox, then change its egress |
 | [`update_resize_egress.py`](update_resize_egress.py) | Resize and change egress in one call; `egress_add` and `egress_remove` |
@@ -83,6 +84,7 @@ These need only your credentials.
 | --- | --- |
 | [`create_agent.py`](create_agent.py) | Create an agent, use its sandbox, update, pause, delete |
 | [`agent_ports_audit.py`](agent_ports_audit.py) | An agent's preview URL, keepalive and audit trail |
+| [`agent_auto_resume.py`](agent_auto_resume.py) | Use a paused agent without calling `resume()`; reports whether it woke by itself |
 
 ## Agent tools
 
@@ -122,7 +124,7 @@ See [`workflow_examples/README.md`](workflow_examples/README.md) for options.
 | `NEEV_ORG_ID` | All | Required |
 | `NEEV_PROJECT_ID` | All | Required |
 | `NEEV_SANDBOX_TEMPLATE_ID` | Sandbox examples | `sb-ubuntu-26-04-dev` |
-| `NEEV_AGENT_TEMPLATE` | `create_agent.py` | `claude-code` |
+| `NEEV_AGENT_TEMPLATE` | `create_agent.py`, `agent_ports_audit.py`, `agent_auto_resume.py` | `claude-code` |
 | `NEEV_INFERENCE_API_KEY` | Agent and workflow examples | `NEEV_API_KEY` |
 | `NEEV_INFERENCE_BASE_URL` | Agent and workflow examples | `https://inference.ai.neevcloud.com/v1` |
 | `NEEV_MODEL` | Agent and workflow examples | `gpt-oss-120b` |
