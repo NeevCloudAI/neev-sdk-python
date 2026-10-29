@@ -94,7 +94,7 @@ Everything in `neevai.__all__`:
 | `AuditEvent` / `AuditActor` / `AuditActorUser` / `AuditAPI` / `AuditResource` | model | generated |
 | `SandboxEgressRule` | model | generated |
 | `SandboxEgressRules` | model | generated |
-| `NeevAIError`, `APIConnectionError`, `APITimeoutError`, `APIError`, `BadRequestError`, `AuthenticationError`, `PermissionDeniedError`, `NotFoundError`, `ConflictError`, `PreconditionFailedError`, `RateLimitError`, `DeadlineExceededError`, `InternalServerError`, `ServiceUnavailableError` | exceptions | `errors.py` |
+| `NeevAIError`, `APIConnectionError`, `APITimeoutError`, `APIError`, `BadRequestError`, `AuthenticationError`, `PermissionDeniedError`, `NotFoundError`, `ConflictError`, `PreconditionFailedError`, `TooEarlyError`, `RateLimitError`, `DeadlineExceededError`, `InternalServerError`, `ServiceUnavailableError` | exceptions | `errors.py` |
 
 Types exported from `neevai.types.__all__`:
 
@@ -666,6 +666,27 @@ Pause and resume return updated `Agent` handles. Delete returns `None` (HTTP 204
 progress. `rollback` rolls the agent's backing sandbox back in place to a snapshot from
 the same project. Both return the updated `Agent`.
 
+### `client.agents.create_snapshot(id, params=None, ...)` / `client.agents.list_snapshots(id, page=None, limit=None, ...)`
+
+Snapshot the sandbox backing an agent, and list those snapshots. Same params and
+`Snapshot` shape as `client.sandboxes.create_snapshot` / `.list_snapshots`; the
+snapshot starts `Pending`. Wait on it with `client.sandboxes.wait_for_snapshot`, or
+use `agent.snapshot(wait_until_ready=True)`.
+
+### `client.agents.fork(id, name, ...)`
+
+Forks an agent into a new agent with the source's template and configuration and its
+own gateway token. Returns the new `Agent`, which is `Provisioning` until it is ready;
+call `wait_until_ready()` on it before use. The source agent keeps running.
+
+```python
+forked = client.agents.fork(agent.id, "web-fork")
+forked.wait_until_ready()
+```
+
+A paused or still-provisioning agent raises `ConflictError` (409) or
+`TooEarlyError` (425).
+
 ### Agent preview ports
 
 `client.agents.expose_port(id, port, org_id=None, project_id=None, *, slug=None)`,
@@ -774,6 +795,11 @@ Resolves the backing sandbox as a `Sandbox` handle via `Agents.get_sandbox()`.
 
 Handle wrappers for `client.agents.keepalive` / `.rollback` / `.audit`; the first two
 update the handle in place and return `self`.
+
+### `agent.snapshot(params=None, *, wait_until_ready=False, timeout_ms=..., poll_interval_ms=...)` / `agent.snapshots()` / `agent.fork(name)`
+
+Same as `sandbox.snapshot()` / `.snapshots()`, for the sandbox backing this agent.
+`fork` returns a new `Agent` handle for the fork; this handle is unchanged.
 
 ### `agent.expose_port(port, *, slug=None)` / `agent.list_ports()` / `agent.revoke_port(port)` / `agent.get_url(port, ..., *, slug=None)`
 
@@ -1911,18 +1937,25 @@ for `egress_add` / `egress_remove`.
 | `next_cursor` | `str \| None` | no (pass as `cursor` for the next, older page) |
 | `data` | `list[AuditEvent]` | yes (newest first) |
 
-`AuditEvent` is one call, in the OCSF API Activity format. The fields most callers read:
+`AuditEvent` is one thing that happened in the sandbox, in OCSF format: an API Activity
+event (`class_uid` 6003) for a call, and, unless the sandbox's `execution_trace` is off,
+a Process Activity event (1007) for a program starting or ending and a Network Activity
+event (4001) for a connection a program opened. The fields most callers read:
 
 | Field | Type | Required |
 | ----- | ---- | -------- |
+| `class_uid` | `int` | yes (6003, 1007 or 4001) |
 | `time` | `int` | yes (milliseconds since the Unix epoch) |
-| `api.operation` | `str` | yes (e.g. `pty_command`, `ssh`, `exec`, `process.start`, `fs.read`) |
+| `api.operation` | `str` | API Activity only (e.g. `pty_command`, `ssh`, `exec`, `process.start`, `fs.read`) |
+| `process.name` | `str \| None` | Process Activity (the program, without its arguments) |
+| `exit_code` | `int \| None` | no (a program's exit code on Terminate) |
+| `device.uid` | `str` | yes (the sandbox id) |
 | `status` | `str` | yes (`Success` or `Failure`) |
 | `status_code` | `str \| None` | no (`ok`, `permission_denied`, `internal`) |
-| `actor.user.type` | `user` \| `api_key` \| `system` \| `unknown` | yes |
+| `actor.user.type` | `User` \| `API Key` \| `System` \| `Unknown` | yes |
 | `actor.user.uid` | `str` | yes (the user's or API key's id) |
 | `actor.user.name` | `str \| None` | no |
-| `actor.user.credential_uid` | `str \| None` | no (the API key used; absent for a user) |
+| `actor.user.programmatic_credentials` | `list \| None` | no (the API key used, as `[{"uid": ...}]`; absent for a user) |
 | `actor.session.uid` | `str \| None` | no (the console session) |
 | `resources` | `list[AuditResource] \| None` | no (the sandbox, then any file, process, program or terminal the call touched) |
 | `duration` | `int \| None` | no (milliseconds) |
@@ -2094,6 +2127,7 @@ All SDK errors inherit from `NeevAIError`. Import from `neevai` or `neevai.error
 | `NotFoundError` | HTTP 404 |
 | `ConflictError` | HTTP 409 |
 | `PreconditionFailedError` | HTTP 412 |
+| `TooEarlyError` | HTTP 425 (not ready yet, such as an agent still provisioning) |
 | `RateLimitError` | HTTP 429 |
 | `DeadlineExceededError` | HTTP 504 |
 | `InternalServerError` | HTTP 5xx |
@@ -2254,6 +2288,8 @@ Compact reviewer index. Each symbol should also appear in
 | `Agents.delete` | method | `None` |
 | `Agents.get_sandbox` | method | `Sandbox` |
 | `Agents.keepalive` / `.rollback` | methods | `Agent` |
+| `Agents.create_snapshot` / `.list_snapshots` | methods | `Snapshot` / `list[Snapshot]` |
+| `Agents.fork` | method | `Agent` (the new agent) |
 | `Agents.expose_port` / `.list_ports` / `.revoke_port` / `.get_port_url` | methods | `SandboxPort` / `list[SandboxPort]` / `None` / `str` |
 | `Agents.audit` | method | `AuditTrail` |
 | `AsyncAgents.*` | methods | Same as sync with `await` |
@@ -2277,6 +2313,7 @@ Compact reviewer index. Each symbol should also appear in
 | `Agent.sandbox` | method | Backing `Sandbox` handle |
 | `Agent.update` / `.pause` / `.resume` / `.delete` | methods | Scope-threaded |
 | `Agent.keepalive` / `.rollback` / `.audit` | methods | Scope-threaded |
+| `Agent.snapshot` / `.snapshots` / `.fork` | methods | `Snapshot` / `list[Snapshot]` / new `Agent` |
 | `Agent.expose_port` / `.list_ports` / `.revoke_port` / `.get_url` | methods | Preview ports |
 | `Agent.idle_timeout_seconds` | property | `int \| None` |
 | `AsyncAgent.*` | mirror | Same surface with `await` |

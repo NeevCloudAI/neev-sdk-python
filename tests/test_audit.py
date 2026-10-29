@@ -57,7 +57,8 @@ def _event(uid: str, operation: str, status_id: int, actor: dict, **extra) -> di
         "status": status,
         "actor": actor,
         "api": {"operation": operation, "request": {"uid": f"req-{uid}"}},
-        "cloud": {"provider": "NeevCloud", "account": {"uid": "org1"}, "project_uid": "proj1"},
+        "cloud": {"provider": "NeevCloud", "account": {"uid": "proj1"}, "org": {"uid": "org1"}},
+        "device": {"type_id": 6, "type": "Virtual", "uid": SANDBOX_ID},
         "src_endpoint": {"name": "unknown"},
         "osint": [],
         "metadata": {
@@ -82,11 +83,11 @@ TRAIL = {
             1,
             {
                 "user": {
-                    "type": "api_key",
+                    "type": "API Key",
                     "type_id": 99,
                     "uid": "key-1",
                     "name": "ci",
-                    "credential_uid": "key-1",
+                    "programmatic_credentials": [{"uid": "key-1", "type": "API Key"}],
                 }
             },
             duration=120,
@@ -97,7 +98,7 @@ TRAIL = {
             "e2",
             "fs.read",
             2,
-            {"user": {"type": "user", "type_id": 1, "uid": "user-1"}, "session": {"uid": "s1"}},
+            {"user": {"type": "User", "type_id": 1, "uid": "user-1"}, "session": {"uid": "s1"}},
             status_code="permission_denied",
             resources=[{"type": "file", "name": "notes.txt"}],
         ),
@@ -124,9 +125,10 @@ def _assert_trail(trail: AuditTrail) -> None:
     assert first.api.operation == "exec"
     assert first.status == "Success"
     assert first.time == 1767268800000
-    assert first.actor.user.type == "api_key"
+    assert first.actor.user.type == "API Key"
     assert first.actor.user.name == "ci"
-    assert first.actor.user.credential_uid == "key-1"
+    creds = first.actor.user.programmatic_credentials
+    assert creds is not None and creds[0].uid == "key-1"
     assert second.status_code == "permission_denied"
     assert second.actor.user.name is None
     assert second.actor.session is not None and second.actor.session.uid == "s1"

@@ -83,6 +83,7 @@ These need only your credentials.
 | --- | --- |
 | [`create_agent.py`](create_agent.py) | Create an agent, use its sandbox, update, pause, delete |
 | [`agent_ports_audit.py`](agent_ports_audit.py) | An agent's preview URL, keepalive and audit trail |
+| [`agent_snapshot_fork_rollback.py`](agent_snapshot_fork_rollback.py) | Snapshot an agent, fork it into a new agent, roll it back |
 
 ## Agent tools
 

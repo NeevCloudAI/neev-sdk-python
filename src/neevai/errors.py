@@ -120,6 +120,12 @@ class PreconditionFailedError(APIError):
     pass
 
 
+class TooEarlyError(APIError):
+    """425 - The resource is not ready yet (for example, an agent still provisioning); retry later."""
+
+    pass
+
+
 class RateLimitError(APIError):
     """429 - Rate limit exceeded."""
 
@@ -194,6 +200,8 @@ def error_from_status(
         return ConflictError(status_code, body, request_id, **kwargs)
     elif status_code == 412:
         return PreconditionFailedError(status_code, body, request_id, **kwargs)
+    elif status_code == 425:
+        return TooEarlyError(status_code, body, request_id, **kwargs)
     elif status_code == 429:
         return RateLimitError(status_code, body, request_id, **kwargs)
     elif status_code == 503:

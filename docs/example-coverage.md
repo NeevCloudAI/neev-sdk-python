@@ -50,7 +50,10 @@ examples themselves, see [`examples/README.md`](../examples/README.md).
 | `client.agents.pause` / `.resume` | — | `agent = client.agents.pause(agent_id)` / `client.agents.resume(agent_id)` |
 | `client.agents.delete` | `create_agent.py` | `client.agents.delete(agent_id)` |
 | `client.agents.keepalive` / `agent.keepalive` | `agent_ports_audit.py` | `agent.keepalive()` |
-| `client.agents.rollback` / `agent.rollback` | — | `agent.rollback(snapshot_id)` |
+| `client.agents.rollback` / `agent.rollback` | `agent_snapshot_fork_rollback.py` | `agent.rollback(snapshot_id)` |
+| `client.agents.create_snapshot` / `agent.snapshot` | `agent_snapshot_fork_rollback.py` | `snap = agent.snapshot({"name": "before-change"}, wait_until_ready=True)` |
+| `client.agents.list_snapshots` / `agent.snapshots` | `agent_snapshot_fork_rollback.py` | `snaps = agent.snapshots()` |
+| `client.agents.fork` / `agent.fork` | `agent_snapshot_fork_rollback.py` | `fork = agent.fork("web-fork"); fork.wait_until_ready()` |
 | `agent.expose_port` / `.list_ports` / `.revoke_port` / `.get_url` | `agent_ports_audit.py` | `port = agent.expose_port(3000, slug=random_slug())` |
 | `client.agents.audit` / `agent.audit` | `agent_ports_audit.py` | `trail = agent.audit(limit=20)` |
 | `agent.idle_timeout_seconds` | `agent_ports_audit.py` | `print(agent.idle_timeout_seconds)` |
@@ -114,6 +117,7 @@ examples themselves, see [`examples/README.md`](../examples/README.md).
 | Resize & egress edits | `examples/update_resize_egress.py` | Resize + re-scope egress in one update → `egress_add` / `egress_remove` |
 | Audit trail | `examples/audit_trail.py` | Run commands → page through `sandbox.audit()` |
 | Agent ports & audit | `examples/agent_ports_audit.py` | Agent preview port with slug → rotate → `keepalive` → `audit` → revoke |
+| Agent snapshot, fork & rollback | `examples/agent_snapshot_fork_rollback.py` | Write state → snapshot → modify → fork → check fork has the modified file → rollback → check original state → cleanup |
 | Streaming exec | `examples/streaming_exec.py` | `exec_stream` with progress output |
 | Processes lifecycle | `examples/processes.py` | Create → connect_url wait → Ready → runtime probe → start → follow → logs → list → kill → wait |
 | Process pool | `examples/process_pool.py` | Create → connect_url wait → Ready → runtime probe → parallel start → list → kill_all → wait |

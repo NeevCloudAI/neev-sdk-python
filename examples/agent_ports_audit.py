@@ -63,7 +63,10 @@ def main() -> None:
             for e in trail.data:
                 at = datetime.fromtimestamp(e.time / 1000, tz=timezone.utc)
                 who = e.actor.user.name or e.actor.user.uid
-                print(f"{at:%H:%M:%S} {e.api.operation:<14} {who} {e.status}")
+                # A recorded program has no api; its process names it instead.
+                proc = e.process or e.actor.process
+                what = e.api.operation if e.api else (proc.name if proc else None)
+                print(f"{at:%H:%M:%S} {what or '-':<14} {who} {e.status}")
 
             agent.revoke_port(PORT)
         except NeevAIError as e:

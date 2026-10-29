@@ -309,7 +309,8 @@ def test_sandboxes_create_snapshot(mock_transport):
     client._transport.request = capturing_request  # type: ignore[method-assign]
 
     snap = client.sandboxes.create_snapshot(sb.id, {"name": "demo-snap"})
-    assert captured_bodies == [{"name": "demo-snap"}]
+    client.sandboxes.create_snapshot(sb.id, {"snapshot_type": "filesystem"})
+    assert captured_bodies == [{"name": "demo-snap"}, {"snapshot_type": "filesystem"}]
     assert str(snap.id) == _first_snapshot_id()
     assert snap.status == SnapshotStatus.Pending
     client.close()

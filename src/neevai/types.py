@@ -164,10 +164,7 @@ from neevai.generated.aiagent import (  # noqa: F401
     SandboxTemplateListResponse as SandboxTemplateListResponse,
 )
 from neevai.generated.aiagent import (  # noqa: F401
-    Snapshot as Snapshot,
-)
-from neevai.generated.aiagent import (  # noqa: F401
-    SnapshotListResponse as SnapshotListResponse,
+    Snapshot as _GeneratedSnapshot,
 )
 from neevai.generated.aiagent import (  # noqa: F401
     SnapshotStatus as SnapshotStatus,
@@ -219,11 +216,33 @@ class SandboxData(_GeneratedSandbox):
     phase: str  # type: ignore[assignment]  # pyright: ignore[reportIncompatibleVariableOverride]
 
 
+class Snapshot(_GeneratedSnapshot):
+    """Snapshot record with an optional ``trigger``.
+
+    Older API versions send no ``trigger``; accept its absence at the SDK boundary.
+    """
+
+    trigger: SnapshotTrigger | None = None  # type: ignore[assignment]  # pyright: ignore[reportIncompatibleVariableOverride]
+
+
+class SnapshotListResponse(BaseModel):
+    items: list[Snapshot]
+    total: int
+    page: int
+    limit: int
+
+
 class CreateSnapshotParams(BaseModel):
-    """Caller-facing params for creating a sandbox snapshot."""
+    """Caller-facing params for creating a sandbox snapshot.
+
+    ``snapshot_type`` ``"filesystem"`` captures /workspace only, without process
+    memory, so it can be restored onto any sandbox image; ``"full"`` (the server
+    default) captures both.
+    """
 
     name: str | None = None
     retain_for: str | None = None
+    snapshot_type: Literal["full", "filesystem"] | None = None
 
 
 class SandboxListResponse(BaseModel):
