@@ -266,6 +266,8 @@ An agent is a catalogue template (such as `"claude-code"`) running on its own sa
 | `get(id, org_id=None, project_id=None)` | `Agent` | Fetches the current record for an agent by ID or name. |
 | `update(id, params, org_id=None, project_id=None, *, allow_internet=None, allow_egress=None)` | `Agent` | In-place update of egress, cpu/memory (`resources`; defaults & bounds in [Agent resources](./api-inventory.md#agent-resources)) and `idle_timeout_seconds`. `allow_internet` / `allow_egress` are the same egress convenience as `create`; `egress_add` / `egress_remove` edit the allow-list in place. Rejects `{}` locally, naming every field. |
 | `keepalive(id, ...)` / `rollback(id, snapshot_id, ...)` | `Agent` | Resets the idle timer / rolls the backing sandbox back to a snapshot. |
+| `create_snapshot(id, params=None, ...)` / `list_snapshots(id, page=None, limit=None, ...)` | `Snapshot` / `list[Snapshot]` | Snapshots the backing sandbox (starts `Pending`) / lists its snapshots. |
+| `fork(id, name, ...)` | `Agent` | Forks into a new agent, `Provisioning` until ready; the source keeps running. |
 | `expose_port` / `list_ports` / `revoke_port` / `get_port_url` | as on `client.sandboxes` | Agent preview ports, same signatures. |
 | `audit(id, *, from_=None, to=None, cursor=None, limit=None, ...)` | `AuditTrail` | The agent's audit trail, with the same filters. |
 | `pause(id, org_id=None, project_id=None)` | `Agent` | Pauses the agent and its backing sandbox. |
@@ -290,6 +292,7 @@ Returned by `client.agents.create()`, `get()`, `list().items`, etc.
 | `wait_until_ready(timeout_ms=120000, poll_interval_ms=2000, on_poll=None)` | method — polls until `Ready`; fails fast on `Failed` / `Paused` |
 | `pause()` / `resume()` / `delete()` | methods |
 | `keepalive()` / `rollback(snapshot_id)` / `audit(...)` | methods |
+| `snapshot(params=None, *, wait_until_ready=False, ...)` / `snapshots()` / `fork(name)` | methods — `fork` returns a new `Agent` handle |
 | `expose_port(port, *, slug=None)` / `list_ports()` / `revoke_port(port)` / `get_url(port, ..., *, slug=None)` | methods — preview ports |
 | `sandbox()` | method — backing `Sandbox` handle for runtime `exec`, `files`, and `processes` |
 | `to_json()` | method |
@@ -386,6 +389,7 @@ Every failure is a `NeevAIError`. API failures are `APIError` subclasses with `s
 | `NotFoundError` | 404: no such resource |
 | `ConflictError` | 409: conflicting state |
 | `PreconditionFailedError` | 412: the sandbox is not in a state that allows the call |
+| `TooEarlyError` | 425: not ready yet, such as an agent still provisioning; retry later |
 | `RateLimitError` | 429: too many requests |
 | `DeadlineExceededError` | 504: the call ran past its deadline |
 | `InternalServerError` | 5xx (`ServiceUnavailableError` for 503) |
@@ -436,7 +440,10 @@ Minimal one-liners for each public API. Runnable examples link to repo paths.
 | `client.agents.pause(id)` / `.resume(id)` | `agent = client.agents.pause(agent_id)` / `client.agents.resume(agent_id)` | `agent = await client.agents.pause(agent_id)` / `await client.agents.resume(agent_id)` | [create_agent.py](../examples/create_agent.py) (pause via handle) |
 | `client.agents.delete(id)` | `client.agents.delete(agent_id)` | `await client.agents.delete(agent_id)` | [create_agent.py](../examples/create_agent.py) |
 | `client.agents.keepalive(id)` | `client.agents.keepalive(agent_id)` | `await client.agents.keepalive(agent_id)` | [agent_ports_audit.py](../examples/agent_ports_audit.py) |
-| `client.agents.rollback(id, snapshot_id)` | `client.agents.rollback(agent_id, snap_id)` | `await client.agents.rollback(agent_id, snap_id)` | — |
+| `client.agents.rollback(id, snapshot_id)` | `client.agents.rollback(agent_id, snap_id)` | `await client.agents.rollback(agent_id, snap_id)` | [agent_snapshot_fork_rollback.py](../examples/agent_snapshot_fork_rollback.py) (via `agent.rollback`) |
+| `client.agents.create_snapshot(id, ...)` | `snap = client.agents.create_snapshot(agent_id, {"name": "demo"})` | `snap = await client.agents.create_snapshot(agent_id, {"name": "demo"})` | [agent_snapshot_fork_rollback.py](../examples/agent_snapshot_fork_rollback.py) (via `agent.snapshot`) |
+| `client.agents.list_snapshots(id)` | `snaps = client.agents.list_snapshots(agent_id)` | `snaps = await client.agents.list_snapshots(agent_id)` | [agent_snapshot_fork_rollback.py](../examples/agent_snapshot_fork_rollback.py) (via `agent.snapshots`) |
+| `client.agents.fork(id, name)` | `fork = client.agents.fork(agent_id, "fork-name")` | `fork = await client.agents.fork(agent_id, "fork-name")` | [agent_snapshot_fork_rollback.py](../examples/agent_snapshot_fork_rollback.py) (via `agent.fork`) |
 | `client.agents.expose_port(id, port, ..., *, slug)` | `p = client.agents.expose_port(agent_id, 3000)` | `p = await client.agents.expose_port(agent_id, 3000)` | [agent_ports_audit.py](../examples/agent_ports_audit.py) |
 | `client.agents.audit(id, ...)` | `trail = client.agents.audit(agent_id, limit=50)` | `trail = await client.agents.audit(agent_id, limit=50)` | [agent_ports_audit.py](../examples/agent_ports_audit.py) |
 | `client.agent_templates.list(...)` | `page = client.agent_templates.list()` | `page = await client.agent_templates.list()` | [create_agent.py](../examples/create_agent.py) |
@@ -475,7 +482,9 @@ Minimal one-liners for each public API. Runnable examples link to repo paths.
 | `agent.sandbox()` | `sandbox = agent.sandbox()` — then `exec` / `files` / `processes` | `sandbox = await agent.sandbox()` | [create_agent.py](../examples/create_agent.py) |
 | `agent.update(params)` | `agent.update({"resources": {...}})` | `await agent.update({...})` | [create_agent.py](../examples/create_agent.py) |
 | `agent.pause()` / `.resume()` / `.delete()` | `agent.pause(); agent.resume(); agent.delete()` | `await agent.pause(); await agent.resume(); await agent.delete()` | [create_agent.py](../examples/create_agent.py) (pause/delete; resume via handle API) |
-| `agent.keepalive()` / `.rollback(snapshot_id)` | `agent.keepalive()` | `await agent.keepalive()` | [agent_ports_audit.py](../examples/agent_ports_audit.py) |
+| `agent.keepalive()` / `.rollback(snapshot_id)` | `agent.keepalive()` | `await agent.keepalive()` | [agent_ports_audit.py](../examples/agent_ports_audit.py), [agent_snapshot_fork_rollback.py](../examples/agent_snapshot_fork_rollback.py) (rollback) |
+| `agent.snapshot(...)` / `.snapshots()` | `snap = agent.snapshot(wait_until_ready=True)` | `snap = await agent.snapshot(wait_until_ready=True)` | [agent_snapshot_fork_rollback.py](../examples/agent_snapshot_fork_rollback.py) |
+| `agent.fork(name)` | `fork = agent.fork("fork-name"); fork.wait_until_ready()` | `fork = await agent.fork("fork-name")` | [agent_snapshot_fork_rollback.py](../examples/agent_snapshot_fork_rollback.py) |
 | `agent.expose_port(port, *, slug)` / `.list_ports()` / `.revoke_port(port)` / `.get_url(port)` | `p = agent.expose_port(3000)` | `p = await agent.expose_port(3000)` | [agent_ports_audit.py](../examples/agent_ports_audit.py) |
 | `agent.audit(...)` | `trail = agent.audit(limit=50)` | `trail = await agent.audit(limit=50)` | [agent_ports_audit.py](../examples/agent_ports_audit.py) |
 | `agent.idle_timeout_seconds` | `print(agent.idle_timeout_seconds)` | same | — |

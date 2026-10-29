@@ -11,13 +11,18 @@ from neevai.errors import NeevAIError
 from neevai.resources.sandboxes import (
     DEFAULT_PORT_POLL_INTERVAL_MS,
     DEFAULT_PORT_WAIT_TIMEOUT_MS,
+    DEFAULT_SNAPSHOT_POLL_INTERVAL_MS,
+    DEFAULT_SNAPSHOT_WAIT_TIMEOUT_MS,
+    check_snapshot_wait,
 )
 from neevai.types import (
     AgentData,
     AgentLastCrash,
     AuditTrail,
+    CreateSnapshotParams,
     SandboxPort,
     Scope,
+    Snapshot,
     UpdateAgentParams,
 )
 
@@ -227,6 +232,64 @@ class Agent:
         )
         self._state = next_state._state
         return self
+
+    def snapshot(
+        self,
+        params: CreateSnapshotParams | Mapping[str, Any] | None = None,
+        *,
+        wait_until_ready: bool = False,
+        timeout_ms: int = DEFAULT_SNAPSHOT_WAIT_TIMEOUT_MS,
+        poll_interval_ms: int = DEFAULT_SNAPSHOT_POLL_INTERVAL_MS,
+    ) -> Snapshot:
+        """Captures a snapshot of the sandbox backing this agent.
+
+        Returns at once with status Pending; with ``wait_until_ready=True`` it waits
+        and returns the Ready snapshot.
+        """
+        if self.agents is None:
+            raise NeevAIError("Cannot snapshot an agent handle with no client context.")
+        if wait_until_ready:
+            # Reject a bad timing before the snapshot exists, so none is left behind.
+            check_snapshot_wait(timeout_ms, poll_interval_ms)
+        org_id = self.scope.org_id if self.scope else None
+        project_id = self.scope.project_id if self.scope else None
+        snapshot = self.agents.create_snapshot(
+            self.id, params, org_id=org_id, project_id=project_id
+        )
+        if not wait_until_ready:
+            return snapshot
+        return self.agents._sandboxes.wait_for_snapshot(
+            snapshot.id,
+            timeout_ms=timeout_ms,
+            poll_interval_ms=poll_interval_ms,
+            org_id=org_id,
+            project_id=project_id,
+        )
+
+    def snapshots(self) -> list[Snapshot]:
+        """Lists snapshots taken of the sandbox backing this agent."""
+        if self.agents is None:
+            raise NeevAIError("Cannot list snapshots on an agent handle with no client context.")
+        return self.agents.list_snapshots(
+            self.id,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+        )
+
+    def fork(self, name: str) -> Agent:
+        """Forks this agent into a new agent seeded from its current state.
+
+        This agent keeps running. The new agent is Provisioning until it is ready;
+        call ``wait_until_ready()`` on it before use.
+        """
+        if self.agents is None:
+            raise NeevAIError("Cannot fork an agent handle with no client context.")
+        return self.agents.fork(
+            self.id,
+            name,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+        )
 
     def audit(
         self,
@@ -518,6 +581,64 @@ class AsyncAgent:
         )
         self._state = next_state._state
         return self
+
+    async def snapshot(
+        self,
+        params: CreateSnapshotParams | Mapping[str, Any] | None = None,
+        *,
+        wait_until_ready: bool = False,
+        timeout_ms: int = DEFAULT_SNAPSHOT_WAIT_TIMEOUT_MS,
+        poll_interval_ms: int = DEFAULT_SNAPSHOT_POLL_INTERVAL_MS,
+    ) -> Snapshot:
+        """Captures a snapshot of the sandbox backing this agent asynchronously.
+
+        Returns at once with status Pending; with ``wait_until_ready=True`` it waits
+        and returns the Ready snapshot.
+        """
+        if self.agents is None:
+            raise NeevAIError("Cannot snapshot an agent handle with no client context.")
+        if wait_until_ready:
+            # Reject a bad timing before the snapshot exists, so none is left behind.
+            check_snapshot_wait(timeout_ms, poll_interval_ms)
+        org_id = self.scope.org_id if self.scope else None
+        project_id = self.scope.project_id if self.scope else None
+        snapshot = await self.agents.create_snapshot(
+            self.id, params, org_id=org_id, project_id=project_id
+        )
+        if not wait_until_ready:
+            return snapshot
+        return await self.agents._sandboxes.wait_for_snapshot(
+            snapshot.id,
+            timeout_ms=timeout_ms,
+            poll_interval_ms=poll_interval_ms,
+            org_id=org_id,
+            project_id=project_id,
+        )
+
+    async def snapshots(self) -> list[Snapshot]:
+        """Lists snapshots taken of the sandbox backing this agent asynchronously."""
+        if self.agents is None:
+            raise NeevAIError("Cannot list snapshots on an agent handle with no client context.")
+        return await self.agents.list_snapshots(
+            self.id,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+        )
+
+    async def fork(self, name: str) -> AsyncAgent:
+        """Forks this agent into a new agent seeded from its current state asynchronously.
+
+        This agent keeps running. The new agent is Provisioning until it is ready;
+        await ``wait_until_ready()`` on it before use.
+        """
+        if self.agents is None:
+            raise NeevAIError("Cannot fork an agent handle with no client context.")
+        return await self.agents.fork(
+            self.id,
+            name,
+            org_id=self.scope.org_id if self.scope else None,
+            project_id=self.scope.project_id if self.scope else None,
+        )
 
     async def audit(
         self,

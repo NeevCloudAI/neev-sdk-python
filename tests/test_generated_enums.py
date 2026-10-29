@@ -10,6 +10,6 @@ def test_snapshot_status_equals_its_string() -> None:
 
 
 def test_audit_actor_type_equals_its_string() -> None:
-    """Callers filter audit events with `event.actor.user.type == "api_key"`."""
-    user = AuditActorUser.model_validate({"type": "api_key", "type_id": 99, "uid": "key-1"})
-    assert user.type == "api_key"
+    """Callers filter audit events with `event.actor.user.type == "API Key"`."""
+    user = AuditActorUser.model_validate({"type": "API Key", "type_id": 99, "uid": "key-1"})
+    assert user.type == "API Key"

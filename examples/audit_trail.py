@@ -31,7 +31,10 @@ TEMPLATE = os.environ.get("NEEV_SANDBOX_TEMPLATE_ID", "sb-ubuntu-26-04-dev")
 def show(e: AuditEvent) -> None:
     at = datetime.fromtimestamp(e.time / 1000, tz=timezone.utc)
     who = e.actor.user.name or e.actor.user.uid
-    print(f"{at:%H:%M:%S} {e.api.operation:<14} {who:<20} {e.status}")
+    # A recorded program has no api; its process names it instead.
+    proc = e.process or e.actor.process
+    what = e.api.operation if e.api else (proc.name if proc else None)
+    print(f"{at:%H:%M:%S} {what or '-':<14} {who:<20} {e.status}")
 
 
 def main() -> None:
