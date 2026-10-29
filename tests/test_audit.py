@@ -57,7 +57,8 @@ def _event(uid: str, operation: str, status_id: int, actor: dict, **extra) -> di
         "status": status,
         "actor": actor,
         "api": {"operation": operation, "request": {"uid": f"req-{uid}"}},
-        "cloud": {"provider": "NeevCloud", "account": {"uid": "org1"}, "project_uid": "proj1"},
+        "cloud": {"provider": "NeevCloud", "account": {"uid": "proj1"}, "org": {"uid": "org1"}},
+        "device": {"type_id": 6, "type": "Virtual", "uid": SANDBOX_ID},
         "src_endpoint": {"name": "unknown"},
         "osint": [],
         "metadata": {
@@ -325,7 +326,7 @@ def _program(activity_id: int, name: str, **extra) -> dict:
         "status": "Success",
         "actor": {"user": {"type": "Unknown", "type_id": 0, "uid": "unknown"}},
         "device": {"type_id": 6, "type": "Virtual", "uid": SANDBOX_ID},
-        "cloud": {"provider": "NeevCloud"},
+        "cloud": {"provider": "NeevCloud", "account": {"uid": "proj1"}, "org": {"uid": "org1"}},
         "osint": [],
         "metadata": {
             "version": "1.9.0",
@@ -412,7 +413,7 @@ def test_audit_parses_every_event_class():
     assert launch.process.file.path == "/usr/bin/curl"
     assert launch.process.parent_process is not None
     assert launch.process.parent_process.pid == 39
-    assert launch.device is not None and launch.device.uid == SANDBOX_ID
+    assert launch.device.uid == SANDBOX_ID
     assert launch.actor.user.type == "Unknown"
     assert call.api is not None and call.api.operation == "exec"
     client.close()

@@ -14,6 +14,7 @@ from neevai.resources.sandboxes import (
     DEFAULT_PORT_POLL_INTERVAL_MS,
     DEFAULT_PORT_WAIT_TIMEOUT_MS,
     _await_for_preview_url,
+    _prepare_create_snapshot_body,
     _wait_for_preview_url,
 )
 from neevai.types import (
@@ -21,7 +22,10 @@ from neevai.types import (
     AgentListResponse,
     AuditTrail,
     CreateAgentParams,
+    CreateSnapshotParams,
     SandboxPort,
+    Snapshot,
+    SnapshotListResponse,
     UpdateAgentParams,
 )
 
@@ -279,6 +283,63 @@ class Agents:
             "POST",
             f"{_agents_path(scope)}/{id}/rollback",
             body={"snapshot_id": snapshot_id},
+        )
+        data = coerce_model(AgentData, raw)
+        return Agent(self, data, scope)
+
+    def create_snapshot(
+        self,
+        id: str,
+        params: CreateSnapshotParams | Mapping[str, Any] | None = None,
+        org_id: str | None = None,
+        project_id: str | None = None,
+    ) -> Snapshot:
+        """Snapshots the sandbox backing an agent (returns immediately with status Pending)."""
+        scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
+        raw = self._client._transport.request(
+            "POST",
+            f"{_agents_path(scope)}/{id}/snapshots",
+            body=_prepare_create_snapshot_body(params),
+        )
+        return coerce_model(Snapshot, raw)
+
+    def list_snapshots(
+        self,
+        id: str,
+        page: int | None = None,
+        limit: int | None = None,
+        org_id: str | None = None,
+        project_id: str | None = None,
+    ) -> builtins.list[Snapshot]:
+        """Lists snapshots taken of the sandbox backing an agent."""
+        scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
+        query: dict[str, Any] = {}
+        if page is not None:
+            query["page"] = page
+        if limit is not None:
+            query["limit"] = limit
+        raw = self._client._transport.request(
+            "GET", f"{_agents_path(scope)}/{id}/snapshots", query=query
+        )
+        return builtins.list(coerce_model(SnapshotListResponse, raw).items)
+
+    def fork(
+        self,
+        id: str,
+        name: str,
+        org_id: str | None = None,
+        project_id: str | None = None,
+    ) -> Agent:
+        """Forks an agent into a new agent seeded from its current state.
+
+        The source agent keeps running. The new agent is Provisioning until it is
+        ready; call ``wait_until_ready()`` on it before use.
+        """
+        from neevai.handles.agent import Agent
+
+        scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
+        raw = self._client._transport.request(
+            "POST", f"{_agents_path(scope)}/{id}/fork", body={"name": name}
         )
         data = coerce_model(AgentData, raw)
         return Agent(self, data, scope)
@@ -584,6 +645,63 @@ class AsyncAgents:
             "POST",
             f"{_agents_path(scope)}/{id}/rollback",
             body={"snapshot_id": snapshot_id},
+        )
+        data = coerce_model(AgentData, raw)
+        return AsyncAgent(self, data, scope)
+
+    async def create_snapshot(
+        self,
+        id: str,
+        params: CreateSnapshotParams | Mapping[str, Any] | None = None,
+        org_id: str | None = None,
+        project_id: str | None = None,
+    ) -> Snapshot:
+        """Snapshots the sandbox backing an agent asynchronously (returns with status Pending)."""
+        scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
+        raw = await self._client._transport.request(
+            "POST",
+            f"{_agents_path(scope)}/{id}/snapshots",
+            body=_prepare_create_snapshot_body(params),
+        )
+        return coerce_model(Snapshot, raw)
+
+    async def list_snapshots(
+        self,
+        id: str,
+        page: int | None = None,
+        limit: int | None = None,
+        org_id: str | None = None,
+        project_id: str | None = None,
+    ) -> builtins.list[Snapshot]:
+        """Lists snapshots taken of the sandbox backing an agent asynchronously."""
+        scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
+        query: dict[str, Any] = {}
+        if page is not None:
+            query["page"] = page
+        if limit is not None:
+            query["limit"] = limit
+        raw = await self._client._transport.request(
+            "GET", f"{_agents_path(scope)}/{id}/snapshots", query=query
+        )
+        return builtins.list(coerce_model(SnapshotListResponse, raw).items)
+
+    async def fork(
+        self,
+        id: str,
+        name: str,
+        org_id: str | None = None,
+        project_id: str | None = None,
+    ) -> AsyncAgent:
+        """Forks an agent into a new agent seeded from its current state asynchronously.
+
+        The source agent keeps running. The new agent is Provisioning until it is
+        ready; await ``wait_until_ready()`` on it before use.
+        """
+        from neevai.handles.agent import AsyncAgent
+
+        scope = self._client._resolve_scope(org_id=org_id, project_id=project_id)
+        raw = await self._client._transport.request(
+            "POST", f"{_agents_path(scope)}/{id}/fork", body={"name": name}
         )
         data = coerce_model(AgentData, raw)
         return AsyncAgent(self, data, scope)

@@ -187,7 +187,7 @@ class Snapshot(BaseModel):
     name: str | None = Field(None, description="Optional customer-supplied name.")
     status: SnapshotStatus
     snapshot_type: SnapshotType
-    trigger: SnapshotTrigger | None = None
+    trigger: SnapshotTrigger
     source_region: str = Field(..., description="Region where the snapshot is stored.")
     size_bytes: int | None = Field(
         None,
@@ -229,6 +229,7 @@ class CreateSnapshotRequest(BaseModel):
         None,
         description="Optional name for this snapshot. Must be a valid DNS name (lowercase\nalphanumeric or '-', starting with a letter, max 63 characters) so it\ncan name sandboxes created on fork and restore. Omit to leave unnamed.\n",
     )
+    snapshot_type: SnapshotType | None = None
 
 
 class RollbackSandboxRequest(BaseModel):
@@ -387,11 +388,11 @@ class TypeId(IntEnum):
 class AuditDevice(BaseModel):
     type_id: TypeId = Field(..., description="Always 6, Virtual.")
     type: str | None = Field(None, description="Always Virtual.")
-    uid: str | None = Field(None, description="The sandbox id.")
+    uid: str = Field(..., description="The sandbox id.")
 
 
 class AuditParentProcess(BaseModel):
-    pid: int | None = Field(None, description="Identifies the parent within the sandbox.")
+    pid: int = Field(..., description="Identifies the parent within the sandbox.")
 
 
 class TypeId1(IntEnum):
@@ -594,8 +595,8 @@ class AuditResource(BaseModel):
 
 class AuditCloud(BaseModel):
     provider: str = Field(..., description="Always NeevCloud.")
-    account: AuditAccount | None = None
-    org: AuditOrg | None = None
+    account: AuditAccount
+    org: AuditOrg
 
 
 class AuditMetadata(BaseModel):
@@ -616,11 +617,11 @@ class AuditMetadata(BaseModel):
 class AuditActorUser(BaseModel):
     type: Type1 = Field(
         ...,
-        description="The OCSF caption of type_id: User for a user in the console, System for the platform acting on its own, such as pairing a device, Unknown when no principal can be named, and API Key (type_id 99, Other) for an API key.",
+        description="The OCSF caption of type_id: User for a user in the console, System for the platform acting on its own, such as pairing a device, and API Key (type_id 99, Other) for an API key. Unknown is only for a program the sandbox ran on its own, such as a background process, since no caller started it.",
     )
     type_id: TypeId2 = Field(
         ...,
-        description="OCSF user.type_id: 0 (Unknown), 1 (User), 3 (System), 99 (Other) for an API key.",
+        description="OCSF user.type_id: 1 (User), 3 (System), 99 (Other) for an API key, the same values as the platform audit log, so use it to match actors across them. 0 (Unknown) is only for a program the sandbox ran on its own.",
     )
     uid: str = Field(
         ...,
@@ -1197,7 +1198,7 @@ class AuditEvent(BaseModel):
         description="What a program returned when it ended. Zero means it succeeded. Present on a Process Activity Terminate event unless a signal stopped the program.",
     )
     dst_endpoint: AuditDstEndpoint | None = None
-    device: AuditDevice | None = None
+    device: AuditDevice
     resources: list[AuditResource] | None = Field(
         None,
         description="What the call touched: the sandbox, then any file or process it named, the program it ran, and the terminal it ran in. Present on API Activity only; Process and Network events name the sandbox in device.",

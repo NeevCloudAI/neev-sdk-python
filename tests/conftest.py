@@ -70,6 +70,7 @@ def _make_snapshot_record(
         "name": req.get("name"),
         "status": "Pending",
         "snapshot_type": "full",
+        "trigger": "manual",
         "sandbox_format_version": 1,
         "restorability": "restorable",
         "source_region": "as-south-1",
