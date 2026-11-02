@@ -521,16 +521,18 @@ def test_sandboxes_update_resources_and_egress_single_patch(mock_transport):
     client.close()
 
 
-def test_sandboxes_update_execution_trace_alone(mock_transport):
+def test_sandboxes_update_execution_trace(mock_transport):
     client = _make_client(mock_transport)
     sb = client.sandboxes.create({"name": "s1", "sandbox_template_id": "sb-x"})
+    assert sb.execution_trace is True
     captured = _capture_requests(client)
 
-    client.sandboxes.update(sb.id, {"execution_trace": False})
+    updated = client.sandboxes.update(sb.id, {"execution_trace": False})
 
-    method, _path, body = captured[-1]
+    method, _, body = captured[-1]
     assert method == "PATCH"
     assert body == {"execution_trace": False}
+    assert updated.execution_trace is False
     client.close()
 
 

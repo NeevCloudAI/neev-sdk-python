@@ -13,7 +13,11 @@ __all__ = [
     "AuditAPI",
     "AuditActor",
     "AuditActorUser",
+    "AuditDevice",
+    "AuditDstEndpoint",
     "AuditEvent",
+    "AuditFile",
+    "AuditProcess",
     "AuditResource",
     "AuditTrail",
     "CreateAgentParams",
@@ -92,7 +96,19 @@ from neevai.generated.aiagent import (  # noqa: F401
     AuditAPI as AuditAPI,
 )
 from neevai.generated.aiagent import (  # noqa: F401
+    AuditDevice as AuditDevice,
+)
+from neevai.generated.aiagent import (  # noqa: F401
+    AuditDstEndpoint as AuditDstEndpoint,
+)
+from neevai.generated.aiagent import (  # noqa: F401
     AuditEvent as AuditEvent,
+)
+from neevai.generated.aiagent import (  # noqa: F401
+    AuditFile as AuditFile,
+)
+from neevai.generated.aiagent import (  # noqa: F401
+    AuditProcess as AuditProcess,
 )
 from neevai.generated.aiagent import (  # noqa: F401
     AuditResource as AuditResource,
