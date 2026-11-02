@@ -64,7 +64,7 @@ Example Output
 
 ::
 
-    AI code-interpreter (gpt-oss-120b → Neev sandbox)
+    AI code-interpreter (gpt-oss-120b -> Neev sandbox)
     task: Print every prime number below 50…
 
     [sandbox] creating (template=sb-ubuntu-26-04-dev)…
@@ -190,7 +190,7 @@ def chat(messages: list[dict[str, Any]]) -> tuple[dict[str, Any], dict[str, Any]
 
 
 def main() -> None:
-    line(_bold("AI code-interpreter (gpt-oss-120b -> Neev sandbox)"))
+    line(_bold(f"AI code-interpreter ({NEEV_MODEL} -> Neev sandbox)"))
     line(_dim(f"task: {TASK}"))
 
     with NeevAI() as client:

@@ -389,8 +389,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Analyze a git repository in a sandbox.")
     parser.add_argument(
         "--repo",
-        default="https://github.com/NeevCloudAI/neevai-sdk-python",
-        help="Repository URL to clone and analyze (default: neevai-sdk-python)",
+        default="https://github.com/NeevCloudAI/neev-sdk-python",
+        help="Repository URL to clone and analyze (default: neev-sdk-python)",
     )
     args = parser.parse_args()
 
