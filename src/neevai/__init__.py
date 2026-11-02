@@ -17,6 +17,7 @@ from neevai.errors import (
     PreconditionFailedError,
     RateLimitError,
     ServiceUnavailableError,
+    TooEarlyError,
 )
 from neevai.handles import Agent, AsyncAgent, AsyncSandbox, Sandbox
 from neevai.resources.agent_templates import (
@@ -152,6 +153,7 @@ __all__ = [
     "NotFoundError",
     "ConflictError",
     "PreconditionFailedError",
+    "TooEarlyError",
     "RateLimitError",
     "DeadlineExceededError",
     "InternalServerError",

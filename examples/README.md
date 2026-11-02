@@ -91,6 +91,7 @@ These need only your credentials.
 | [`create_agent.py`](create_agent.py) | Create an agent, use its sandbox, update, pause, delete |
 | [`agent_ports_audit.py`](agent_ports_audit.py) | An agent's preview URL, keepalive and audit trail |
 | [`agent_auto_resume.py`](agent_auto_resume.py) | Use a paused agent without calling `resume()`; reports whether it woke by itself |
+| [`agent_snapshot_fork_rollback.py`](agent_snapshot_fork_rollback.py) | Snapshot an agent, fork it into a new agent, roll it back |
 
 ## Agent tools
 
@@ -311,23 +312,29 @@ uv run python examples/agent_auto_resume.py
 ```
 → `created agent …, waiting for it to be Ready...` → `agent is Ready; wrote auto-resume-marker.txt into its sandbox …` → `agent paused (status: Paused)` → `reading auto-resume-marker.txt from the paused agent, without calling resume()...` → `file read back intact after N.Ns` → `agent status now: Ready` → `RESULT: woke automatically` (or `the read was refused with 429 and the agent is still Paused (…)` → `calling resume() and reading the file again...` → `file read back intact after N.Ns` → … → `RESULT: resumed explicitly` where automatic wake-up is off) → `deleted agent …`.
 
+**31. Agent snapshot, fork and rollback**
+```bash
+uv run python examples/agent_snapshot_fork_rollback.py
+```
+→ `ready: …` → `snapshot … is Ready` → `agent snapshots: ['before-change']` → `forked: … (…)` → `fork has: modified state` → `after rollback, snapshot-demo (…) has: original state`.
+
 ### Agent tools
 
 These call a model. They use `NEEV_API_KEY` for inference unless you set `NEEV_INFERENCE_API_KEY`, and the model is `gpt-oss-120b` unless you set `NEEV_MODEL`.
 
-**31. Minimal agent loop**
+**32. Minimal agent loop**
 ```bash
 uv run python examples/agent_patterns/minimal_agent.py
 ```
 → `AI code-interpreter (<model> -> Neev sandbox)` → `task: Print every prime number below 50, …` → `[sandbox] creating (template=…)…` → for each step: `━━━━━ step N ━━━━━` → `[model] calling … with N messages…` → `[model] tokens: prompt=… completion=… total=…` → `[model] requested N tool call(s)` → `[tool] run_shell` and `  $ <command>` → `  ┌─ live output ───…` → the command's output as it runs → `  └─ exit 0 ───…` → `[tool] returned N bytes to the model` … → `✅ final answer:` → the model's answer → `[sandbox] deleting …`.
 
-**32. Ready-made agent tools**
+**33. Ready-made agent tools**
 ```bash
 uv run python examples/agent_patterns/agent_tools_loop.py
 ```
 → `[sandbox] …` → `[tool] <name>({…}) -> {…}` (one line per tool call, as the model writes and runs `fib.py`) → `[answer] …` (the model's reply with the last Fibonacci number) → `[sandbox] deleted …`.
 
-**33. LangGraph agent**
+**34. LangGraph agent**
 ```bash
 uv sync --extra agents
 uv run --extra agents python examples/agent_patterns/langchain_agent.py
@@ -338,13 +345,13 @@ uv run --extra agents python examples/agent_patterns/langchain_agent.py
 
 These also call a model, and save their result under `examples/workflow_examples/output/`.
 
-**34. Repository analyzer**
+**35. Repository analyzer**
 ```bash
 uv run python examples/workflow_examples/repo_analyzer.py
 ```
 → `[sandbox] creating (template=…)…` → `[sandbox] created …; waiting until ready…` → `[sandbox] ready: …` → `[bootstrap] git available` and `[bootstrap] ripgrep available` (or `installing … via …` lines if the template lacks them) → `[clone] fetching https://github.com/NeevCloudAI/neev-sdk-python…` → `[clone] done (…)` → for each step: `[model] calling … (step N)…` → `  tokens: …` → `  $ <command>` with its live output between `┌─ live output` and `└─ exit N` … → the four-section report → `[artifact] saved N bytes → …/output/repo-analysis.md` → `[sandbox] deleting …`. Pass `--repo <url>` to analyze another repository.
 
-**35. Browser agent**
+**36. Browser agent**
 ```bash
 uv run python examples/workflow_examples/browser_agent.py --query "AI"
 ```
