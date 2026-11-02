@@ -121,7 +121,7 @@ def _assert_trail(trail: AuditTrail) -> None:
     assert trail.next_cursor == "c2"
     assert [e.metadata.uid for e in trail.data] == ["e1", "e2"]
     first, second = trail.data
-    assert first.api.operation == "exec"
+    assert first.api is not None and first.api.operation == "exec"
     assert first.status == "Success"
     assert first.time == 1767268800000
     assert first.actor.user.type == "api_key"
@@ -305,3 +305,45 @@ async def test_async_handles_pass_filters():
     assert dict(captured[0].url.params) == {"status": "success"}
     assert dict(captured[1].url.params) == {"credential_uid": "key-1"}
     await client.aclose()
+
+
+def test_program_and_connection_events_validate() -> None:
+    unknown = {"type": "unknown", "type_id": 0, "uid": "unknown"}
+    launch = {
+        **_event("p1", "exec", 1, {"user": unknown}),
+        "class_uid": 1007,
+        "class_name": "Process Activity",
+        "category_uid": 1,
+        "category_name": "System Activity",
+        "activity_name": "Launch",
+        "type_uid": 100701,
+        "type_name": "Process Activity: Launch",
+        "process": {
+            "pid": 31,
+            "name": "curl",
+            "cwd": "/workspace",
+            "file": {"path": "/usr/bin/curl"},
+            "parent_process": {"pid": 12},
+        },
+    }
+    connect = {
+        **_event("p2", "connect", 1, {"user": unknown, "process": {"pid": 31, "name": "curl"}}),
+        "class_uid": 4001,
+        "class_name": "Network Activity",
+        "category_uid": 4,
+        "category_name": "Network Activity",
+        "activity_name": "Open",
+        "type_uid": 400101,
+        "type_name": "Network Activity: Open",
+        "dst_endpoint": {"ip": "169.254.25.10", "port": 53},
+    }
+    for e in (launch, connect):
+        del e["api"], e["src_endpoint"]
+
+    trail = AuditTrail.model_validate({**TRAIL, "data": [launch, connect]})
+    first, second = trail.data
+    assert first.api is None
+    assert first.process is not None and first.process.parent_process is not None
+    assert first.process.parent_process.pid == 12
+    assert second.actor.process is not None and second.actor.process.name == "curl"
+    assert second.dst_endpoint is not None and second.dst_endpoint.port == 53

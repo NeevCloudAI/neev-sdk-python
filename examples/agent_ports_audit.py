@@ -62,8 +62,12 @@ def main() -> None:
             trail = agent.audit(limit=20)
             for e in trail.data:
                 at = datetime.fromtimestamp(e.time / 1000, tz=timezone.utc)
-                who = e.actor.user.name or e.actor.user.uid
-                print(f"{at:%H:%M:%S} {e.api.operation:<14} {who} {e.status}")
+                if e.api is not None:
+                    what = f"{e.api.operation} by {e.actor.user.name or e.actor.user.uid}"
+                else:
+                    proc = e.process or e.actor.process
+                    what = f"{e.class_name}: {proc.name if proc else '?'}"
+                print(f"{at:%H:%M:%S} {what} {e.status}")
 
             agent.revoke_port(PORT)
         except NeevAIError as e:

@@ -353,10 +353,14 @@ class ConnectTokenResponse(BaseModel):
 
 class ClassUid(IntEnum):
     AuditClassAPIActivity = 6003
+    AuditClassProcessActivity = 1007
+    AuditClassNetworkActivity = 4001
 
 
 class CategoryUid(IntEnum):
     AuditCategoryApplicationActivity = 6
+    AuditCategorySystemActivity = 1
+    AuditCategoryNetworkActivity = 4
 
 
 class ActivityId(IntEnum):
@@ -374,6 +378,25 @@ class SeverityId(IntEnum):
 class StatusId(IntEnum):
     AuditStatusSuccess = 1
     AuditStatusFailure = 2
+
+
+class AuditParentProcess(BaseModel):
+    pid: int | None = Field(None, description="Identifies the parent within the sandbox.")
+
+
+class AuditFile(BaseModel):
+    path: str = Field(
+        ...,
+        description="The file that actually executed, after symlinks and interpreters were resolved.",
+    )
+
+
+class AuditDstEndpoint(BaseModel):
+    ip: str | None = Field(None, description="The address reached for.")
+    port: int | None = Field(None, description="The port reached for.")
+    name: str | None = Field(
+        None, description="A local socket, as `unix:<path>`, in place of ip and port."
+    )
 
 
 class AuditAPIRequest(BaseModel):
@@ -532,6 +555,17 @@ class SandboxEgressConfig(BaseModel):
     )
 
 
+class AuditProcess(BaseModel):
+    pid: int | None = Field(None, description="Identifies the program within the sandbox.")
+    name: str | None = Field(
+        None,
+        description="The program, without its arguments. A program can name itself freely, so file.path is the stronger field.",
+    )
+    cwd: str | None = Field(None, description="The working directory the program ran in.")
+    file: AuditFile | None = None
+    parent_process: AuditParentProcess | None = None
+
+
 class AuditAPI(BaseModel):
     operation: str = Field(
         ...,
@@ -560,6 +594,7 @@ class AuditMetadata(BaseModel):
 class AuditActor(BaseModel):
     user: AuditActorUser
     session: AuditActorSession | None = None
+    process: AuditProcess | None = None
 
 
 class Agent(BaseModel):
@@ -708,6 +743,10 @@ class AgentTemplateListResponse(BaseModel):
 
 
 class Sandbox(BaseModel):
+    execution_trace: bool | None = Field(
+        None,
+        description="Whether this sandbox records every program that runs inside it, which\nis on unless it was turned off. False means it records only the\noperations you request.\n",
+    )
     id: UUID
     org_id: str
     project_id: str
@@ -1038,6 +1077,10 @@ class UpdateSandboxRequest(BaseModel):
         None,
         description="New egress policy for the sandbox. Replaces the existing policy\nin full and takes effect immediately for new connections — no sandbox\nrestart is required.\n",
     )
+    execution_trace: bool | None = Field(
+        None,
+        description="Record every program that runs inside this sandbox, not only the\noperations you request. On by default; false turns it off, and true\nturns it back on. Takes effect on the running sandbox without a\nrestart. Recording costs a little processor time on each program\nstarted.\n",
+    )
     egress_add: SandboxEgressRules | None = Field(
         None,
         description="Destinations to add to the existing allow-list, leaving every other\nrule in place. Adding a host already allowed replaces its ports and\nprotocol. Rejected with `egress`, and rejected when the current mode\nis deny_all — switch the mode with `egress` first.\n",
@@ -1056,17 +1099,32 @@ class SandboxListResponse(BaseModel):
 
 
 class AuditEvent(BaseModel):
-    class_uid: ClassUid = Field(..., description="OCSF class, API Activity.")
-    class_name: str = Field(..., description="Always API Activity.")
-    category_uid: CategoryUid = Field(..., description="OCSF category, Application Activity.")
-    category_name: str = Field(..., description="Always Application Activity.")
+    class_uid: ClassUid = Field(
+        ...,
+        description="OCSF class, API Activity, Process Activity or Network Activity.",
+    )
+    class_name: str = Field(..., description="The name of class_uid, such as API Activity.")
+    category_uid: CategoryUid = Field(
+        ...,
+        description="OCSF category: Application Activity for an API call, System Activity for a program, Network Activity for a connection.",
+    )
+    category_name: str = Field(
+        ..., description="The name of category_uid, such as Application Activity."
+    )
     activity_id: ActivityId = Field(
         ...,
-        description="1 Create (a write, a started process, a terminal), 2 Read, 3 Update (a move), 4 Delete (a removed file, a killed process), 99 Other.",
+        description="Read with class_uid. For an API call: 1 Create (a write, a started process, a terminal), 2 Read, 3 Update (a move), 4 Delete (a removed file, a killed process), 99 Other. For a program: 1 Launch, 2 Terminate, 99 Other (the sandbox starting). For a connection: 1 Open.",
     )
-    activity_name: str = Field(..., description="The name of activity_id, such as Create.")
-    type_uid: int = Field(..., description="class_uid * 100 + activity_id, such as 600301.")
-    type_name: str = Field(..., description="Such as API Activity: Create.")
+    activity_name: str = Field(
+        ...,
+        description="The name of activity_id within its class, such as Create or Launch.",
+    )
+    type_uid: int = Field(
+        ..., description="class_uid * 100 + activity_id, such as 600301 or 100701."
+    )
+    type_name: str = Field(
+        ..., description="Such as API Activity: Create or Process Activity: Launch."
+    )
     time: int = Field(
         ...,
         description="When the call was recorded, in milliseconds since the Unix epoch.",
@@ -1085,18 +1143,24 @@ class AuditEvent(BaseModel):
     )
     status_detail: str | None = Field(
         None,
-        description="How a code-interpreter cell ended: `ok`, `error`, `deadline_exceeded`, `kernel_restarted`, `memory_exceeded`, `unavailable`, `invalid_response`, or `client_gone` when the caller disconnected first.",
+        description="How a code-interpreter cell ended: `ok`, `error`, `deadline_exceeded`, `kernel_restarted`, `memory_exceeded`, `unavailable`, `invalid_response`, or `client_gone` when the caller disconnected first. On a program that was stopped rather than ending on its own, such as one out of memory or told to stop, `signal <n>` names the signal that stopped it.",
     )
     actor: AuditActor
-    api: AuditAPI
+    api: AuditAPI | None = None
+    process: AuditProcess | None = None
+    exit_code: int | None = Field(
+        None,
+        description="What a program returned when it ended. Zero means it succeeded. Present on a Process Activity Terminate event unless a signal stopped the program.",
+    )
+    dst_endpoint: AuditDstEndpoint | None = None
     resources: list[AuditResource] | None = Field(
         None,
         description="What the call touched: the sandbox, then any file or process it named, the program it ran, and the terminal it ran in.",
     )
     cloud: AuditCloud
-    src_endpoint: AuditEndpoint
+    src_endpoint: AuditEndpoint | None = None
     osint: list[dict[str, Any]] = Field(
-        ..., description="Threat intelligence about the call. Always empty."
+        ..., description="Threat intelligence about the event. Always empty."
     )
     metadata: AuditMetadata
 
