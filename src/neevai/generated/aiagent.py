@@ -380,15 +380,32 @@ class StatusId(IntEnum):
     AuditStatusFailure = 2
 
 
+class TypeId(IntEnum):
+    AuditDeviceTypeVirtual = 6
+
+
+class AuditDevice(BaseModel):
+    type_id: TypeId = Field(..., description="Always 6, Virtual.")
+    type: str | None = Field(None, description="Always Virtual.")
+    uid: str | None = Field(None, description="The sandbox id.")
+
+
 class AuditParentProcess(BaseModel):
     pid: int | None = Field(None, description="Identifies the parent within the sandbox.")
 
 
+class TypeId1(IntEnum):
+    AuditFileTypeExecutable = 8
+
+
 class AuditFile(BaseModel):
+    name: str = Field(..., description="The file name, the last element of path.")
     path: str = Field(
         ...,
         description="The file that actually executed, after symlinks and interpreters were resolved.",
     )
+    type_id: TypeId1 = Field(..., description="Always 8, Executable File.")
+    type: str | None = Field(None, description="Always Executable File.")
 
 
 class AuditDstEndpoint(BaseModel):
@@ -412,16 +429,18 @@ class Type(str, Enum):
     AuditResourceInterpreterContext = "interpreter_context"
 
 
-class AuditResource(BaseModel):
-    type: Type
-    uid: str | None = Field(None, description="The sandbox, terminal or interpreter context id.")
-    name: str | None = Field(
+class AuditResourceData(BaseModel):
+    pid: int | None = Field(
         None,
-        description="A file path (a move reads `source -> destination`), a program name without its arguments, or an SSH channel such as `direct-tcpip db.internal:5432`, `tcpip-forward 0.0.0.0:8080` or `auth-agent <socket>`. A program reads `[redacted]` where its name could not be established, and a terminal command interrupted with Ctrl-C is prefixed `[Ctrl-C]`. Truncated with a trailing `...` if unusually long.",
+        description="The process the call started. A Process Activity event whose pid, or any ancestor's pid through parent_process, equals it was started by this call, so its actor.user is who ran that program.",
     )
 
 
 class AuditAccount(BaseModel):
+    uid: str = Field(..., description="The project id.")
+
+
+class AuditOrg(BaseModel):
     uid: str = Field(..., description="The organization id.")
 
 
@@ -435,38 +454,22 @@ class AuditProduct(BaseModel):
 
 
 class Type1(str, Enum):
-    AuditActorTypeUser = "user"
-    AuditActorTypeAPIKey = "api_key"
-    AuditActorTypeSystem = "system"
-    AuditActorTypeUnknown = "unknown"
+    AuditActorTypeUser = "User"
+    AuditActorTypeAPIKey = "API Key"
+    AuditActorTypeSystem = "System"
+    AuditActorTypeUnknown = "Unknown"
 
 
-class TypeId(IntEnum):
+class TypeId2(IntEnum):
     AuditActorTypeIDUnknown = 0
     AuditActorTypeIDUser = 1
     AuditActorTypeIDSystem = 3
     AuditActorTypeIDOther = 99
 
 
-class AuditActorUser(BaseModel):
-    type: Type1 = Field(
-        ...,
-        description="A user in the console, an API key, the platform acting on its own, such as pairing a device, or unknown.",
-    )
-    type_id: TypeId = Field(
-        ...,
-        description="OCSF user.type_id: 0 (Unknown), 1 (User), 3 (System), 99 (Other) for api_key.",
-    )
-    uid: str = Field(
-        ...,
-        description="The user's id, the API key's id, a stable name for what the platform ran, such as device-pairing, or unknown.",
-    )
-    name: str | None = Field(
-        None, description="The user's or the API key's name when the call ran."
-    )
-    credential_uid: str | None = Field(
-        None, description="The API key the call was made with. Absent for a user."
-    )
+class AuditProgrammaticCredential(BaseModel):
+    uid: str = Field(..., description="The API key's id.")
+    type: str | None = Field(None, description="Always API Key.")
 
 
 class AuditActorSession(BaseModel):
@@ -561,7 +564,9 @@ class AuditProcess(BaseModel):
         None,
         description="The program, without its arguments. A program can name itself freely, so file.path is the stronger field.",
     )
-    cwd: str | None = Field(None, description="The working directory the program ran in.")
+    working_directory: str | None = Field(
+        None, description="The working directory the program ran in."
+    )
     file: AuditFile | None = None
     parent_process: AuditParentProcess | None = None
 
@@ -574,10 +579,23 @@ class AuditAPI(BaseModel):
     request: AuditAPIRequest | None = None
 
 
+class AuditResource(BaseModel):
+    type: Type
+    uid: str | None = Field(
+        None,
+        description="The sandbox, terminal or interpreter context id, or the pid of a started process that has no name.",
+    )
+    data: AuditResourceData | None = None
+    name: str | None = Field(
+        None,
+        description="A file path (a move reads `source -> destination`), a program name without its arguments, or an SSH channel such as `direct-tcpip db.internal:5432`, `tcpip-forward 0.0.0.0:8080` or `auth-agent <socket>`. A program reads `[redacted]` where its name could not be established, and a terminal command interrupted with Ctrl-C is prefixed `[Ctrl-C]`. Truncated with a trailing `...` if unusually long.",
+    )
+
+
 class AuditCloud(BaseModel):
     provider: str = Field(..., description="Always NeevCloud.")
     account: AuditAccount | None = None
-    project_uid: str | None = Field(None, description="The project id.")
+    org: AuditOrg | None = None
 
 
 class AuditMetadata(BaseModel):
@@ -585,16 +603,36 @@ class AuditMetadata(BaseModel):
     product: AuditProduct
     uid: str = Field(..., description="Stable id of this event, unique within the trail.")
     tenant_uid: str | None = Field(None, description="The organization id.")
+    profiles: list[str] | None = Field(
+        None,
+        description="The OCSF profiles the event uses, always cloud, osint and host.",
+    )
     sequence: int | None = Field(
         None,
         description="Ordinal of a terminal command within its terminal. Absent otherwise.",
     )
 
 
-class AuditActor(BaseModel):
-    user: AuditActorUser
-    session: AuditActorSession | None = None
-    process: AuditProcess | None = None
+class AuditActorUser(BaseModel):
+    type: Type1 = Field(
+        ...,
+        description="The OCSF caption of type_id: User for a user in the console, System for the platform acting on its own, such as pairing a device, Unknown when no principal can be named, and API Key (type_id 99, Other) for an API key.",
+    )
+    type_id: TypeId2 = Field(
+        ...,
+        description="OCSF user.type_id: 0 (Unknown), 1 (User), 3 (System), 99 (Other) for an API key.",
+    )
+    uid: str = Field(
+        ...,
+        description="The user's id, the API key's id, a stable name for what the platform ran, such as device-pairing, or unknown.",
+    )
+    name: str | None = Field(
+        None, description="The user's or the API key's name when the call ran."
+    )
+    programmatic_credentials: list[AuditProgrammaticCredential] | None = Field(
+        None,
+        description="The API key the call was made with, as OCSF programmatic_credentials. Absent for a user.",
+    )
 
 
 class Agent(BaseModel):
@@ -1098,6 +1136,12 @@ class SandboxListResponse(BaseModel):
     limit: int
 
 
+class AuditActor(BaseModel):
+    user: AuditActorUser
+    session: AuditActorSession | None = None
+    process: AuditProcess | None = None
+
+
 class AuditEvent(BaseModel):
     class_uid: ClassUid = Field(
         ...,
@@ -1113,7 +1157,7 @@ class AuditEvent(BaseModel):
     )
     activity_id: ActivityId = Field(
         ...,
-        description="Read with class_uid. For an API call: 1 Create (a write, a started process, a terminal), 2 Read, 3 Update (a move), 4 Delete (a removed file, a killed process), 99 Other. For a program: 1 Launch, 2 Terminate, 99 Other (the sandbox starting). For a connection: 1 Open.",
+        description="Read with class_uid. For an API call: 1 Create (a write, a started process, a terminal), 2 Read, 3 Update (a move), 4 Delete (a removed file, a killed process), 99 Other. For a program: 1 Launch, 2 Terminate, 99 Sandbox Start. For a connection: 1 Open.",
     )
     activity_name: str = Field(
         ...,
@@ -1153,9 +1197,10 @@ class AuditEvent(BaseModel):
         description="What a program returned when it ended. Zero means it succeeded. Present on a Process Activity Terminate event unless a signal stopped the program.",
     )
     dst_endpoint: AuditDstEndpoint | None = None
+    device: AuditDevice | None = None
     resources: list[AuditResource] | None = Field(
         None,
-        description="What the call touched: the sandbox, then any file or process it named, the program it ran, and the terminal it ran in.",
+        description="What the call touched: the sandbox, then any file or process it named, the program it ran, and the terminal it ran in. Present on API Activity only; Process and Network events name the sandbox in device.",
     )
     cloud: AuditCloud
     src_endpoint: AuditEndpoint | None = None

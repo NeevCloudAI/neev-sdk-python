@@ -61,8 +61,8 @@ These need only your credentials. Start with `templates_list.py`.
 | [`files_api.py`](files_api.py) | Write, read and list files |
 | [`upload_download.py`](upload_download.py) | Upload and download a large file with progress |
 | [`preview_ports.py`](preview_ports.py) | Serve a port, get its preview URL, rotate it, revoke it |
-| [`audit_trail.py`](audit_trail.py) | Run commands, then page through the audit trail |
-| [`pty.py`](pty.py) | A scripted terminal session (no typing needed) |
+| [`audit_trail.py`](audit_trail.py) | Calls, programs and connections, each program tied to the call that started it |
+| [`pty.py`](pty.py) | An interactive terminal |
 | [`ssh_tunnel.py`](ssh_tunnel.py) | SSH, `rsync` and port forwarding through one tunnel |
 | [`streaming_exec.py`](streaming_exec.py) | Stream command output line by line |
 | [`processes.py`](processes.py) | Start, follow, read logs of and stop a process |
@@ -223,7 +223,7 @@ uv run python examples/preview_ports.py
 ```bash
 uv run python examples/audit_trail.py
 ```
-→ `ready: …` → `retention: … days, truncated: …` → `HH:MM:SS <operation> <who> <status>` (one line per event, newest first) → `exec calls:` → the same kind of line for each `exec` event.
+→ `ready: …` → `HH:MM:SS <type_name> <what>` (one line per call, program and connection, newest first; a program or connection ends with `<- exec by <who>` for the call that started it) → `N events ended in failure`.
 
 **17. Terminal (PTY)**
 ```bash
@@ -303,7 +303,7 @@ uv run python examples/create_agent.py
 ```bash
 uv run python examples/agent_ports_audit.py
 ```
-→ `ready: … (idle window: …)` → `preview URL: …` → `rotated to: … (the old URL no longer works)` → `exposed ports: [3000]` → `HH:MM:SS <operation> <who> <status>` (one line per audit event).
+→ `ready: … (idle window: …)` → `preview URL: …` → `rotated to: … (the old URL no longer works)` → `exposed ports: [3000]` → `HH:MM:SS <type_name> <operation or program> <status>` (one line per audit event).
 
 **30. Agent auto-resume**
 ```bash
