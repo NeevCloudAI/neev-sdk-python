@@ -114,8 +114,8 @@ class Agents:
     ) -> Agent:
         """Creates a new agent from a catalogue template in the resolved project context.
 
-        Egress is deny-all by default. ``allow_internet=True`` opens all egress
-        (0.0.0.0/0 and ::/0); ``allow_egress`` allows specific hosts (FQDN or CIDR). An
+        The agent starts with its template's egress rules. ``allow_internet=True`` (all
+        egress) or ``allow_egress`` (specific hosts, FQDN or CIDR) replace those rules; an
         explicit ``egress`` in ``params`` takes precedence over both.
         """
         from neevai.handles.agent import Agent
@@ -476,8 +476,8 @@ class AsyncAgents:
     ) -> AsyncAgent:
         """Creates a new agent asynchronously.
 
-        Egress is deny-all by default. ``allow_internet=True`` opens all egress
-        (0.0.0.0/0 and ::/0); ``allow_egress`` allows specific hosts (FQDN or CIDR). An
+        The agent starts with its template's egress rules. ``allow_internet=True`` (all
+        egress) or ``allow_egress`` (specific hosts, FQDN or CIDR) replace those rules; an
         explicit ``egress`` in ``params`` takes precedence over both.
         """
         from neevai.handles.agent import AsyncAgent

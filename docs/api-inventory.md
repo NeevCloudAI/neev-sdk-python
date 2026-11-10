@@ -629,8 +629,10 @@ Access via `client.agents` (`Agents`). Requires org/project scope.
 `idle_timeout_seconds` (omit for the account default, `0` for no idle limit).
 
 **Egress convenience:** `allow_internet=True` opens all egress (`0.0.0.0/0` + `::/0`);
-`allow_egress=[...]` allows specific hosts (FQDN or CIDR). Egress is deny-all by default;
-an explicit `egress` in `params` takes precedence over these.
+`allow_egress=[...]` allows specific hosts (FQDN or CIDR). The agent starts with its
+template's egress rules, and these replace them; an explicit `egress` in `params` takes
+precedence over both. To add a host and keep the template's rules, create the agent first
+and then call `update` with `egress_add`.
 
 **Returns:** `Agent` handle with `status` typically `Provisioning`.
 
