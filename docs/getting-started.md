@@ -1,7 +1,8 @@
 # Getting started
 
 This guide takes you from install to a running sandbox, step by step. For a shorter
-overview, see the [README](../README.md).
+overview, see the [README](../README.md); for every guide, see the
+[documentation index](./README.md).
 
 ## Contents
 
@@ -131,12 +132,12 @@ Good to know:
 | Topic | Detail |
 | --- | --- |
 | Templates | Pass `sandbox_template_id`. Find ids with `client.templates.list()`. |
-| Size | Without `resources`, a sandbox gets 1 vCPU, 2 GB memory and 10 GB disk. You can ask for 0.5–8 vCPU (steps of 0.5), 1–16 GB memory and 10–100 GB disk (steps of 10). See [`SandboxResources`](api-inventory.md#sandboxresources). |
+| Size | Without `resources`, a sandbox gets 1 vCPU, 2 GB memory and 10 GB disk. You can ask for 0.5–8 vCPU (steps of 0.5), 1–16 GB memory and 10–100 GB disk (steps of 10). See [Sandbox lifecycle](./sandboxes.md#sandbox-lifecycle). |
 | Readiness | Call `wait_until_ready()` before running commands or using files. |
 | Names | `client.sandboxes.get()` accepts a sandbox's id or its name. |
 | Handles | `pause()` and `resume()` return an updated `Sandbox`. |
 | Files | `files.write` handles any size. For large files on disk, use `files.upload_file` and `files.download_file`. |
-| Errors | Errors carry a `code` such as `not_found`; branch on it. See [Errors](api-inventory.md#errors). |
+| Errors | Errors carry a `code` such as `not_found`; branch on it. See [Errors](./errors.md). |
 
 Next, try [`sandbox_lifecycle.py`](../examples/sandbox_lifecycle.py) and
 [`files_api.py`](../examples/files_api.py), or snapshots with
@@ -216,8 +217,8 @@ The same client covers every NeevCloud product in this SDK.
 
 | Product | Start here |
 | --- | --- |
-| Agents: ready-made coding agents, each on its own sandbox | [Create an agent](#create-an-agent), then [README: Agents](../README.md#agents) |
-| Agent tools: sandbox tools for the agent you build | [README: Agent tools](../README.md#agent-tools) |
+| Agents: ready-made coding agents, each on its own sandbox | [Create an agent](#create-an-agent), then [Agents](./agents.md) |
+| Agent tools: sandbox tools for the agent you build | [Agent tools](./agent-tools.md) |
 
 ### Create an agent
 
@@ -251,9 +252,10 @@ which connect your own model to a sandbox. See
 
 | Guide | For |
 | --- | --- |
-| [README](../README.md) | An overview of every feature |
-| [API reference](api-reference.md) | Every product and method, grouped by product, with snippets |
-| [API inventory](api-inventory.md) | Full signatures, parameter tables, types and errors |
-| [Example coverage](example-coverage.md) | Which example shows which API |
+| [Sandboxes](./sandboxes.md) · [Agents](./agents.md) · [Agent tools](./agent-tools.md) | One guide per product |
+| [Configuration](./configuration.md) | Credentials, client options and timeouts |
+| [Errors](./errors.md) | Error classes, codes and what to retry |
+| [API reference](./api-reference.md) | Every public method, grouped by product, with snippets |
+| [API inventory](./api-inventory.md) | Full signatures, parameter tables, types and errors |
 | [Examples](../examples/README.md) | Runnable scripts, from basics to complete workflows |
-| [Development](development.md) | Contributing to this SDK |
+| [Use from an AI agent](./ai-agents.md) | Prompts and rules for a coding agent using the SDK |
